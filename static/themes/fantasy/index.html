@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>モンじゃん! モンスターのたまご</title>
   <!-- フォント(どちらも SIL Open Font License。イベントでの利用も可)。ネットにつながらないときは丸ゴシックで表示される -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Kiwi+Maru:wght@400;500&display=swap" rel="stylesheet">
+  <!-- フォントは手元に置いてある(ネットが切れても字体が変わらないように) -->
+  <link rel="stylesheet" href="/static/vendor/fonts/fantasy.css">
   <link rel="stylesheet" href="/static/common/common.css">
   <link rel="stylesheet" href="/static/themes/fantasy/style.css">
 </head>
@@ -225,6 +224,9 @@
 <script src="/static/vendor/gsap/SplitText.min.js"></script>
 <script src="/static/vendor/tsparticles/tsparticles.bundle.min.js"></script>
 <script src="/static/themes/fantasy/effects.js"></script>
+<!-- 効果音(Howler.js。static/vendor/ に置いてある) -->
+<script src="/static/vendor/howler/howler.core.min.js"></script>
+<script src="/static/common/sound.js"></script>
 <script src="/static/common/app.js"></script>
 </body>
 </html>

@@ -27,6 +27,9 @@
 //   テーマが window.themeFx.birth(showCard) を用意していれば、誕生の演出をまかせる。
 //   テーマは「ため」の演出のあと showCard()(s4 にする)を呼び、演出が終わったら Promise を終える。
 //   用意していないテーマ・途中で失敗したときは、すぐに s4 にして CSS の演出で見せる。
+//   誕生の効果音(crack・fanfare)も、themeFx を用意したテーマは自分で鳴らす(演出に合わせるため)。
+// ── 効果音 ──
+//   static/common/sound.js(window.sfx)を app.js より前に読む。読んでいなければ鳴らないだけ。
 // ── 場面転換 ──
 //   切りかえのあいだ #stage に class="shut" が付く。閉じる・開く時間は、テーマの CSS 変数
 //   --scene-close-ms / --scene-open-ms で変えられる(初期値 340 / 140)。
@@ -34,6 +37,7 @@
 //   ?demo=1&play=birth で、がったい中から誕生までの流れを見本のデータで動かす。
 
 const el = (id) => document.getElementById(id);
+const sound = (name) => { if (window.sfx) window.sfx.play(name); };
 const stage = el("stage");
 const params = new URLSearchParams(location.search);
 
@@ -140,6 +144,7 @@ function press(pos) {
   if (!conf || conf.disabled || btn.disabled) return;
   btn.classList.add("pressed");
   setTimeout(() => btn.classList.remove("pressed"), 160);
+  sound("press");
   conf.action();
 }
 
@@ -259,7 +264,11 @@ function birth(data) {
 // 誕生の演出。テーマの演出(window.themeFx.birth)があればまかせ、なければすぐ s4 にする
 async function playBirth() {
   const fx = window.themeFx;
-  if (!fx || typeof fx.birth !== "function") return setScene("s4", { instant: true });
+  if (!fx || typeof fx.birth !== "function") {
+    sound("crack");
+    setTimeout(() => sound("fanfare"), 500);   // CSS のカードの登場(0.5秒あと)に合わせる
+    return setScene("s4", { instant: true });
+  }
   let shown = false;
   const showCard = () => { if (!shown) { shown = true; renderScene("s4"); } };
   try {
@@ -331,6 +340,7 @@ function setProgress(ratio) {
   const level = r <= 0 ? 0 : r < 0.3 ? 1 : r < 0.5 ? 2 : r < 0.7 ? 3 : r < 1 ? 4 : 5;
   stage.dataset.level = level;
   if (level !== prev) stage.dispatchEvent(new CustomEvent("levelchange", { detail: { level, prev } }));
+  if (state.scene === "s3" && level > prev && level < 5) sound("tick");
 }
 
 function setSteps(now) {

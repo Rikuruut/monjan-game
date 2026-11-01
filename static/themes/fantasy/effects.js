@@ -238,7 +238,7 @@
 
     // 4. 割れる:s4 にして、上の殻は回りながら飛び、下の殻は沈み、巣は消える
     tl.add("pop");
-    tl.add(() => { showCard(); gsap.set(card, { autoAlpha: 0 }); }, "pop");
+    tl.add(() => { showCard(); gsap.set(card, { autoAlpha: 0 }); if (window.sfx) sfx.play("crack"); }, "pop");
     tl.to(flash, { opacity: 0, scale: 2.6, duration: 0.9, ease: "power2.out" }, "pop");
     tl.to(glow, { opacity: 0, scale: 2.2, duration: 1.0, ease: "power2.out" }, "pop");
     tl.fromTo($(".shell-top"), { x: 0, y: 0, rotation: 0 },
@@ -269,6 +269,7 @@
       { autoAlpha: 0, scale: 0.25, rotationY: -540, transformPerspective: 1400, filter: "brightness(2.5)" },
       { autoAlpha: 1, scale: 1, rotationY: 0, filter: "brightness(1)", duration: 1.1, ease: "back.out(1.3)" },
       "pop+=0.35");
+    tl.add(() => { if (window.sfx) sfx.play("fanfare"); }, "pop+=0.5");
 
     // 7. 名前が1文字ずつ跳ねる
     if (window.SplitText && nameEl.textContent.trim()) {
