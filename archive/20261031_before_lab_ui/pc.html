@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん! プロトタイプ (PC)</title>
+  <!-- フォント(どちらも SIL Open Font License。イベントでの利用も可)。ネットにつながらないときは、ふつうのフォントで表示される -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="pc">
+
+  <!-- ヘッダー:タイトルロゴと、スマホの接続状態 -->
+  <header class="game-header">
+    <h1 class="logo">モンじゃん<span class="logo-bang">!</span></h1>
+    <p class="logo-sub">どうぶつ × みのまわりの もの = モンスター!</p>
+    <p class="header-status">スマホ:<span id="phone-status" class="status status-off">未接続</span></p>
+  </header>
+
+  <main class="game-main">
+
+    <!-- 左:撮影から生成までの3ステップ -->
+    <div class="game-col">
+
+      <!-- STEP 1:撮影の合図 -->
+      <section class="panel">
+        <h2 class="panel-title"><span class="step-badge">STEP 1</span>しゃしんを とる</h2>
+        <button id="btn-capture" class="game-button" disabled>スマホで とる!</button>
+        <p id="capture-msg" class="msg">※ 動物はスマホ側でえらびます</p>
+
+        <details class="connect-info">
+          <summary>スマホのつなぎかた(QRコード)</summary>
+          <p><code id="phone-url">読み込み中...</code></p>
+          <img id="qr" src="/api/qr" alt="QRコード" width="160" height="160">
+        </details>
+      </section>
+
+      <!-- STEP 2:届いた写真と動物 -->
+      <section class="panel">
+        <h2 class="panel-title"><span class="step-badge">STEP 2</span>とどいたもの</h2>
+        <!-- 写真 × 動物 を、ひと目で分かるように並べる -->
+        <div class="recipe">
+          <figure class="recipe-item">
+            <img id="photo" class="photo-preview" alt="" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 150'>
+            <figcaption>しゃしん</figcaption>
+          </figure>
+          <span class="recipe-op">×</span>
+          <figure class="recipe-item">
+            <div id="animal-icon" class="animal-icon">?</div>
+            <figcaption><strong id="animal-name">(まだ届いていません)</strong></figcaption>
+          </figure>
+          <span class="recipe-op">=</span>
+          <figure class="recipe-item">
+            <div class="animal-icon recipe-result">?</div>
+            <figcaption>モンスター</figcaption>
+          </figure>
+        </div>
+        <p id="photo-id" class="msg"></p>
+      </section>
+
+      <!-- STEP 3:生成 -->
+      <section class="panel">
+        <h2 class="panel-title"><span class="step-badge">STEP 3</span>モンスターを つくる</h2>
+        <button id="btn-generate" class="game-button game-button-big" disabled>つくる!</button>
+        <p id="generate-msg" class="msg"></p>
+
+        <!-- ローディング(生成のあいだ、今の段階を見せる。本番の大きい画面のローディングのたたき台) -->
+        <div id="loading" class="loading hidden">
+          <ol class="loading-steps">
+            <li id="step-naming">なまえを かんがえているよ</li>
+            <li id="step-drawing">え を かいているよ</li>
+            <li id="step-soon">もうすぐ!</li>
+          </ol>
+          <div class="loading-bar"><div id="loading-bar-fill"></div></div>
+          <p id="loading-sub" class="loading-sub"></p>
+        </div>
+
+        <p id="error-msg" class="error"></p>
+      </section>
+    </div>
+
+    <!-- 右:完成したモンスター(カード風) -->
+    <div class="game-col">
+      <section class="panel panel-monster">
+        <h2 class="panel-title"><span class="step-badge step-badge-gold">GET!</span>きみの モンスター</h2>
+
+        <div id="result-area" class="hidden">
+          <p id="retake-msg" class="retake hidden"></p>
+
+          <div id="monster-card" class="monster-card">
+            <div class="mc-head">
+              <span id="mc-name" class="mc-name">???</span>
+              <span id="mc-element" class="mc-element"></span>
+            </div>
+            <div class="mc-art">
+              <img id="monster" alt="(まだありません)">
+            </div>
+            <div class="mc-foot">
+              <p id="mc-recipe" class="mc-recipe"></p>
+              <p id="mc-desc" class="mc-desc"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 融合のアニメーション(生成のあいだ) -->
+        <div id="fusion-stage" class="fusion-stage hidden">
+          <div class="fusion-orbit">
+            <img id="fusion-photo" class="fusion-item fusion-left" alt="">
+            <div id="fusion-animal" class="fusion-item fusion-right">?</div>
+            <div class="fusion-core"></div>
+            <span class="fusion-spark s1">✦</span>
+            <span class="fusion-spark s2">✧</span>
+            <span class="fusion-spark s3">✦</span>
+            <span class="fusion-spark s4">✧</span>
+          </div>
+          <p class="fusion-title">モンスター せいせいちゅう</p>
+          <p id="fusion-sub" class="fusion-sub">がったい している よ…</p>
+        </div>
+
+        <div id="monster-empty" class="monster-empty">
+          <p>?</p>
+          <p class="msg">ここに モンスターが あらわれるよ</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- 開発者メニュー:検証用の情報(判定のJSON・時間・料金・名前のテスト) -->
+  <details class="dev-menu" open>
+    <summary>開発者メニュー(検証用の情報)</summary>
+
+    <div class="dev-grid">
+      <section class="dev-panel">
+        <h3>かかった時間</h3>
+        <ul id="timings"></ul>
+        <h3>使った設定</h3>
+        <ul id="settings"></ul>
+        <h3>APIの使用量と料金(試算)</h3>
+        <ul id="usage"></ul>
+        <p id="output-dir" class="msg"></p>
+      </section>
+
+      <section class="dev-panel">
+        <h3>判定結果</h3>
+        <pre id="result-json"></pre>
+        <div id="notes-area" class="hidden">
+          <h3>補正したところ</h3>
+          <ul id="notes"></ul>
+        </div>
+      </section>
+    </div>
+
+    <!-- 名前のテスト(写真も画像生成も使わず、モンスター名だけを何回か作る) -->
+    <section class="dev-panel">
+      <h3>名前のテスト</h3>
+      <p class="msg">
+        動物と物の名前だけから、モンスター名を作ります。写真も画像生成も使いません(料金は1回 0.1円以下)。<br>
+        判定と同じ「名前のつけ方」を使うので、名前のプロンプトを調整するときに使います。
+      </p>
+      <p class="nt-form">
+        動物:<select id="nt-animal"></select>
+        物の名前:<input id="nt-object" type="text" value="はさみ" maxlength="30">
+        回数:<input id="nt-count" type="number" value="5" min="1" max="10">
+        <button id="btn-name-test" class="game-button game-button-small">名前を作る</button>
+      </p>
+      <p id="nt-msg" class="msg"></p>
+      <table id="nt-table" class="hidden">
+        <thead>
+          <tr><th>回</th><th>採用した名前</th><th>候補(× は使わなかったもの)</th><th>取り込む場所</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </details>
+
+  <script src="/static/pc.js"></script>
+</body>
+</html>

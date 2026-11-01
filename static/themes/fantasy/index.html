@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="fantasy">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん! モンスターのたまご</title>
+  <!-- フォント(どちらも SIL Open Font License。イベントでの利用も可)。ネットにつながらないときは丸ゴシックで表示される -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Kiwi+Maru:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/common/common.css">
+  <link rel="stylesheet" href="/static/themes/fantasy/style.css">
+</head>
+<body>
+
+<!--
+  テーマ:fantasy「モンスターの たまご」
+  森の空き地で、写真と動物の力が大きなたまごに注がれ、ひびが増えていって、最後に割れて生まれる。
+  動き(撮影・生成・場面の進行・開発者メニュー)は /static/common/app.js が共通で受け持つ。
+  app.js が使う要素(ID)は、app.js の先頭の「テーマとの約束」を参照。
+  進み具合は #stage の --progress(0〜1)で、たまごのひびを少しずつ伸ばす(style.css)。
+-->
+<div id="stage" class="stage" data-scene="s1" data-level="0">
+
+  <!-- 木もれ日と、左右の木 -->
+  <div class="forest" aria-hidden="true">
+    <span class="tree tree-l1"></span><span class="tree tree-l2"></span>
+    <span class="tree tree-r1"></span><span class="tree tree-r2"></span>
+    <span class="ray r1"></span><span class="ray r2"></span><span class="ray r3"></span>
+  </div>
+
+  <!-- 上:木の看板と、いまの段階(たまごの印) -->
+  <header class="top">
+    <div class="signboard">
+      <h1>モンじゃん! <small>モンスターの たまご</small></h1>
+    </div>
+    <ol class="lamps" aria-label="いまの だんかい">
+      <li data-step="s1"><span class="lamp"></span>とる</li>
+      <li data-step="s2"><span class="lamp"></span>あわせる</li>
+      <li data-step="s3"><span class="lamp"></span>がったい</li>
+      <li data-step="s4"><span class="lamp"></span>たんじょう</li>
+    </ol>
+  </header>
+
+  <!-- 場面ごとの大きな見出し -->
+  <h2 id="headline" class="headline">スマホで しゃしんを とってね</h2>
+
+  <section class="scene-art" aria-label="モンスターの たまご">
+
+    <!-- 巣からたまごへ流れる光の帯 -->
+    <svg class="streams" viewBox="0 0 1920 1080" aria-hidden="true">
+      <path class="stream" d="M 520 470 C 620 380, 700 380, 790 470" />
+      <path class="stream" d="M 1400 470 C 1300 380, 1220 380, 1130 470" />
+    </svg>
+
+    <!-- 左の巣:しゃしん -->
+    <div class="nest-item nest-left">
+      <div class="orb">
+        <img id="photo" class="orb-photo" alt="">
+        <span class="orb-empty">📷</span>
+      </div>
+      <div class="nest"></div>
+      <p class="tag">しゃしん</p>
+    </div>
+
+    <!-- 右の巣:どうぶつ -->
+    <div class="nest-item nest-right">
+      <div class="orb">
+        <span id="animal-icon" class="orb-icon"></span>
+        <span class="orb-empty">🐾</span>
+      </div>
+      <div class="nest"></div>
+      <p id="animal-name" class="tag">どうぶつ</p>
+    </div>
+
+    <!-- 中央:大きな巣と、モンスターのたまご -->
+    <div class="egg-area">
+      <div class="egg-glow"></div>
+      <div class="egg">
+        <div class="shell shell-bottom"></div>
+        <div class="shell shell-top"></div>
+        <!-- ひび(--progress にあわせて、てっぺんから少しずつ伸びて枝分かれする)
+             --a:伸び始める進み具合 / --w:伸びきるまでの幅(どちらも 0〜1)。pathLength="100" で長さをそろえている -->
+        <svg class="cracks" viewBox="0 0 380 480" aria-hidden="true">
+          <!-- てっぺんの大きなひび -->
+          <path class="crack main" pathLength="100" style="--a:0.04;--w:0.14" d="M 190 34 L 178 80 L 200 105" />
+          <path class="crack main" pathLength="100" style="--a:0.18;--w:0.14" d="M 200 105 L 184 150 L 205 178" />
+          <!-- 左右に枝分かれ -->
+          <path class="crack" pathLength="100" style="--a:0.30;--w:0.10" d="M 178 80 L 140 98 L 128 130" />
+          <path class="crack" pathLength="100" style="--a:0.37;--w:0.10" d="M 200 105 L 240 118 L 252 150" />
+          <path class="crack" pathLength="100" style="--a:0.44;--w:0.10" d="M 128 130 L 96 160 L 104 196 L 70 222" />
+          <path class="crack" pathLength="100" style="--a:0.50;--w:0.10" d="M 252 150 L 290 175 L 280 210 L 315 238" />
+          <path class="crack" pathLength="100" style="--a:0.56;--w:0.10" d="M 205 178 L 190 222 L 214 254" />
+          <!-- 細かいひび -->
+          <path class="crack thin" pathLength="100" style="--a:0.62;--w:0.06" d="M 96 160 L 64 150" />
+          <path class="crack thin" pathLength="100" style="--a:0.65;--w:0.06" d="M 290 175 L 324 165" />
+          <!-- たまごのおなかを一周しはじめる -->
+          <path class="crack" pathLength="100" style="--a:0.70;--w:0.10" d="M 70 222 L 58 262 L 100 282 L 140 268" />
+          <path class="crack" pathLength="100" style="--a:0.76;--w:0.10" d="M 315 238 L 326 276 L 285 294 L 245 280" />
+          <path class="crack" pathLength="100" style="--a:0.83;--w:0.08" d="M 140 268 L 175 290 L 214 254 L 245 280" />
+          <!-- 最後のこまかい割れ -->
+          <path class="crack thin" pathLength="100" style="--a:0.88;--w:0.06" d="M 160 300 L 148 340" />
+          <path class="crack thin" pathLength="100" style="--a:0.90;--w:0.06" d="M 232 300 L 250 336" />
+          <path class="crack thin" pathLength="100" style="--a:0.92;--w:0.05" d="M 140 98 L 116 84" />
+          <path class="crack thin" pathLength="100" style="--a:0.93;--w:0.05" d="M 240 118 L 262 98" />
+        </svg>
+        <p id="center-mark" class="center-mark">?</p>
+      </div>
+      <div class="big-nest"></div>
+      <p id="center-sub" class="center-sub">スマホで どうぶつを えらんで「とる!」を おしてね</p>
+      <!-- 誕生でとびちる 殻のかけら -->
+      <span class="chip"></span><span class="chip"></span><span class="chip"></span><span class="chip"></span>
+      <span class="chip"></span><span class="chip"></span><span class="chip"></span><span class="chip"></span>
+    </div>
+
+    <!-- がったい中:左は「あそびかた」、右は「なまえ」、中央の下は進み具合(木の立て札) -->
+    <aside class="board board-left">
+      <h3>あそびかた</h3>
+      <p id="tip" class="tip"></p>
+    </aside>
+    <aside class="board board-right">
+      <h3>なまえ</h3>
+      <p id="name-help" class="name-help">スマホで えらんでね</p>
+      <ul id="name-list" class="name-list"></ul>
+    </aside>
+    <div class="status-plate">
+      <ol class="status-steps">
+        <li id="st-naming">なまえを かんがえているよ</li>
+        <li id="st-drawing">え を かいているよ</li>
+        <li id="st-soon">もうすぐ!</li>
+      </ol>
+    </div>
+
+    <!-- たんじょう:モンスターのカード(木の額にツタ) -->
+    <article id="card" class="card">
+      <span class="vine vine-tl"></span><span class="vine vine-br"></span>
+      <header class="card-head">
+        <span id="card-name" class="card-name">???</span>
+        <span id="card-element" class="card-element"></span>
+      </header>
+      <div class="card-art"><img id="card-img" alt=""></div>
+      <footer class="card-foot">
+        <p id="card-recipe" class="card-recipe"></p>
+        <p id="card-desc" class="card-desc"></p>
+      </footer>
+    </article>
+  </section>
+
+  <!-- 下:木の操作盤(3つのボタン。キーボードの ← / Enter / → でも押せる) -->
+  <footer class="deck">
+    <button id="btn-left" class="knob knob-side" data-pos="left"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-center" class="knob knob-main" data-pos="center"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-right" class="knob knob-side" data-pos="right"><span class="knob-face"></span><span class="knob-label"></span></button>
+  </footer>
+
+  <!-- 短いお知らせ -->
+  <p id="toast" class="toast" role="status" aria-live="polite"></p>
+
+  <!-- 場面転換:葉っぱの群れが画面を横切る(#stage に class="shut" が付いているあいだ、画面をおおう) -->
+  <div class="leaves" aria-hidden="true">
+    <span class="leaf leaf-a" style="left:-59px;top:-101px;--r:-10deg;--s:1.0;--d:0.041s"></span>
+    <span class="leaf leaf-c" style="left:142px;top:-74px;--r:14deg;--s:1.0;--d:0.036s"></span>
+    <span class="leaf leaf-a" style="left:371px;top:-65px;--r:-7deg;--s:1.0;--d:0.055s"></span>
+    <span class="leaf leaf-a" style="left:644px;top:-113px;--r:45deg;--s:1.0;--d:0.107s"></span>
+    <span class="leaf leaf-a" style="left:894px;top:-113px;--r:13deg;--s:0.9;--d:0.149s"></span>
+    <span class="leaf leaf-b" style="left:1055px;top:-49px;--r:49deg;--s:1.1;--d:0.146s"></span>
+    <span class="leaf leaf-c" style="left:1349px;top:-105px;--r:13deg;--s:1.2;--d:0.191s"></span>
+    <span class="leaf leaf-b" style="left:1533px;top:-107px;--r:14deg;--s:1.1;--d:0.18s"></span>
+    <span class="leaf leaf-b" style="left:1748px;top:-48px;--r:-53deg;--s:1.1;--d:0.234s"></span>
+    <span class="leaf leaf-b" style="left:-46px;top:120px;--r:-1deg;--s:0.9;--d:0.015s"></span>
+    <span class="leaf leaf-c" style="left:153px;top:111px;--r:-50deg;--s:1.2;--d:0.05s"></span>
+    <span class="leaf leaf-a" style="left:403px;top:137px;--r:-24deg;--s:1.0;--d:0.076s"></span>
+    <span class="leaf leaf-b" style="left:611px;top:123px;--r:-41deg;--s:0.9;--d:0.077s"></span>
+    <span class="leaf leaf-b" style="left:829px;top:151px;--r:13deg;--s:1.2;--d:0.135s"></span>
+    <span class="leaf leaf-a" style="left:1126px;top:143px;--r:14deg;--s:0.9;--d:0.167s"></span>
+    <span class="leaf leaf-a" style="left:1314px;top:140px;--r:29deg;--s:1.0;--d:0.187s"></span>
+    <span class="leaf leaf-b" style="left:1549px;top:153px;--r:27deg;--s:0.9;--d:0.211s"></span>
+    <span class="leaf leaf-b" style="left:1784px;top:82px;--r:60deg;--s:0.9;--d:0.208s"></span>
+    <span class="leaf leaf-b" style="left:-86px;top:343px;--r:-53deg;--s:1.1;--d:0.006s"></span>
+    <span class="leaf leaf-a" style="left:161px;top:330px;--r:-10deg;--s:0.9;--d:0.033s"></span>
+    <span class="leaf leaf-b" style="left:411px;top:350px;--r:-25deg;--s:1.1;--d:0.093s"></span>
+    <span class="leaf leaf-a" style="left:625px;top:333px;--r:-15deg;--s:0.9;--d:0.083s"></span>
+    <span class="leaf leaf-a" style="left:842px;top:299px;--r:-31deg;--s:1.1;--d:0.124s"></span>
+    <span class="leaf leaf-a" style="left:1125px;top:303px;--r:-27deg;--s:1.2;--d:0.132s"></span>
+    <span class="leaf leaf-a" style="left:1348px;top:327px;--r:18deg;--s:1.2;--d:0.185s"></span>
+    <span class="leaf leaf-b" style="left:1575px;top:359px;--r:23deg;--s:1.0;--d:0.22s"></span>
+    <span class="leaf leaf-b" style="left:1811px;top:330px;--r:-10deg;--s:0.9;--d:0.205s"></span>
+    <span class="leaf leaf-a" style="left:-49px;top:487px;--r:-36deg;--s:1.0;--d:0.022s"></span>
+    <span class="leaf leaf-a" style="left:144px;top:523px;--r:16deg;--s:1.0;--d:0.025s"></span>
+    <span class="leaf leaf-c" style="left:379px;top:548px;--r:-48deg;--s:1.2;--d:0.051s"></span>
+    <span class="leaf leaf-c" style="left:616px;top:558px;--r:-12deg;--s:1.1;--d:0.088s"></span>
+    <span class="leaf leaf-a" style="left:864px;top:557px;--r:-14deg;--s:0.9;--d:0.106s"></span>
+    <span class="leaf leaf-b" style="left:1112px;top:539px;--r:1deg;--s:0.9;--d:0.129s"></span>
+    <span class="leaf leaf-b" style="left:1293px;top:523px;--r:34deg;--s:1.2;--d:0.191s"></span>
+    <span class="leaf leaf-c" style="left:1530px;top:546px;--r:-58deg;--s:1.1;--d:0.193s"></span>
+    <span class="leaf leaf-c" style="left:1809px;top:483px;--r:37deg;--s:1.2;--d:0.243s"></span>
+    <span class="leaf leaf-b" style="left:-67px;top:746px;--r:-14deg;--s:1.1;--d:0.039s"></span>
+    <span class="leaf leaf-c" style="left:198px;top:749px;--r:39deg;--s:1.2;--d:0.036s"></span>
+    <span class="leaf leaf-c" style="left:384px;top:710px;--r:44deg;--s:0.9;--d:0.09s"></span>
+    <span class="leaf leaf-c" style="left:615px;top:746px;--r:3deg;--s:1.2;--d:0.076s"></span>
+    <span class="leaf leaf-a" style="left:823px;top:715px;--r:0deg;--s:1.2;--d:0.135s"></span>
+    <span class="leaf leaf-b" style="left:1094px;top:737px;--r:43deg;--s:1.2;--d:0.129s"></span>
+    <span class="leaf leaf-b" style="left:1293px;top:709px;--r:0deg;--s:1.1;--d:0.16s"></span>
+    <span class="leaf leaf-b" style="left:1589px;top:758px;--r:47deg;--s:1.0;--d:0.22s"></span>
+    <span class="leaf leaf-b" style="left:1784px;top:690px;--r:46deg;--s:1.0;--d:0.239s"></span>
+    <span class="leaf leaf-b" style="left:-75px;top:941px;--r:53deg;--s:1.1;--d:0.039s"></span>
+    <span class="leaf leaf-b" style="left:172px;top:891px;--r:42deg;--s:0.9;--d:0.045s"></span>
+    <span class="leaf leaf-a" style="left:370px;top:900px;--r:-39deg;--s:1.1;--d:0.058s"></span>
+    <span class="leaf leaf-c" style="left:649px;top:898px;--r:18deg;--s:0.9;--d:0.122s"></span>
+    <span class="leaf leaf-a" style="left:839px;top:950px;--r:10deg;--s:1.1;--d:0.101s"></span>
+    <span class="leaf leaf-b" style="left:1063px;top:947px;--r:35deg;--s:1.1;--d:0.174s"></span>
+    <span class="leaf leaf-a" style="left:1304px;top:907px;--r:-57deg;--s:1.2;--d:0.165s"></span>
+    <span class="leaf leaf-c" style="left:1540px;top:955px;--r:-19deg;--s:1.2;--d:0.196s"></span>
+    <span class="leaf leaf-b" style="left:1756px;top:887px;--r:56deg;--s:1.2;--d:0.233s"></span>
+  </div>
+</div>
+
+<script src="/static/common/app.js"></script>
+</body>
+</html>

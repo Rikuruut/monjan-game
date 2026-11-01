@@ -1,0 +1,653 @@
+/* ==================================================================
+   テーマ:fantasy「モンスターの たまご」(2026年10月31日)
+   ------------------------------------------------------------------
+   - 舞台(#stage)の拡大縮小と開発者メニューは static/common/common.css にある。ここは見た目だけ
+   - 1920×1080 の舞台に、すべてを px で配置する。場面は #stage の data-scene(s1〜s4)で切りかえる
+   - 進み具合は、app.js が付ける --progress(0〜1)で ひびの伸び具合 と たまごの光に、data-level(0〜5)で ゆれの強さ に変える
+       ひびは、てっぺんから少しずつ伸びて枝分かれし、最後はおなかを一周する(16本。index.html の --a / --w)
+       level 4 もうすぐ … ひびが橙に光り、たまごがガタガタゆれる
+   - 大胆にするのは中央の「たまご」だけ。ほかの部品は木と葉で静かにそろえる
+   ================================================================== */
+
+:root {
+  --forest: #23423A;      /* 森の深い緑(背景) */
+  --leaf:   #8CCB5E;      /* 若葉(明るい差し色・済んだ段階) */
+  --shell:  #FFF4DC;      /* 殻の白(たまご・文字・カードの地) */
+  --spot:   #3E7CB1;      /* 殻の模様の青 */
+  --glow:   #F28C28;      /* 孵化の光の橙(ひびの光・呼びかけ) */
+  --nest:   #6B4A2B;      /* 巣の茶(巣・木の部品・縁取り) */
+  /* 上の6色から作った濃淡 */
+  --forest-deep: #162b25;
+  --nest-dark:   #3d2a18;
+  --leaf-dark:   #5f9e48;
+  --font-title: "Mochiy Pop One", "Kiwi Maru", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  --font-body:  "Kiwi Maru", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  /* 場面転換:葉っぱが画面をおおうまでの時間と、晴れるまでの時間(app.js が読む) */
+  --scene-close-ms: 580;
+  --scene-open-ms: 120;
+}
+
+body {
+  background: var(--forest-deep);   /* 舞台のまわりの余白(画面の縦横比がちがうとき) */
+  font-family: var(--font-body);
+  color: var(--shell);
+}
+
+/* ------------------------------------------------------------------ */
+/* 舞台:森の空き地                                                     */
+/* ------------------------------------------------------------------ */
+.stage {
+  background: radial-gradient(ellipse at 50% 18%, #3c6b4f 0%, var(--forest) 48%, var(--forest-deep) 100%);
+}
+.forest { position: absolute; inset: 0; pointer-events: none; }
+.tree {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #2c5446, #17302a 70%);
+  opacity: 0.9;
+}
+.tree-l1 { left: -260px; top: 120px; width: 560px; height: 820px; }
+.tree-l2 { left: -120px; top: -200px; width: 420px; height: 520px; opacity: 0.7; }
+.tree-r1 { right: -260px; top: 160px; width: 560px; height: 820px; }
+.tree-r2 { right: -140px; top: -220px; width: 440px; height: 540px; opacity: 0.7; }
+/* 上から差しこむ木もれ日 */
+.ray {
+  position: absolute;
+  top: -120px;
+  width: 220px;
+  height: 1000px;
+  background: linear-gradient(180deg, #fff4dc2e, #fff4dc00 80%);
+  filter: blur(10px);
+  transform-origin: top center;
+}
+.ray.r1 { left: 760px;  transform: rotate(14deg); }
+.ray.r2 { left: 960px;  transform: rotate(4deg);  width: 160px; }
+.ray.r3 { left: 1080px; transform: rotate(-10deg); }
+
+/* ------------------------------------------------------------------ */
+/* 上:木の看板と、段階の印(たまご)                                      */
+/* ------------------------------------------------------------------ */
+.top {
+  position: absolute;
+  top: 28px;
+  left: 48px;
+  right: 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.signboard {
+  padding: 10px 34px 12px;
+  background:
+    repeating-linear-gradient(180deg, #ffffff0f 0 2px, transparent 2px 14px),
+    linear-gradient(180deg, #8a6240, var(--nest));
+  border: 4px solid var(--nest-dark);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 var(--nest-dark);
+}
+.signboard h1 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 40px;
+  color: var(--shell);
+  letter-spacing: 1px;
+}
+.signboard h1 small { font-size: 24px; color: var(--leaf); margin-left: 8px; }
+
+.lamps { display: flex; gap: 30px; list-style: none; margin: 0; padding: 0; }
+.lamps li { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 24px; color: #8aa69a; }
+.lamp {
+  width: 22px;
+  height: 28px;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  background: #2f5146;
+  border: 3px solid var(--forest-deep);
+}
+.lamps li.done .lamp { background: var(--leaf); }
+.lamps li.now { color: var(--shell); }
+.lamps li.now .lamp { background: var(--glow); box-shadow: 0 0 16px var(--glow); }
+
+/* ------------------------------------------------------------------ */
+/* 場面の見出し                                                         */
+/* ------------------------------------------------------------------ */
+.headline {
+  position: absolute;
+  top: 128px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 68px;
+  line-height: 1.15;
+  color: var(--shell);
+  text-shadow: 0 5px 0 var(--nest), 0 0 40px #f28c2833;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 巣と光の帯                                                           */
+/* ------------------------------------------------------------------ */
+.scene-art { position: absolute; inset: 0; pointer-events: none; }
+
+.streams { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+.stream {
+  fill: none;
+  stroke: #fff4dc55;
+  stroke-width: 10;
+  stroke-linecap: round;
+  stroke-dasharray: 2 26;
+}
+
+.nest-item { position: absolute; top: 300px; width: 280px; text-align: center; }
+.nest-left  { left: 240px; }
+.nest-right { left: 1400px; }
+.orb {
+  position: relative;
+  z-index: 2;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 40% 35%, #3a6556, #22403a);
+  border: 6px solid var(--leaf);
+  box-shadow: 0 0 0 6px var(--forest-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.orb-photo { width: 100%; height: 100%; object-fit: cover; display: none; }
+.orb-icon  { font-size: 128px; line-height: 1; display: none; }
+.orb-empty { font-size: 80px; opacity: 0.25; filter: grayscale(1); }
+.has-photo  .orb-photo,
+.has-animal .orb-icon { display: block; }
+.has-photo  .nest-left  .orb-empty,
+.has-animal .nest-right .orb-empty { display: none; }
+/* 巣:つるで編んだおわん(写真や動物の玉を下から抱える) */
+.nest {
+  position: relative;
+  z-index: 3;
+  width: 280px;
+  height: 84px;
+  margin-top: -44px;
+  border-radius: 0 0 140px 140px / 0 0 84px 84px;
+  background:
+    repeating-linear-gradient(24deg, #00000022 0 3px, transparent 3px 12px),
+    repeating-linear-gradient(-24deg, #ffffff14 0 3px, transparent 3px 14px),
+    linear-gradient(180deg, #8a6240, var(--nest));
+  border: 4px solid var(--nest-dark);
+  border-top-width: 6px;
+}
+.tag {
+  display: inline-block;
+  margin: 12px 0 0;
+  padding: 2px 22px 4px;
+  font-weight: 500;
+  font-size: 28px;
+  color: var(--shell);
+  background: var(--nest);
+  border: 3px solid var(--nest-dark);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* モンスターのたまご                                                   */
+/* ------------------------------------------------------------------ */
+.egg-area { position: absolute; left: 580px; top: 240px; width: 760px; height: 600px; }
+.egg-glow {
+  position: absolute;
+  left: 50%;
+  top: 270px;
+  width: 640px;
+  height: 640px;
+  margin: -320px 0 0 -320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #f28c28aa 0%, #f28c2833 40%, transparent 70%);
+  opacity: 0;
+}
+.egg {
+  position: absolute;
+  z-index: 2;
+  left: 190px;
+  top: 20px;
+  width: 380px;
+  height: 480px;
+  filter: drop-shadow(0 18px 18px #0000004d);
+}
+.shell {
+  position: absolute;
+  inset: 0;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  border: 6px solid var(--nest-dark);
+  background:
+    radial-gradient(ellipse at 30% 24%, #ffffffcc 0 6%, transparent 22%),
+    radial-gradient(circle at 70% 22%, var(--spot) 0 20px, transparent 21px),
+    radial-gradient(circle at 34% 52%, var(--spot) 0 30px, transparent 31px),
+    radial-gradient(circle at 74% 64%, var(--spot) 0 18px, transparent 19px),
+    radial-gradient(circle at 46% 86%, var(--spot) 0 14px, transparent 15px),
+    radial-gradient(circle at 20% 76%, var(--spot) 0 10px, transparent 11px),
+    linear-gradient(160deg, #fffaf0, var(--shell) 50%, #e8d6b0);
+}
+/* 上と下の殻(誕生のとき、ギザギザの線で2つに割れる) */
+.shell-bottom { display: none; }
+/* たんじょうのときだけ、ギザギザの線で上と下の殻に分ける(それまでは割れる位置を見せない) */
+[data-scene="s4"] .shell-top    { clip-path: polygon(0 0, 100% 0, 100% 47%, 90% 41%, 80% 49%, 70% 41%, 60% 49%, 50% 41%, 40% 49%, 30% 41%, 20% 49%, 10% 41%, 0 47%); }
+[data-scene="s4"] .shell-bottom { display: block; clip-path: polygon(0 47%, 10% 41%, 20% 49%, 30% 41%, 40% 49%, 50% 41%, 60% 49%, 70% 41%, 80% 49%, 90% 41%, 100% 47%, 100% 100%, 0 100%); }
+
+.cracks { position: absolute; inset: 0; z-index: 3; width: 380px; height: 480px; overflow: visible; }
+.crack {
+  fill: none;
+  stroke: var(--nest-dark);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0;
+}
+.crack.main { stroke-width: 7; }
+.crack.thin { stroke-width: 4; }
+/* --progress にあわせて、ひびを1本ずつ少しずつ伸ばす(画像を作っているあいだ、--progress は少しずつ増える)
+   --grow:そのひびの伸び具合(0〜1)。--a で伸び始め、--a + --w で伸びきる
+   ※ transition やアニメーションでは伸ばさない。たまごのゆれと重なって、途中の状態で止まって見えたため。
+     その時点の --progress から長さを計算するだけにしている */
+[data-scene="s3"] .crack {
+  --grow: clamp(0, calc((var(--progress, 0) - var(--a)) / var(--w)), 1);
+  stroke-dashoffset: calc(100 - 100 * var(--grow));
+  opacity: calc(var(--grow) * 100);
+}
+/* もうすぐ:ひびから光がもれる */
+[data-scene="s3"][data-level="4"] .crack,
+[data-scene="s3"][data-level="5"] .crack { stroke: var(--glow); filter: drop-shadow(0 0 10px var(--glow)); }
+
+.center-mark {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-size: 170px;
+  color: var(--spot);
+  opacity: 0.3;
+}
+/* 大きな巣(たまごの下半分を抱える) */
+.big-nest {
+  position: absolute;
+  z-index: 4;
+  left: 90px;
+  top: 392px;
+  width: 580px;
+  height: 140px;
+  border-radius: 0 0 290px 290px / 0 0 140px 140px;
+  background:
+    repeating-linear-gradient(24deg, #00000026 0 4px, transparent 4px 16px),
+    repeating-linear-gradient(-24deg, #ffffff14 0 4px, transparent 4px 18px),
+    linear-gradient(180deg, #8a6240, var(--nest) 60%, #4f351f);
+  border: 5px solid var(--nest-dark);
+  border-top-width: 8px;
+}
+.center-sub {
+  position: absolute;
+  top: 548px;
+  left: -100px;
+  right: -100px;
+  margin: 0;
+  text-align: center;
+  font-weight: 500;
+  font-size: 26px;
+  color: var(--shell);
+  text-shadow: 0 2px 0 var(--forest-deep);
+}
+/* 誕生でとびちる 殻のかけら */
+.chip {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 240px;
+  width: 54px;
+  height: 64px;
+  background: linear-gradient(150deg, #fffaf0, var(--shell) 60%, #e8d6b0);
+  clip-path: polygon(50% 0, 100% 35%, 80% 100%, 10% 80%, 0 30%);
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* がったい中の立て札(あそびかた・なまえ・進み具合)                      */
+/* ------------------------------------------------------------------ */
+.board {
+  position: absolute;
+  top: 716px;
+  width: 420px;
+  height: 158px;
+  padding: 12px 20px;
+  background:
+    repeating-linear-gradient(180deg, #ffffff0d 0 2px, transparent 2px 16px),
+    linear-gradient(180deg, #7d5836, var(--nest));
+  border: 4px solid var(--nest-dark);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 var(--nest-dark);
+  display: none;
+}
+.board-left  { left: 190px; }
+.board-right { left: 1310px; }
+.board h3 { margin: 0 0 6px; font-family: var(--font-title); font-weight: 400; font-size: 26px; color: var(--leaf); }
+.tip { margin: 0; font-weight: 500; font-size: 25px; line-height: 1.45; word-break: keep-all; }
+.board-right h3 { display: inline; margin-right: 12px; }
+.name-help { display: inline; margin: 0; font-size: 20px; color: #f0dcb4; }
+.name-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.name-list li {
+  font-family: var(--font-title);
+  font-size: 21px;
+  padding: 1px 12px;
+  border-radius: 8px;
+  border: 3px solid #9a7550;
+}
+.name-list li.chosen { color: var(--nest-dark); background: var(--glow); border-color: var(--shell); }
+
+.status-plate {
+  position: absolute;
+  top: 822px;
+  left: 640px;
+  width: 640px;
+  height: 62px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--nest-dark);
+  border: 4px solid var(--nest);
+  border-radius: 12px;
+}
+.status-steps { display: flex; gap: 22px; list-style: none; margin: 0; padding: 0; }
+.status-steps li { font-weight: 500; font-size: 22px; color: #8a6e52; }
+.status-steps li.done { color: var(--leaf); }
+.status-steps li.now  { color: var(--glow); }
+
+/* ------------------------------------------------------------------ */
+/* たんじょう:モンスターのカード(木の額にツタ)                           */
+/* ------------------------------------------------------------------ */
+.card {
+  position: absolute;
+  top: 226px;
+  left: 670px;
+  width: 580px;
+  padding: 14px;
+  background: linear-gradient(160deg, var(--shell), #efe1c2);
+  color: var(--forest);
+  border: 10px solid var(--nest);
+  border-radius: 20px;
+  box-shadow: 0 0 0 4px var(--nest-dark), 0 0 90px #ffd27acc;   /* 生まれたカードの輝き(gacha・summon と同じくらいの明るさ) */
+  display: none;
+}
+.vine {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 22px 12px at 30% 20%, var(--leaf) 98%, transparent 100%),
+    radial-gradient(ellipse 20px 11px at 62% 34%, var(--leaf-dark) 98%, transparent 100%),
+    radial-gradient(ellipse 22px 12px at 20% 56%, var(--leaf-dark) 98%, transparent 100%),
+    radial-gradient(ellipse 18px 10px at 46% 70%, var(--leaf) 98%, transparent 100%);
+}
+.vine-tl { left: -62px; top: -62px; }
+.vine-br { right: -62px; bottom: -62px; transform: rotate(180deg); }
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  background: var(--forest);
+  border-radius: 10px;
+}
+.card-name { font-family: var(--font-title); font-size: 38px; color: var(--shell); white-space: nowrap; }
+.card-element {
+  font-weight: 500;
+  font-size: 20px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  border: 3px solid var(--shell);
+  color: #fff;
+  white-space: nowrap;
+}
+.el-fire    { background: #d9472f; }
+.el-water   { background: #2f7fd0; }
+.el-thunder { background: #e0b000; color: var(--forest); border-color: var(--forest); }
+.el-rock    { background: #8a6e4b; }
+.el-sharp   { background: #7a4fc4; }
+.el-soft    { background: #e07aa8; }
+.card-art {
+  margin-top: 12px;
+  aspect-ratio: 4 / 3;
+  border: 4px solid var(--nest);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--forest-deep);
+}
+.card-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-foot { margin-top: 10px; }
+.card-recipe { margin: 0; font-size: 18px; color: var(--nest); }
+.card-desc { margin: 2px 0 0; font-weight: 500; font-size: 22px; line-height: 1.4; word-break: keep-all; }
+.card-name.pop { animation: name-pop 0.5s cubic-bezier(.2, 1.6, .4, 1); display: inline-block; }
+@keyframes name-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ------------------------------------------------------------------ */
+/* 下:木の操作盤(3つのボタン = 丸い木の盾に葉のしるし)                  */
+/* ------------------------------------------------------------------ */
+.deck {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 184px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 318px, #00000033 318px 322px),
+    repeating-linear-gradient(180deg, #ffffff0a 0 3px, transparent 3px 22px),
+    linear-gradient(180deg, #6f4c2c, #4a321d);
+  border-top: 6px solid var(--nest-dark);
+}
+.deck::before {
+  /* 操作盤のふちの草 */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -26px;
+  height: 22px;
+  background: radial-gradient(circle at 18px 26px, var(--leaf-dark) 0 18px, transparent 19px) 0 0 / 36px 26px repeat-x;
+}
+.knob {
+  position: absolute;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.knob[data-pos="left"]   { left: 560px;  transform: translateX(-50%); }
+.knob[data-pos="center"] { left: 960px;  transform: translateX(-50%); }
+.knob[data-pos="right"]  { left: 1360px; transform: translateX(-50%); }
+.knob-face {
+  position: relative;
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 34%, #b0835a, #855b37 55%, #5a3d24);
+  box-shadow: 0 0 0 7px var(--nest-dark), 0 0 0 11px var(--leaf), 0 7px 0 11px #2a1d10;
+  transition: transform 0.08s;
+}
+.knob-face::after {
+  /* 葉のしるし */
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46%;
+  height: 28%;
+  border-radius: 0 100% 0 100%;
+  background: var(--leaf);
+  transform: translate(-50%, -50%) rotate(-30deg);
+  box-shadow: inset 0 0 0 3px #ffffff33;
+}
+.knob-side .knob-face { width: 76px; height: 76px; }
+.knob-main .knob-face { width: 92px; height: 92px; }
+.knob-label {
+  margin-top: 14px;
+  font-weight: 500;
+  font-size: 26px;
+  line-height: 1.2;
+  color: var(--shell);
+  white-space: nowrap;
+}
+.knob-main .knob-label { font-family: var(--font-title); font-size: 28px; color: var(--leaf); }
+.knob.pressed .knob-face, .knob:active .knob-face { transform: translateY(6px); }
+.knob:disabled { cursor: default; }
+.knob:disabled .knob-face { background: radial-gradient(circle at 40% 34%, #7c7166, #574d44); }
+.knob:disabled .knob-face::after { background: #7f8f78; }
+.knob:disabled .knob-label { color: #9a8a76; }
+.knob.empty { visibility: hidden; }
+.knob:focus-visible .knob-face { outline: 4px dashed var(--shell); outline-offset: 16px; }
+/* がったい!のボタンは、押せるときだけ光って呼びかける */
+[data-scene="s2"] .knob-main .knob-face { animation: knob-call 1.4s ease-in-out infinite; }
+@keyframes knob-call {
+  0%, 100% { box-shadow: 0 0 0 7px var(--nest-dark), 0 0 0 11px var(--leaf), 0 7px 0 11px #2a1d10, 0 0 0 0 #f28c2800; }
+  50%      { box-shadow: 0 0 0 7px var(--nest-dark), 0 0 0 11px var(--leaf), 0 7px 0 11px #2a1d10, 0 0 50px 18px #f28c2899; }
+}
+
+/* 短いお知らせ */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 200px;
+  transform: translateX(-50%) translateY(20px);
+  margin: 0;
+  padding: 12px 30px;
+  font-family: var(--font-title);
+  font-size: 26px;
+  color: var(--forest);
+  background: var(--leaf);
+  border: 4px solid var(--forest-deep);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 5;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ------------------------------------------------------------------ */
+/* 場面ごとの見え方                                                      */
+/* ------------------------------------------------------------------ */
+/* s2:たまごが小さくゆれて呼びかける。真ん中の ? が光る */
+[data-scene="s2"] .egg { animation: egg-wobble 1.6s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes egg-wobble { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+[data-scene="s2"] .center-mark { color: var(--glow); opacity: 1; text-shadow: 0 6px 0 var(--nest-dark); }
+[data-scene="s2"] .egg-glow { opacity: 0.35; }
+[data-scene="s2"] .center-sub,
+[data-scene="s3"] .center-sub,
+[data-scene="s4"] .center-sub { display: none; }
+
+/* s3:光の帯が流れ、たまごが光り、ひびが増える */
+[data-scene="s3"] .center-mark { display: none; }
+[data-scene="s3"] .stream {
+  stroke: var(--glow);
+  stroke-width: 12;
+  filter: drop-shadow(0 0 8px var(--glow));
+  animation: stream-flow 0.9s linear infinite;
+}
+@keyframes stream-flow { to { stroke-dashoffset: -56; } }
+[data-scene="s3"] .egg-glow { opacity: calc(0.25 + var(--progress, 0) * 0.75); transition: opacity 0.6s; }
+[data-scene="s3"] .egg { animation: egg-shake 2.4s ease-in-out infinite; transform-origin: 50% 90%; }
+[data-scene="s3"][data-level="4"] .egg { animation: egg-shake-hard 0.45s linear infinite; }
+@keyframes egg-shake { 0%, 100% { transform: rotate(0); } 10% { transform: rotate(-2deg); } 20% { transform: rotate(2deg); } 30% { transform: rotate(0); } }
+@keyframes egg-shake-hard { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg) translateX(-4px); } 75% { transform: rotate(4deg) translateX(4px); } }
+[data-scene="s3"] .orb { animation: orb-glow 1.2s ease-in-out infinite; }
+@keyframes orb-glow { 50% { box-shadow: 0 0 0 6px var(--forest-deep), 0 0 40px 10px #f28c2888; } }
+[data-scene="s3"] .board { display: block; }
+[data-scene="s3"] .status-plate { display: flex; }
+[data-scene="s3"] .tag { display: none; }
+
+/* s4:たんじょう(まぶしく光り、上の殻がはね上がって、かけらが飛び、カードが飛び出す) */
+[data-scene="s4"] .stream { opacity: 0.3; }
+[data-scene="s4"] .egg-glow { animation: birth-flash 1s ease-out forwards; }
+@keyframes birth-flash {
+  0%   { opacity: 1; transform: scale(0.6); }
+  30%  { opacity: 1; transform: scale(1.8); background: radial-gradient(circle, #fff 0%, #fff4dc 30%, #f28c2866 55%, transparent 70%); }
+  100% { opacity: 0; transform: scale(2.2); }
+}
+[data-scene="s4"] .shell-top    { animation: shell-top 0.9s cubic-bezier(.2, .8, .4, 1) forwards; }
+[data-scene="s4"] .shell-bottom { animation: shell-bottom 0.9s ease-in forwards; }
+@keyframes shell-top    { to { transform: translate(-60px, -420px) rotate(-38deg); opacity: 0; } }
+@keyframes shell-bottom { to { transform: translateY(140px); opacity: 0; } }
+[data-scene="s4"] .cracks,
+[data-scene="s4"] .center-mark { display: none; }
+[data-scene="s4"] .big-nest { animation: fade-out 0.9s ease-out forwards; }
+@keyframes fade-out { to { opacity: 0; } }
+[data-scene="s4"] .chip { animation: chip-fly 1s ease-out forwards; }
+[data-scene="s4"] .chip:nth-of-type(1) { --dx: -420px; --dy: -240px; --r: -160deg; }
+[data-scene="s4"] .chip:nth-of-type(2) { --dx: 400px;  --dy: -280px; --r: 180deg; }
+[data-scene="s4"] .chip:nth-of-type(3) { --dx: -470px; --dy: 80px;   --r: -220deg; }
+[data-scene="s4"] .chip:nth-of-type(4) { --dx: 460px;  --dy: 60px;   --r: 240deg; }
+[data-scene="s4"] .chip:nth-of-type(5) { --dx: -280px; --dy: 300px;  --r: 140deg; }
+[data-scene="s4"] .chip:nth-of-type(6) { --dx: 290px;  --dy: 320px;  --r: -140deg; }
+[data-scene="s4"] .chip:nth-of-type(7) { --dx: -80px;  --dy: -360px; --r: 100deg; }
+[data-scene="s4"] .chip:nth-of-type(8) { --dx: 100px;  --dy: -380px; --r: -100deg; }
+@keyframes chip-fly {
+  0%   { opacity: 1; transform: translate(-50%, -50%) rotate(0); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--r)); }
+}
+[data-scene="s4"] .card { display: block; animation: card-born 0.8s cubic-bezier(.2, 1.4, .4, 1) 0.5s both; }
+@keyframes card-born {
+  0%   { transform: scale(0.2) rotate(-8deg); opacity: 0; filter: brightness(3); }
+  70%  { transform: scale(1.04) rotate(1deg); opacity: 1; filter: brightness(1.3); }
+  100% { transform: scale(1) rotate(0); filter: brightness(1); }
+}
+
+/* ------------------------------------------------------------------ */
+/* 場面転換:葉っぱの群れが左から右へ横切る                               */
+/* ------------------------------------------------------------------ */
+.leaves { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+.leaf {
+  position: absolute;
+  width: 300px;
+  height: 210px;
+  border-radius: 0 100% 0 100%;
+  /* ふだんは画面の外(左) */
+  transform: translateX(-2600px) rotate(var(--r)) scale(var(--s));
+}
+.leaf::after {
+  /* 葉の すじ */
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 50%;
+  height: 4px;
+  background: #ffffff3a;
+  transform: rotate(-35deg);
+}
+.leaf-a { background: linear-gradient(135deg, #a6dc7c, var(--leaf)); }
+.leaf-b { background: linear-gradient(135deg, var(--leaf), var(--leaf-dark)); }
+.leaf-c { background: linear-gradient(135deg, var(--leaf-dark), #3f7a3a); }
+/* 閉じる:左から飛んできて画面をおおう / 開く:右へ飛んでいく(ページを開いたときも、ここから始まる) */
+.stage.shut .leaf { animation: leaf-in 0.32s ease-in var(--d) both; }
+.stage:not(.shut) .leaf { animation: leaf-out 0.5s ease-out var(--d) both; }
+@keyframes leaf-in  { from { transform: translateX(-2600px) rotate(var(--r)) scale(var(--s)); } to { transform: translateX(0) rotate(var(--r)) scale(var(--s)); } }
+@keyframes leaf-out { from { transform: translateX(0) rotate(var(--r)) scale(var(--s)); } to { transform: translateX(2600px) rotate(calc(var(--r) + 90deg)) scale(var(--s)); } }
+
+/* 動きを減らす設定のときは、葉っぱを出さない */
+@media (prefers-reduced-motion: reduce) {
+  .leaves { display: none; }
+}

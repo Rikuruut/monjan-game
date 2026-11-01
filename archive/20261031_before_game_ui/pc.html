@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん! プロトタイプ (PC)</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="pc">
+  <h1>モンじゃん! プロトタイプ</h1>
+
+  <!-- 1. 接続状態 -->
+  <section>
+    <h2>1. 接続状態</h2>
+    <p>スマホ:<span id="phone-status" class="status status-off">未接続</span></p>
+  </section>
+
+  <!-- 2. スマホ用ページのURL -->
+  <section>
+    <h2>2. スマホで開くURL</h2>
+    <p><code id="phone-url">読み込み中...</code></p>
+    <img id="qr" src="/api/qr" alt="QRコード" width="180" height="180">
+  </section>
+
+  <!-- 3. 撮影の合図 -->
+  <section>
+    <h2>3. 撮影</h2>
+    <button id="btn-capture" disabled>スマホでとる</button>
+    <p id="capture-msg" class="msg">※ 動物はスマホ側でえらびます</p>
+  </section>
+
+  <!-- 4. 届いた写真と動物 -->
+  <section>
+    <h2>4. スマホから届いたもの</h2>
+    <img id="photo" class="preview" alt="(まだ届いていません)">
+    <p>動物:<strong id="animal-name">(まだ届いていません)</strong></p>
+    <p id="photo-id" class="msg"></p>
+  </section>
+
+  <!-- 5. 生成 -->
+  <section>
+    <h2>5. 生成</h2>
+    <button id="btn-generate" disabled>生成する</button>
+    <p id="generate-msg" class="msg"></p>
+
+    <!-- ローディング(生成のあいだ、今の段階を見せる。本番の大きい画面のローディングのたたき台) -->
+    <div id="loading" class="loading hidden">
+      <ol class="loading-steps">
+        <li id="step-naming">なまえを かんがえているよ</li>
+        <li id="step-drawing">え を かいているよ</li>
+        <li id="step-soon">もうすぐ!</li>
+      </ol>
+      <div class="loading-bar"><div id="loading-bar-fill"></div></div>
+      <p id="loading-sub" class="msg"></p>
+    </div>
+  </section>
+
+  <!-- 6. 結果 -->
+  <section>
+    <h2>6. 結果</h2>
+    <div id="result-area" class="hidden">
+      <p id="retake-msg" class="retake hidden"></p>
+
+      <h3>判定結果</h3>
+      <pre id="result-json"></pre>
+
+      <div id="notes-area" class="hidden">
+        <h3>補正したところ</h3>
+        <ul id="notes"></ul>
+      </div>
+
+      <h3>モンスター画像</h3>
+      <img id="monster" class="preview" alt="(まだありません)">
+
+      <h3>かかった時間</h3>
+      <ul id="timings"></ul>
+
+      <h3>使った設定</h3>
+      <ul id="settings"></ul>
+
+      <h3>APIの使用量と料金(試算)</h3>
+      <ul id="usage"></ul>
+
+      <p id="output-dir" class="msg"></p>
+    </div>
+    <p id="error-msg" class="error"></p>
+  </section>
+
+  <!-- 7. 名前のテスト(写真も画像生成も使わず、モンスター名だけを何回か作る) -->
+  <section>
+    <h2>7. 名前のテスト</h2>
+    <p class="msg">
+      動物と物の名前だけから、モンスター名を作ります。写真も画像生成も使いません(料金は1回 0.1円以下)。<br>
+      判定と同じ「名前のつけ方」を使うので、名前のプロンプトを調整するときに使います。
+    </p>
+    <p>
+      動物:<select id="nt-animal"></select>
+      物の名前:<input id="nt-object" type="text" value="はさみ" maxlength="30">
+      回数:<input id="nt-count" type="number" value="5" min="1" max="10" style="width:4em">
+      <button id="btn-name-test">名前を作る</button>
+    </p>
+    <p id="nt-msg" class="msg"></p>
+    <table id="nt-table" class="hidden">
+      <thead>
+        <tr><th>回</th><th>採用した名前</th><th>候補(× は使わなかったもの)</th><th>取り込む場所</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <script src="/static/pc.js"></script>
+</body>
+</html>

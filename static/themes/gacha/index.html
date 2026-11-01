@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="gacha">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん! ガチャガチャ</title>
+  <!-- フォント(どちらも SIL Open Font License。イベントでの利用も可)。ネットにつながらないときは丸ゴシックで表示される -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/common/common.css">
+  <link rel="stylesheet" href="/static/themes/gacha/style.css">
+</head>
+<body>
+
+<!--
+  テーマ:gacha「ガチャガチャ」
+  写真と動物のカプセルを機械に入れて、ハンドルを回すとモンスターのカプセルが出てくる。
+  ハンドルが1段ずつ回り、中のカプセルがかき回され、最後にカプセルが転がり出てパカッと割れる。
+  当たり外れ・レア度の意味は持たせない(だれでも同じ演出)。
+  動き(撮影・生成・場面の進行・開発者メニュー)は /static/common/app.js が共通で受け持つ。
+  app.js が使う要素(ID)は、app.js の先頭の「テーマとの約束」を参照。
+  進み具合は #stage の data-level(0〜5)で ハンドルの角度・中のカプセル・機械のゆれ に、
+  --progress(0〜1)で 目盛りのメーター に変える(style.css)。
+-->
+<div id="stage" class="stage" data-scene="s1" data-level="0">
+
+  <!-- 上:看板と、いまの段階(小さなカプセル) -->
+  <header class="top">
+    <div class="signboard">
+      <h1>モンじゃん! <small>ガチャガチャ</small></h1>
+    </div>
+    <ol class="lamps" aria-label="いまの だんかい">
+      <li data-step="s1"><span class="lamp"></span>とる</li>
+      <li data-step="s2"><span class="lamp"></span>あわせる</li>
+      <li data-step="s3"><span class="lamp"></span>がったい</li>
+      <li data-step="s4"><span class="lamp"></span>たんじょう</li>
+    </ol>
+  </header>
+
+  <!-- 場面ごとの大きな見出し -->
+  <h2 id="headline" class="headline">スマホで しゃしんを とってね</h2>
+
+  <section class="scene-art" aria-label="ガチャガチャ">
+
+    <!-- 左のカプセル:しゃしん(上半分が透明で、中身が見える) -->
+    <div class="cap cap-left">
+      <div class="cap-ball">
+        <div class="cap-window">
+          <img id="photo" class="cap-photo" alt="">
+          <span class="cap-empty">📷</span>
+        </div>
+      </div>
+      <p class="tag">しゃしん</p>
+    </div>
+
+    <!-- 右のカプセル:どうぶつ -->
+    <div class="cap cap-right">
+      <div class="cap-ball">
+        <div class="cap-window">
+          <span id="animal-icon" class="cap-icon"></span>
+          <span class="cap-empty">🐾</span>
+        </div>
+      </div>
+      <p id="animal-name" class="tag">どうぶつ</p>
+    </div>
+
+    <!-- 中央:ガチャガチャの機械 -->
+    <div class="machine-area">
+      <div class="machine">
+        <!-- 透明なドームと、中のカプセル(level 2 からかき回される) -->
+        <div class="dome">
+          <span class="ball k1"></span><span class="ball k2"></span><span class="ball k3"></span>
+          <span class="ball k4"></span><span class="ball k5"></span><span class="ball k6"></span>
+          <span class="ball k7"></span><span class="ball k8"></span>
+          <p class="dome-mark">?</p>
+        </div>
+        <!-- 本体 -->
+        <div class="body">
+          <p class="body-label">モンじゃん!</p>
+          <!-- 回すハンドル(data-level で1段ずつ回る) -->
+          <div class="dial"><span class="dial-bar"></span></div>
+          <!-- 目盛りのメーター(--progress) -->
+          <div class="gauge"><span class="gauge-fill"></span></div>
+          <!-- 取り出し口 -->
+          <div class="chute"></div>
+        </div>
+      </div>
+      <!-- たんじょう:転がり出て割れるカプセル -->
+      <div class="out-cap"><span class="out-top"></span><span class="out-bottom"></span></div>
+      <span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span><span class="spark s4"></span>
+      <p class="machine-sub">スマホで どうぶつを えらんで「とる!」を おしてね</p>
+    </div>
+
+    <!-- がったい中:左は「あそびかた」、右は「なまえ」、中央の下は進み具合 -->
+    <aside class="board board-left">
+      <h3>あそびかた</h3>
+      <p id="tip" class="tip"></p>
+    </aside>
+    <aside class="board board-right">
+      <h3>なまえ</h3>
+      <p id="name-help" class="name-help">スマホで えらんでね</p>
+      <ul id="name-list" class="name-list"></ul>
+    </aside>
+    <div class="status-plate">
+      <ol class="status-steps">
+        <li id="st-naming">なまえを かんがえているよ</li>
+        <li id="st-drawing">え を かいているよ</li>
+        <li id="st-soon">もうすぐ!</li>
+      </ol>
+    </div>
+
+    <!-- たんじょう:モンスターのカード -->
+    <article id="card" class="card">
+      <header class="card-head">
+        <span id="card-name" class="card-name">???</span>
+        <span id="card-element" class="card-element"></span>
+      </header>
+      <div class="card-art"><img id="card-img" alt=""></div>
+      <footer class="card-foot">
+        <p id="card-recipe" class="card-recipe"></p>
+        <p id="card-desc" class="card-desc"></p>
+      </footer>
+    </article>
+  </section>
+
+  <!-- 下:操作盤(3つのボタン = 丸いハンドル。キーボードの ← / Enter / → でも押せる) -->
+  <footer class="deck">
+    <button id="btn-left" class="knob knob-side" data-pos="left"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-center" class="knob knob-main" data-pos="center"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-right" class="knob knob-side" data-pos="right"><span class="knob-face"></span><span class="knob-label"></span></button>
+  </footer>
+
+  <!-- 短いお知らせ -->
+  <p id="toast" class="toast" role="status" aria-live="polite"></p>
+
+  <!-- 場面転換:カプセルが画面いっぱいに降ってくる(#stage に class="shut" が付いているあいだ)。下の段から先に積もる -->
+  <div class="rain" aria-hidden="true">
+    <span class="drop g" style="left:-130px;top:-80px;--r:10deg;--d:0.213s"></span>
+    <span class="drop b" style="left:89px;top:-88px;--r:6deg;--d:0.209s"></span>
+    <span class="drop g" style="left:378px;top:-108px;--r:-36deg;--d:0.184s"></span>
+    <span class="drop g" style="left:581px;top:-136px;--r:-29deg;--d:0.208s"></span>
+    <span class="drop b" style="left:793px;top:-88px;--r:-12deg;--d:0.212s"></span>
+    <span class="drop b" style="left:1062px;top:-80px;--r:33deg;--d:0.209s"></span>
+    <span class="drop b" style="left:1263px;top:-126px;--r:31deg;--d:0.223s"></span>
+    <span class="drop g" style="left:1513px;top:-114px;--r:29deg;--d:0.186s"></span>
+    <span class="drop g" style="left:1749px;top:-105px;--r:-27deg;--d:0.209s"></span>
+    <span class="drop p" style="left:-110px;top:107px;--r:-28deg;--d:0.162s"></span>
+    <span class="drop b" style="left:89px;top:131px;--r:39deg;--d:0.145s"></span>
+    <span class="drop y" style="left:363px;top:129px;--r:0deg;--d:0.158s"></span>
+    <span class="drop p" style="left:614px;top:124px;--r:-2deg;--d:0.147s"></span>
+    <span class="drop g" style="left:801px;top:139px;--r:-30deg;--d:0.164s"></span>
+    <span class="drop p" style="left:1058px;top:126px;--r:17deg;--d:0.149s"></span>
+    <span class="drop y" style="left:1264px;top:102px;--r:-19deg;--d:0.173s"></span>
+    <span class="drop y" style="left:1504px;top:154px;--r:13deg;--d:0.137s"></span>
+    <span class="drop p" style="left:1772px;top:99px;--r:3deg;--d:0.170s"></span>
+    <span class="drop y" style="left:-112px;top:361px;--r:-32deg;--d:0.132s"></span>
+    <span class="drop y" style="left:145px;top:347px;--r:-32deg;--d:0.093s"></span>
+    <span class="drop y" style="left:364px;top:349px;--r:-4deg;--d:0.126s"></span>
+    <span class="drop p" style="left:611px;top:372px;--r:-38deg;--d:0.137s"></span>
+    <span class="drop b" style="left:812px;top:340px;--r:23deg;--d:0.093s"></span>
+    <span class="drop g" style="left:1074px;top:348px;--r:-9deg;--d:0.110s"></span>
+    <span class="drop y" style="left:1318px;top:385px;--r:-30deg;--d:0.098s"></span>
+    <span class="drop p" style="left:1520px;top:365px;--r:-23deg;--d:0.131s"></span>
+    <span class="drop p" style="left:1785px;top:365px;--r:13deg;--d:0.139s"></span>
+    <span class="drop y" style="left:-107px;top:621px;--r:-11deg;--d:0.053s"></span>
+    <span class="drop g" style="left:96px;top:574px;--r:-11deg;--d:0.046s"></span>
+    <span class="drop g" style="left:373px;top:602px;--r:-7deg;--d:0.059s"></span>
+    <span class="drop p" style="left:564px;top:591px;--r:38deg;--d:0.073s"></span>
+    <span class="drop b" style="left:850px;top:573px;--r:18deg;--d:0.090s"></span>
+    <span class="drop y" style="left:1074px;top:625px;--r:10deg;--d:0.065s"></span>
+    <span class="drop y" style="left:1266px;top:595px;--r:-33deg;--d:0.055s"></span>
+    <span class="drop g" style="left:1508px;top:593px;--r:-26deg;--d:0.062s"></span>
+    <span class="drop b" style="left:1733px;top:571px;--r:32deg;--d:0.053s"></span>
+    <span class="drop p" style="left:-144px;top:860px;--r:38deg;--d:0.001s"></span>
+    <span class="drop y" style="left:140px;top:813px;--r:-21deg;--d:0.032s"></span>
+    <span class="drop p" style="left:342px;top:838px;--r:20deg;--d:0.006s"></span>
+    <span class="drop y" style="left:609px;top:831px;--r:21deg;--d:0.024s"></span>
+    <span class="drop b" style="left:795px;top:809px;--r:3deg;--d:0.037s"></span>
+    <span class="drop g" style="left:1055px;top:853px;--r:26deg;--d:0.001s"></span>
+    <span class="drop p" style="left:1320px;top:860px;--r:-22deg;--d:0.035s"></span>
+    <span class="drop p" style="left:1553px;top:801px;--r:-29deg;--d:0.035s"></span>
+    <span class="drop p" style="left:1746px;top:833px;--r:-19deg;--d:0.018s"></span>
+  </div>
+</div>
+
+<script src="/static/common/app.js"></script>
+</body>
+</html>

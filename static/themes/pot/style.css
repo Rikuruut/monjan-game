@@ -1,0 +1,616 @@
+/* ==================================================================
+   テーマ:pot「まほうの おなべ」(2026年11月1日)
+   ------------------------------------------------------------------
+   - 舞台(#stage)の拡大縮小と開発者メニューは static/common/common.css にある。ここは見た目だけ
+   - 1920×1080 の舞台に、すべてを px で配置する。場面は #stage の data-scene(s1〜s4)で切りかえる
+   - 進み具合は、app.js が付ける data-level(0〜5)で 泡・湯気・ふたのゆれ に、
+     --progress(0〜1)で かまどの火の大きさ に変える
+       level 1 なまえを考えている … 小さな泡(2つ)
+       level 2 絵をかき始めた   … 泡が増える(4つ)
+       level 3 半分すぎ         … 泡がいっぱい(6つ)+ 湯気が立つ
+       level 4 もうすぐ         … ふたがカタカタ鳴る(ゆれる)
+   - 段階ごとの表示は opacity などの静的な指定で必ず見えるようにし、動きは飾りとして別に付ける
+     (fantasy で、線を伸ばすアニメーションが途中で止まって見えたため)
+   - 明るい画面なので、文字は夜の窓の紺で書く
+   - 大胆にするのは中央の「鍋」だけ。ほかの部品はタイルと木で静かにそろえる
+   ================================================================== */
+
+:root {
+  --tile:   #9ED8D1;      /* 台所のタイルの水色(背景) */
+  --copper: #B8642F;      /* 銅の鍋 */
+  --fire:   #E8452C;      /* かまどの火 */
+  --steam:  #FDFDFB;      /* 湯気の白(お皿・紙・湯気) */
+  --wood:   #9A6B42;      /* 木のまな板(操作盤) */
+  --ink:    #26355A;      /* 夜の窓の紺(文字・縁取り) */
+  /* 上の6色から作った濃淡 */
+  --tile-deep:   #6fb9b0;
+  --copper-dark: #7a3f1b;
+  --copper-lite: #e0915a;
+  --wood-dark:   #6b4728;
+  --font-title: "Hachi Maru Pop", "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  --font-body:  "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  /* 場面転換:湯気が画面をおおうまでの時間と、晴れるまでの時間(app.js が読む) */
+  --scene-close-ms: 520;
+  --scene-open-ms: 140;
+}
+
+body {
+  background: var(--tile-deep);   /* 舞台のまわりの余白(画面の縦横比がちがうとき) */
+  font-family: var(--font-body);
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ */
+/* 舞台:台所のタイルの壁                                               */
+/* ------------------------------------------------------------------ */
+.stage {
+  background:
+    radial-gradient(ellipse at 50% 45%, #ffffff55 0%, transparent 55%),
+    linear-gradient(#ffffffaa 0 3px, transparent 3px) 0 0 / 120px 120px,
+    linear-gradient(90deg, #ffffffaa 0 3px, transparent 3px) 0 0 / 120px 120px,
+    linear-gradient(180deg, #b4e3dd, var(--tile) 60%, var(--tile-deep));
+}
+
+/* ------------------------------------------------------------------ */
+/* 上:台所の看板と、段階の印(小さなお皿)                                */
+/* ------------------------------------------------------------------ */
+.top {
+  position: absolute;
+  top: 28px;
+  left: 48px;
+  right: 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.signboard {
+  padding: 10px 32px 14px;
+  background: var(--ink);
+  border: 4px solid var(--steam);
+  border-radius: 16px;
+  box-shadow: 0 0 0 4px var(--ink), 0 8px 0 4px #26355a55;
+}
+.signboard h1 { margin: 0; font-family: var(--font-title); font-weight: 400; font-size: 40px; color: var(--steam); -webkit-text-stroke: 1px var(--steam); }
+.signboard h1 small { font-size: 24px; color: var(--tile); margin-left: 8px; }
+
+.lamps { display: flex; gap: 30px; list-style: none; margin: 0; padding: 0; }
+.lamps li { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 24px; color: #4f6a83; }
+.lamp {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--steam);
+  border: 3px solid #7aa7a3;
+  box-shadow: inset 0 0 0 4px #e7f4f2;
+}
+.lamps li.done .lamp { background: var(--tile-deep); border-color: var(--ink); }
+.lamps li.now { color: var(--ink); }
+.lamps li.now .lamp { background: var(--fire); border-color: var(--ink); box-shadow: 0 0 14px var(--fire); }
+
+/* ------------------------------------------------------------------ */
+/* 場面の見出し                                                         */
+/* ------------------------------------------------------------------ */
+.headline {
+  position: absolute;
+  top: 124px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 68px;
+  line-height: 1.2;
+  color: var(--ink);
+  /* Hachi Maru Pop は線が細いので、紺で太らせる */
+  -webkit-text-stroke: 2px var(--ink);
+  /* 明るいタイルの上でも読めるよう、白く縁どる */
+  text-shadow: 3px 3px 0 var(--steam), -3px 3px 0 var(--steam), 3px -3px 0 var(--steam), -3px -3px 0 var(--steam), 0 8px 0 #26355a33;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 左右のお皿(材料:しゃしん・どうぶつ)                                  */
+/* ------------------------------------------------------------------ */
+.scene-art { position: absolute; inset: 0; pointer-events: none; }
+
+.dish { position: absolute; top: 300px; width: 300px; text-align: center; }
+.dish-left  { left: 230px; }
+.dish-right { left: 1390px; }
+.food {
+  position: relative;
+  z-index: 2;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #e7f4f2;
+  border: 6px solid var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.6s cubic-bezier(.3, 1.4, .5, 1);
+}
+.food-photo { width: 100%; height: 100%; object-fit: cover; display: none; }
+.food-icon  { font-size: 130px; line-height: 1; display: none; }
+.food-empty { font-size: 80px; opacity: 0.3; filter: grayscale(1); }
+.has-photo  .food-photo,
+.has-animal .food-icon { display: block; }
+.has-photo  .dish-left  .food-empty,
+.has-animal .dish-right .food-empty { display: none; }
+/* お皿 */
+.plate {
+  position: relative;
+  z-index: 1;
+  width: 300px;
+  height: 70px;
+  margin-top: -34px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 40%, var(--steam) 0 52%, #d7ece9 53% 62%, var(--steam) 63%);
+  border: 4px solid var(--ink);
+}
+.tag {
+  display: inline-block;
+  margin: 14px 0 0;
+  padding: 2px 22px 4px;
+  font-family: var(--font-title);
+  font-size: 28px;
+  color: var(--ink);
+  background: var(--steam);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 中央:まほうの おなべ                                                */
+/* ------------------------------------------------------------------ */
+.pot-area { position: absolute; left: 580px; top: 240px; width: 760px; height: 600px; }
+
+/* ふた */
+.lid {
+  position: absolute;
+  z-index: 4;
+  left: 170px;
+  top: 104px;
+  width: 420px;
+  height: 92px;
+  border-radius: 210px 210px 18px 18px / 92px 92px 18px 18px;
+  background: linear-gradient(180deg, var(--copper-lite), var(--copper) 55%, var(--copper-dark));
+  border: 5px solid var(--ink);
+  transform-origin: 50% 100%;
+}
+.lid::after {
+  /* ふたのつや */
+  content: "";
+  position: absolute;
+  left: 60px;
+  top: 16px;
+  width: 120px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff55;
+  transform: rotate(-8deg);
+}
+.lid-knob {
+  position: absolute;
+  left: 50%;
+  top: -30px;
+  width: 56px;
+  height: 34px;
+  margin-left: -28px;
+  border-radius: 28px 28px 8px 8px;
+  background: linear-gradient(180deg, var(--copper-lite), var(--copper-dark));
+  border: 5px solid var(--ink);
+}
+
+/* 鍋 */
+.pot { position: absolute; z-index: 3; left: 120px; top: 186px; width: 520px; height: 320px; }
+.pot-rim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 34px;
+  border-radius: 17px;
+  background: linear-gradient(180deg, var(--copper-lite), var(--copper-dark));
+  border: 5px solid var(--ink);
+  z-index: 2;
+}
+.pot-body {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 22px;
+  height: 290px;
+  border-radius: 18px 18px 160px 160px / 18px 18px 130px 130px;
+  background:
+    radial-gradient(ellipse at 28% 30%, #ffffff40 0 12%, transparent 30%),
+    linear-gradient(90deg, var(--copper-dark), var(--copper) 30%, var(--copper-lite) 45%, var(--copper) 62%, var(--copper-dark));
+  border: 5px solid var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pot-mark {
+  margin: 20px 0 0;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: var(--steam);
+  border: 5px solid var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-size: 100px;
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0.55;
+}
+.handle {
+  position: absolute;
+  top: 74px;
+  width: 80px;
+  height: 46px;
+  border-radius: 23px;
+  background: linear-gradient(180deg, var(--copper-lite), var(--copper-dark));
+  border: 5px solid var(--ink);
+}
+.handle-l { left: -52px; }
+.handle-r { right: -52px; }
+
+/* かまどの火(--progress で強くなる) */
+.stove { position: absolute; z-index: 2; left: 230px; top: 494px; width: 300px; height: 90px; }
+.stove::after {
+  /* ごとく */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--ink);
+}
+.flame {
+  position: absolute;
+  bottom: 12px;
+  width: 64px;
+  height: 80px;
+  border-radius: 50% 50% 50% 50% / 64% 64% 36% 36%;
+  background: radial-gradient(ellipse at 50% 72%, #ffe28a 0 22%, #ff9a3c 40%, var(--fire) 70%);
+  transform-origin: 50% 100%;
+  transform: scale(calc(0.35 + var(--progress, 0) * 0.75));
+}
+.f1 { left: 46px; }
+.f2 { left: 118px; height: 96px; }
+.f3 { left: 190px; }
+
+/* ふたのすき間からあふれる泡 */
+.bub {
+  position: absolute;
+  z-index: 5;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0 30%, #e7f4f2 60%, #bfe3de);
+  border: 3px solid var(--ink);
+  opacity: 0;
+}
+.b1 { left: 182px; top: 160px; width: 40px; height: 40px; }
+.b2 { left: 540px; top: 156px; width: 44px; height: 44px; }
+.b3 { left: 230px; top: 176px; width: 30px; height: 30px; }
+.b4 { left: 500px; top: 178px; width: 28px; height: 28px; }
+.b5 { left: 150px; top: 190px; width: 24px; height: 24px; }
+.b6 { left: 588px; top: 188px; width: 26px; height: 26px; }
+/* data-level にあわせて、泡を増やす(表示は静的な指定で、ぷくぷく動くのは飾り) */
+[data-scene="s3"][data-level="1"] :is(.b1, .b2),
+[data-scene="s3"][data-level="2"] :is(.b1, .b2, .b3, .b4),
+[data-scene="s3"][data-level="3"] .bub,
+[data-scene="s3"][data-level="4"] .bub,
+[data-scene="s3"][data-level="5"] .bub { opacity: 1; }
+
+/* 湯気(level 3 から立つ) */
+.wisp {
+  position: absolute;
+  z-index: 1;
+  top: 30px;
+  width: 90px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #ffffffdd 0%, #ffffff66 50%, transparent 72%);
+  filter: blur(4px);
+  opacity: 0;
+}
+.w1 { left: 230px; }
+.w2 { left: 335px; top: 10px; height: 160px; }
+.w3 { left: 440px; }
+[data-scene="s3"][data-level="3"] .wisp,
+[data-scene="s3"][data-level="4"] .wisp,
+[data-scene="s3"][data-level="5"] .wisp { opacity: 1; }
+
+/* たんじょうで広がる湯気 */
+.burst {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: 220px;
+  width: 300px;
+  height: 220px;
+  margin: -110px 0 0 -150px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #ffffff 0 45%, #ffffffaa 60%, transparent 72%);
+  opacity: 0;
+}
+
+.pot-sub {
+  position: absolute;
+  top: 596px;
+  left: -100px;
+  right: -100px;
+  margin: 0;
+  text-align: center;
+  font-weight: 900;
+  font-size: 26px;
+  color: var(--ink);
+  text-shadow: 0 2px 0 var(--steam);
+}
+
+/* ------------------------------------------------------------------ */
+/* がったい中の板(レシピカード:あそびかた・なまえ)と進み具合             */
+/* ------------------------------------------------------------------ */
+.board {
+  position: absolute;
+  top: 716px;
+  width: 420px;
+  height: 158px;
+  padding: 12px 20px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 33px, #9ed8d166 33px 35px),
+    var(--steam);
+  border: 4px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 0 6px 0 #26355a55;
+  display: none;
+}
+.board-left  { left: 190px; }
+.board-right { left: 1310px; }
+.board h3 { margin: 0 0 6px; font-family: var(--font-title); font-weight: 400; font-size: 26px; color: var(--fire); }
+.tip { margin: 0; font-weight: 900; font-size: 24px; line-height: 1.45; word-break: keep-all; }
+.board-right h3 { display: inline; margin-right: 12px; }
+.name-help { display: inline; margin: 0; font-weight: 700; font-size: 20px; color: #5a7290; }
+.name-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.name-list li { font-family: var(--font-title); font-size: 21px; padding: 1px 12px; border-radius: 8px; border: 3px solid #b7cfd8; background: var(--steam); }
+.name-list li.chosen { color: var(--steam); background: var(--fire); border-color: var(--ink); }
+
+.status-plate {
+  position: absolute;
+  top: 822px;
+  left: 640px;
+  width: 640px;
+  height: 62px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--ink);
+  border: 4px solid var(--steam);
+  border-radius: 12px;
+}
+.status-steps { display: flex; gap: 22px; list-style: none; margin: 0; padding: 0; }
+.status-steps li { font-weight: 900; font-size: 22px; color: #6d7f9e; }
+.status-steps li.done { color: var(--tile); }
+.status-steps li.now  { color: #ffb08a; }
+
+/* ------------------------------------------------------------------ */
+/* たんじょう:モンスターのカード                                         */
+/* ------------------------------------------------------------------ */
+.card {
+  position: absolute;
+  z-index: 7;
+  top: 226px;
+  left: 670px;
+  width: 580px;
+  padding: 14px;
+  background: var(--steam);
+  color: var(--ink);
+  border: 10px solid var(--copper);
+  border-radius: 20px;
+  box-shadow: 0 0 0 4px var(--ink), 0 0 90px #ffffffcc;
+  display: none;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  background: var(--ink);
+  border-radius: 10px;
+}
+.card-name { font-family: var(--font-title); font-size: 38px; color: var(--steam); white-space: nowrap; }
+.card-element {
+  font-weight: 900;
+  font-size: 20px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  border: 3px solid var(--steam);
+  color: #fff;
+  white-space: nowrap;
+}
+.el-fire    { background: #d9472f; }
+.el-water   { background: #2f7fd0; }
+.el-thunder { background: #e0b000; color: var(--ink); border-color: var(--ink); }
+.el-rock    { background: #8a6e4b; }
+.el-sharp   { background: #7a4fc4; }
+.el-soft    { background: #e07aa8; }
+.card-art {
+  margin-top: 12px;
+  aspect-ratio: 4 / 3;
+  border: 4px solid var(--ink);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--tile-deep);
+}
+.card-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-foot { margin-top: 10px; }
+.card-recipe { margin: 0; font-weight: 700; font-size: 18px; color: var(--copper); }
+.card-desc { margin: 2px 0 0; font-weight: 900; font-size: 22px; line-height: 1.4; word-break: keep-all; }
+.card-name.pop { animation: name-pop 0.5s cubic-bezier(.2, 1.6, .4, 1); display: inline-block; }
+@keyframes name-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ------------------------------------------------------------------ */
+/* 下:木のまな板の操作盤(3つのボタン = 丸いなべしき)                     */
+/* ------------------------------------------------------------------ */
+.deck {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 184px;
+  background:
+    repeating-linear-gradient(180deg, #ffffff10 0 2px, transparent 2px 18px),
+    linear-gradient(180deg, #ad7c50, var(--wood) 40%, var(--wood-dark));
+  border-top: 6px solid var(--ink);
+}
+.knob {
+  position: absolute;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.knob[data-pos="left"]   { left: 560px;  transform: translateX(-50%); }
+.knob[data-pos="center"] { left: 960px;  transform: translateX(-50%); }
+.knob[data-pos="right"]  { left: 1360px; transform: translateX(-50%); }
+.knob-face {
+  display: block;
+  border-radius: 50%;
+  /* なべしき:コルクの輪 */
+  background:
+    repeating-radial-gradient(circle, #00000018 0 3px, transparent 3px 10px),
+    radial-gradient(circle at 40% 35%, #e6bf8a, #c99a62 60%, #a87a45);
+  border: 5px solid var(--ink);
+  box-shadow: 0 7px 0 #00000055;
+  transition: transform 0.08s;
+}
+.knob-side .knob-face { width: 80px; height: 80px; }
+.knob-main .knob-face { width: 96px; height: 96px; }
+.knob-label { margin-top: 12px; font-weight: 900; font-size: 26px; line-height: 1.2; color: var(--steam); white-space: nowrap; text-shadow: 0 2px 0 var(--wood-dark); }
+.knob-main .knob-label { font-size: 30px; color: #ffe2b8; }
+.knob.pressed .knob-face, .knob:active .knob-face { transform: translateY(6px); }
+.knob:disabled { cursor: default; }
+.knob:disabled .knob-face { background: radial-gradient(circle at 40% 35%, #b9ab98, #8f8170); }
+.knob:disabled .knob-label { color: #d7c3a8; }
+.knob.empty { visibility: hidden; }
+.knob:focus-visible .knob-face { outline: 4px dashed var(--steam); outline-offset: 14px; }
+[data-scene="s2"] .knob-main .knob-face { animation: knob-call 1.4s ease-in-out infinite; }
+@keyframes knob-call {
+  0%, 100% { box-shadow: 0 7px 0 #00000055, 0 0 0 0 #e8452c00; }
+  50%      { box-shadow: 0 7px 0 #00000055, 0 0 46px 16px #e8452c88; }
+}
+
+/* 短いお知らせ */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 200px;
+  transform: translateX(-50%) translateY(20px);
+  margin: 0;
+  padding: 12px 30px;
+  font-family: var(--font-title);
+  font-size: 26px;
+  color: var(--steam);
+  background: var(--ink);
+  border: 4px solid var(--steam);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 8;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ------------------------------------------------------------------ */
+/* 場面ごとの見え方                                                      */
+/* ------------------------------------------------------------------ */
+/* s2:ふたが小さくはねて呼びかける。真ん中の ? が光る */
+[data-scene="s2"] .lid { animation: lid-hop 1.6s ease-in-out infinite; }
+@keyframes lid-hop { 0%, 60%, 100% { transform: translateY(0); } 70% { transform: translateY(-14px) rotate(-2deg); } 80% { transform: translateY(0); } }
+[data-scene="s2"] .pot-mark { opacity: 1; color: var(--fire); }
+[data-scene="s2"] .pot-sub,
+[data-scene="s3"] .pot-sub,
+[data-scene="s4"] .pot-sub { display: none; }
+
+/* s3:材料が鍋のほうへ向かい、泡と湯気が増え、ふたがゆれる */
+[data-scene="s3"] .dish-left  .food { transform: translateX(40px) rotate(8deg); }
+[data-scene="s3"] .dish-right .food { transform: translateX(-40px) rotate(-8deg); }
+[data-scene="s3"] .pot-mark { display: none; }
+[data-scene="s3"] .flame { animation: flicker 0.5s ease-in-out infinite alternate; }
+@keyframes flicker { to { filter: brightness(1.25); border-radius: 46% 54% 50% 50% / 60% 66% 34% 40%; } }
+[data-scene="s3"] .bub { animation: bub-bob 1.1s ease-in-out infinite; }
+[data-scene="s3"] .b2, [data-scene="s3"] .b4, [data-scene="s3"] .b6 { animation-delay: 0.4s; }
+@keyframes bub-bob { 50% { transform: translateY(-10px) scale(1.08); } }
+[data-scene="s3"] .wisp { animation: wisp-rise 2.2s ease-in-out infinite; }
+[data-scene="s3"] .w2 { animation-delay: 0.7s; }
+[data-scene="s3"] .w3 { animation-delay: 1.4s; }
+@keyframes wisp-rise { 0% { transform: translateY(20px) scaleX(0.8); } 100% { transform: translateY(-60px) scaleX(1.2); } }
+[data-scene="s3"][data-level="4"] .lid { animation: lid-rattle 0.32s linear infinite; }
+@keyframes lid-rattle { 0%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-8px) rotate(-3deg); } 75% { transform: translateY(-6px) rotate(3deg); } }
+[data-scene="s3"] .board { display: block; }
+[data-scene="s3"] .status-plate { display: flex; }
+
+/* s4:たんじょう(ふたが「ポン!」と飛び、湯気が広がって、カードが現れる) */
+[data-scene="s4"] .lid { animation: lid-pop 0.8s cubic-bezier(.2, .9, .4, 1) forwards; }
+@keyframes lid-pop { to { transform: translate(-120px, -560px) rotate(-30deg); opacity: 0; } }
+[data-scene="s4"] .pot,
+[data-scene="s4"] .stove,
+[data-scene="s4"] .bub,
+[data-scene="s4"] .wisp { animation: fade-out 0.8s ease-out 0.2s forwards; }
+@keyframes fade-out { to { opacity: 0; } }
+[data-scene="s4"] .burst { animation: burst 1.1s ease-out forwards; }
+[data-scene="s4"] .u1 { --bx: -220px; --by: -140px; }
+[data-scene="s4"] .u2 { --bx: 220px;  --by: -160px; }
+[data-scene="s4"] .u3 { --bx: -180px; --by: 120px; }
+[data-scene="s4"] .u4 { --bx: 200px;  --by: 140px; }
+@keyframes burst {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.3); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--bx), var(--by)) scale(2.6); }
+}
+[data-scene="s4"] .card { display: block; animation: card-born 0.8s cubic-bezier(.2, 1.4, .4, 1) 0.45s both; }
+@keyframes card-born {
+  0%   { transform: scale(0.2) rotate(-8deg); opacity: 0; filter: brightness(2); }
+  70%  { transform: scale(1.04) rotate(1deg); opacity: 1; filter: brightness(1.15); }
+  100% { transform: scale(1) rotate(0); filter: brightness(1); }
+}
+
+/* ------------------------------------------------------------------ */
+/* 場面転換:湯気がもくもく画面をおおう                                   */
+/* ------------------------------------------------------------------ */
+.steam { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+.puff {
+  position: absolute;
+  width: 380px;
+  height: 340px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #ffffff 0 55%, #ffffffcc 68%, transparent 74%);
+  transform: scale(0);
+  opacity: 0;
+}
+/* 閉じる:真ん中からもくもく広がって画面をおおう / 開く:さらにふくらんで消える(ページを開いたときも、ここから始まる) */
+.stage.shut .puff { animation: puff-in 0.32s ease-out var(--d) both; }
+.stage:not(.shut) .puff { animation: puff-out 0.5s ease-in var(--d) both; }
+@keyframes puff-in  { from { transform: scale(0); opacity: 0; } to { transform: scale(var(--s)); opacity: 1; } }
+@keyframes puff-out { from { transform: scale(var(--s)); opacity: 1; } to { transform: scale(calc(var(--s) * 1.5)); opacity: 0; } }
+
+/* 動きを減らす設定のときは、湯気を出さない */
+@media (prefers-reduced-motion: reduce) {
+  .steam { display: none; }
+}

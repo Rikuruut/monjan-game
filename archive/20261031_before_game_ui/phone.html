@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん!</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="phone">
+  <!-- 待機中 -->
+  <div id="view-wait" class="view">
+    <p class="big-text">PCの ボタンを<br>まってね</p>
+  </div>
+
+  <!-- 撮影待ち:動物をえらんで撮影する -->
+  <div id="view-ready" class="view hidden">
+    <p class="label-text">すきな どうぶつを えらんで</p>
+    <select id="animal" class="animal-select"></select>
+
+    <label for="camera" class="shoot-button">とる!</label>
+    <!-- カメラの起動。getUserMedia()は使わない(HTTPSが必要になるため) -->
+    <input type="file" id="camera" accept="image/*" capture="environment" hidden>
+  </div>
+
+  <!-- 送信中 -->
+  <div id="view-sending" class="view hidden">
+    <p class="big-text">おくっているよ…</p>
+  </div>
+
+  <!-- 送信完了 -->
+  <div id="view-done" class="view hidden">
+    <p class="big-text">おくったよ!</p>
+  </div>
+
+  <!-- エラー -->
+  <div id="view-error" class="view hidden">
+    <p class="big-text">しっぱいしたよ</p>
+    <p id="phone-error" class="small-text"></p>
+    <button id="btn-retry" class="shoot-button small">もういちど</button>
+  </div>
+
+  <script src="/static/phone.js"></script>
+</body>
+</html>

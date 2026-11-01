@@ -1,0 +1,547 @@
+/* ==================================================================
+   テーマ:cardpack「カードパック かいふう」(2026年11月1日)
+   ------------------------------------------------------------------
+   - 舞台(#stage)の拡大縮小と開発者メニューは static/common/common.css にある。ここは見た目だけ
+   - 1920×1080 の舞台に、すべてを px で配置する。場面は #stage の data-scene(s1〜s4)で切りかえる
+   - 進み具合は、app.js が付ける data-level(0〜5)で パックのふちが光る辺の数 に、
+     --progress(0〜1)で パックのホロの光の強さ に変える
+       level 1 なまえを考えている … 左のふち
+       level 2 絵をかき始めた   … 上のふち
+       level 3 半分すぎ         … 右のふち
+       level 4 もうすぐ         … 下のふち。パックが震え、ホロの光がもれる
+   - 段階ごとの表示は opacity などの静的な指定で必ず見えるようにし、動きは飾りとして別に付ける
+     (fantasy で、線を伸ばすアニメーションが途中で止まって見えたため)
+   - ※ 光り方に「レア度」の意味は持たせない。全員同じ演出にする
+   - 大胆にするのは中央の「パック」だけ。ほかの部品はビロードと金で静かにそろえる
+   ================================================================== */
+
+:root {
+  --velvet: #5A1A2B;      /* ビロードの深紅(背景) */
+  --pack:   #E23B4A;      /* パックの赤 */
+  --gold:   #E8B84A;      /* 金の箔 */
+  --holo-c: #7FE3F0;      /* ホロの水色 */
+  --holo-p: #F6A6D8;      /* ホロの桃 */
+  --paper:  #F5F3EF;      /* 台紙の白(文字・カードの地) */
+  /* 上の6色から作った濃淡 */
+  --velvet-deep: #2e0b15;
+  --pack-dark:   #9d1f2c;
+  --gold-dark:   #a97d22;
+  --font-title: "RocknRoll One", "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  --font-body:  "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  /* 場面転換:カードが画面をおおうまでの時間と、晴れるまでの時間(app.js が読む) */
+  --scene-close-ms: 600;
+  --scene-open-ms: 120;
+}
+
+body {
+  background: var(--velvet-deep);   /* 舞台のまわりの余白(画面の縦横比がちがうとき) */
+  font-family: var(--font-body);
+  color: var(--paper);
+}
+
+/* ------------------------------------------------------------------ */
+/* 舞台:カードを並べるビロードの台                                      */
+/* ------------------------------------------------------------------ */
+.stage {
+  background:
+    radial-gradient(ellipse at 50% 38%, #ffffff1a 0%, transparent 45%),
+    repeating-linear-gradient(45deg, #ffffff06 0 2px, transparent 2px 18px),
+    repeating-linear-gradient(-45deg, #00000014 0 2px, transparent 2px 18px),
+    radial-gradient(ellipse at 50% 40%, #7a2539 0%, var(--velvet) 55%, var(--velvet-deep) 100%);
+}
+
+/* ------------------------------------------------------------------ */
+/* 上:お店の看板と、段階の印(小さなカード)                              */
+/* ------------------------------------------------------------------ */
+.top {
+  position: absolute;
+  top: 28px;
+  left: 48px;
+  right: 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.signboard {
+  padding: 10px 32px 12px;
+  background: linear-gradient(180deg, #7a2539, var(--velvet-deep));
+  border: 4px solid var(--gold);
+  border-radius: 12px;
+  box-shadow: 0 0 0 4px var(--velvet-deep), 0 6px 0 4px #00000066;
+}
+.signboard h1 { margin: 0; font-family: var(--font-title); font-weight: 400; font-size: 40px; color: var(--paper); }
+.signboard h1 small { font-size: 24px; color: var(--gold); margin-left: 8px; }
+
+.lamps { display: flex; gap: 30px; list-style: none; margin: 0; padding: 0; }
+.lamps li { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 24px; color: #c08a97; }
+.lamp {
+  width: 20px;
+  height: 28px;
+  border-radius: 4px;
+  background: #4a1422;
+  border: 3px solid #8a4a58;
+}
+.lamps li.done .lamp { background: var(--gold); border-color: var(--gold-dark); }
+.lamps li.now { color: var(--paper); }
+.lamps li.now .lamp { background: linear-gradient(135deg, var(--holo-c), var(--holo-p)); border-color: var(--paper); box-shadow: 0 0 16px var(--holo-c); }
+
+/* ------------------------------------------------------------------ */
+/* 場面の見出し                                                         */
+/* ------------------------------------------------------------------ */
+.headline {
+  position: absolute;
+  top: 128px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 68px;
+  line-height: 1.15;
+  color: var(--gold);
+  text-shadow: 0 5px 0 var(--velvet-deep), 0 0 40px #e8b84a40;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 左右のカード(しゃしん・どうぶつ)                                      */
+/* ------------------------------------------------------------------ */
+.scene-art { position: absolute; inset: 0; pointer-events: none; }
+
+.mini-card {
+  position: absolute;
+  top: 290px;
+  width: 260px;
+  height: 364px;
+  padding: 14px;
+  background: linear-gradient(160deg, var(--paper), #e8e1d6);
+  border: 8px solid var(--gold);
+  border-radius: 18px;
+  box-shadow: 0 0 0 4px var(--velvet-deep), 0 16px 24px #00000055;
+  transition: transform 0.6s cubic-bezier(.3, 1.3, .5, 1);
+}
+.mini-left  { left: 250px;  transform: rotate(-6deg); }
+.mini-right { left: 1410px; transform: rotate(6deg); }
+.mini-window {
+  height: 240px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: linear-gradient(160deg, #7a2539, var(--velvet-deep));
+  border: 3px solid var(--gold-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mini-photo { width: 100%; height: 100%; object-fit: cover; display: none; }
+.mini-icon  { font-size: 130px; line-height: 1; display: none; }
+.mini-empty { font-size: 80px; opacity: 0.3; filter: grayscale(1); }
+.has-photo  .mini-photo,
+.has-animal .mini-icon { display: block; }
+.has-photo  .mini-left  .mini-empty,
+.has-animal .mini-right .mini-empty { display: none; }
+.mini-label {
+  margin: 14px 0 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 30px;
+  color: var(--velvet);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 中央:カードパック                                                   */
+/* ------------------------------------------------------------------ */
+.pack-area { position: absolute; left: 580px; top: 240px; width: 760px; height: 600px; }
+.pack-glow {
+  position: absolute;
+  left: 50%;
+  top: 270px;
+  width: 640px;
+  height: 640px;
+  margin: -320px 0 0 -320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #e8b84aaa 0%, #e8b84a33 40%, transparent 70%);
+  opacity: 0.15;
+}
+.pack {
+  position: absolute;
+  z-index: 2;
+  left: 190px;
+  top: 10px;
+  width: 380px;
+  height: 520px;
+  filter: drop-shadow(0 20px 22px #00000066);
+}
+/* 上の切り口(誕生のときに破れて飛ぶ) */
+.pack-tear {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 70px;
+  background:
+    repeating-linear-gradient(90deg, #ffffff22 0 3px, transparent 3px 12px),
+    linear-gradient(180deg, var(--gold), var(--gold-dark));
+  clip-path: polygon(0 0, 100% 0, 100% 80%, 95% 100%, 90% 80%, 85% 100%, 80% 80%, 75% 100%, 70% 80%, 65% 100%, 60% 80%, 55% 100%, 50% 80%, 45% 100%, 40% 80%, 35% 100%, 30% 80%, 25% 100%, 20% 80%, 15% 100%, 10% 80%, 5% 100%, 0 80%);
+}
+.pack-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 56px;
+  bottom: 0;
+  overflow: hidden;
+  /* 赤い袋に、ななめのつや */
+  background: linear-gradient(100deg, var(--pack-dark), var(--pack) 30%, #ff7d89 44%, var(--pack) 58%, var(--pack-dark));
+  clip-path: polygon(0 0, 100% 0, 100% 95%, 95% 100%, 90% 95%, 85% 100%, 80% 95%, 75% 100%, 70% 95%, 65% 100%, 60% 95%, 55% 100%, 50% 95%, 45% 100%, 40% 95%, 35% 100%, 30% 95%, 25% 100%, 20% 95%, 15% 100%, 10% 95%, 5% 100%, 0 95%);
+}
+.pack-holo {
+  /* ホロの光(がったい中に、進み具合で強くなる) */
+  position: absolute;
+  inset: -40%;
+  background: conic-gradient(from 0deg, var(--holo-c), var(--holo-p), var(--gold), var(--holo-c), var(--holo-p), var(--holo-c));
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+.pack-emblem {
+  position: absolute;
+  left: 50%;
+  top: 150px;
+  width: 220px;
+  height: 220px;
+  margin-left: -110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #7a2539, var(--velvet-deep));
+  border: 8px solid var(--gold);
+  box-shadow: 0 0 0 4px var(--velvet-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pack-mark { margin: 0; font-family: var(--font-title); font-size: 150px; line-height: 1; color: var(--gold); opacity: 0.45; }
+.pack-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 50px;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 32px;
+  color: var(--gold);
+  text-shadow: 0 3px 0 var(--velvet-deep);
+}
+/* ふちの光(data-level にあわせて1辺ずつ) */
+.edge {
+  position: absolute;
+  z-index: 3;
+  background: #fff3c4;
+  box-shadow: 0 0 14px 6px var(--gold), 0 0 30px 10px #e8b84a88;
+  border-radius: 6px;
+  opacity: 0;
+}
+.e1 { left: -6px;  top: 56px;  bottom: 0;   width: 10px; }   /* 左 */
+.e2 { left: 0;     right: 0;   top: -6px;   height: 10px; }  /* 上 */
+.e3 { right: -6px; top: 56px;  bottom: 0;   width: 10px; }   /* 右 */
+.e4 { left: 0;     right: 0;   bottom: -6px; height: 10px; } /* 下 */
+[data-scene="s3"][data-level="1"] .e1,
+[data-scene="s3"][data-level="2"] :is(.e1, .e2),
+[data-scene="s3"][data-level="3"] :is(.e1, .e2, .e3),
+[data-scene="s3"][data-level="4"] .edge,
+[data-scene="s3"][data-level="5"] .edge { opacity: 1; }
+
+.pack-sub {
+  position: absolute;
+  top: 548px;
+  left: -100px;
+  right: -100px;
+  margin: 0;
+  text-align: center;
+  font-weight: 800;
+  font-size: 26px;
+  color: var(--paper);
+  text-shadow: 0 2px 0 var(--velvet-deep);
+}
+
+/* ------------------------------------------------------------------ */
+/* がったい中の板(あそびかた・なまえ・進み具合)                          */
+/* ------------------------------------------------------------------ */
+.board {
+  position: absolute;
+  top: 716px;
+  width: 420px;
+  height: 158px;
+  padding: 12px 20px;
+  background: linear-gradient(180deg, #4a1422, var(--velvet-deep));
+  border: 4px solid var(--gold);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 #00000066;
+  display: none;
+}
+.board-left  { left: 190px; }
+.board-right { left: 1310px; }
+.board h3 { margin: 0 0 6px; font-family: var(--font-title); font-weight: 400; font-size: 26px; color: var(--gold); }
+.tip { margin: 0; font-weight: 800; font-size: 24px; line-height: 1.45; word-break: keep-all; }
+.board-right h3 { display: inline; margin-right: 12px; }
+.name-help { display: inline; margin: 0; font-size: 20px; color: #e8b6c2; }
+.name-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.name-list li { font-family: var(--font-title); font-size: 21px; padding: 1px 12px; border-radius: 8px; border: 3px solid #8a4a58; }
+.name-list li.chosen { color: var(--velvet-deep); background: var(--gold); border-color: var(--paper); }
+
+.status-plate {
+  position: absolute;
+  top: 822px;
+  left: 640px;
+  width: 640px;
+  height: 62px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--velvet-deep);
+  border: 4px solid var(--gold-dark);
+  border-radius: 12px;
+}
+.status-steps { display: flex; gap: 22px; list-style: none; margin: 0; padding: 0; }
+.status-steps li { font-weight: 800; font-size: 22px; color: #8a4a58; }
+.status-steps li.done { color: var(--gold); }
+.status-steps li.now  { color: var(--holo-c); }
+
+/* ------------------------------------------------------------------ */
+/* たんじょう:モンスターのカード(ホロのきらめき)                          */
+/* ------------------------------------------------------------------ */
+.card {
+  position: absolute;
+  top: 226px;
+  left: 670px;
+  width: 580px;
+  padding: 14px;
+  background: linear-gradient(160deg, var(--paper), #e8e1d6);
+  color: var(--velvet-deep);
+  border: 10px solid var(--gold);
+  border-radius: 20px;
+  box-shadow: 0 0 0 4px var(--velvet-deep), 0 0 90px #7fe3f0aa;   /* 生まれたカードの輝き(gacha・summon と同じくらいの明るさ) */
+  display: none;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  background: linear-gradient(100deg, var(--pack-dark), var(--pack));
+  border-radius: 10px;
+}
+.card-name { font-family: var(--font-title); font-size: 38px; color: var(--paper); white-space: nowrap; text-shadow: 0 3px 0 var(--velvet-deep); }
+.card-element {
+  font-weight: 800;
+  font-size: 20px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  border: 3px solid var(--paper);
+  color: #fff;
+  white-space: nowrap;
+}
+.el-fire    { background: #d9472f; }
+.el-water   { background: #2f7fd0; }
+.el-thunder { background: #e0b000; color: var(--velvet-deep); border-color: var(--velvet-deep); }
+.el-rock    { background: #8a6e4b; }
+.el-sharp   { background: #7a4fc4; }
+.el-soft    { background: #e07aa8; }
+.card-art {
+  position: relative;
+  margin-top: 12px;
+  aspect-ratio: 4 / 3;
+  border: 4px solid var(--gold-dark);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--velvet-deep);
+}
+.card-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* ホロのきらめき(光の帯が絵の上を流れる) */
+.holo-sweep {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, #7fe3f055 44%, #f6a6d855 52%, #ffffff66 56%, transparent 70%);
+  background-size: 300% 100%;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.card-foot { margin-top: 10px; }
+.card-recipe { margin: 0; font-weight: 500; font-size: 18px; color: var(--pack-dark); }
+.card-desc { margin: 2px 0 0; font-weight: 800; font-size: 22px; line-height: 1.4; word-break: keep-all; }
+.card-name.pop { animation: name-pop 0.5s cubic-bezier(.2, 1.6, .4, 1); display: inline-block; }
+@keyframes name-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ------------------------------------------------------------------ */
+/* 下:操作盤(3つのボタン = カードの形)                                  */
+/* ------------------------------------------------------------------ */
+.deck {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 184px;
+  background:
+    repeating-linear-gradient(45deg, #ffffff05 0 2px, transparent 2px 16px),
+    linear-gradient(180deg, #4a1422, var(--velvet-deep));
+  border-top: 6px solid var(--gold);
+}
+.knob {
+  position: absolute;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  cursor: pointer;
+  perspective: 400px;
+}
+.knob[data-pos="left"]   { left: 560px;  transform: translateX(-50%); }
+.knob[data-pos="center"] { left: 960px;  transform: translateX(-50%); }
+.knob[data-pos="right"]  { left: 1360px; transform: translateX(-50%); }
+.knob-face {
+  position: relative;
+  display: block;
+  border-radius: 10px;
+  /* カードの裏面:赤に金のふちと、ひし形の模様 */
+  background:
+    repeating-linear-gradient(45deg, #ffffff14 0 2px, transparent 2px 12px),
+    repeating-linear-gradient(-45deg, #ffffff14 0 2px, transparent 2px 12px),
+    linear-gradient(160deg, var(--pack), var(--pack-dark));
+  border: 5px solid var(--gold);
+  box-shadow: 0 0 0 3px var(--velvet-deep), 0 7px 0 3px #00000088;
+  transition: transform 0.12s;
+}
+.knob-face::after {
+  content: "★";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  color: var(--gold);
+}
+.knob-side .knob-face { width: 104px; height: 70px; }
+.knob-main .knob-face { width: 124px; height: 84px; }
+.knob-label { margin-top: 12px; font-weight: 800; font-size: 26px; line-height: 1.2; color: var(--paper); white-space: nowrap; }
+.knob-main .knob-label { font-family: var(--font-title); font-size: 28px; color: var(--gold); }
+/* 押すと、カードが少しめくれる */
+.knob.pressed .knob-face, .knob:active .knob-face { transform: rotateX(28deg) translateY(4px); }
+.knob:disabled { cursor: default; }
+.knob:disabled .knob-face { background: linear-gradient(160deg, #6b4a52, #4a3036); border-color: #8a7360; }
+.knob:disabled .knob-face::after { color: #8a7360; }
+.knob:disabled .knob-label { color: #8a6a72; }
+.knob.empty { visibility: hidden; }
+.knob:focus-visible .knob-face { outline: 4px dashed var(--holo-c); outline-offset: 12px; }
+[data-scene="s2"] .knob-main .knob-face { animation: knob-call 1.4s ease-in-out infinite; }
+@keyframes knob-call {
+  0%, 100% { box-shadow: 0 0 0 3px var(--velvet-deep), 0 7px 0 3px #00000088, 0 0 0 0 #e8b84a00; }
+  50%      { box-shadow: 0 0 0 3px var(--velvet-deep), 0 7px 0 3px #00000088, 0 0 46px 16px #e8b84a99; }
+}
+
+/* 短いお知らせ */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 200px;
+  transform: translateX(-50%) translateY(20px);
+  margin: 0;
+  padding: 12px 30px;
+  font-family: var(--font-title);
+  font-size: 26px;
+  color: var(--velvet-deep);
+  background: var(--gold);
+  border: 4px solid var(--velvet-deep);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 5;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ------------------------------------------------------------------ */
+/* 場面ごとの見え方                                                      */
+/* ------------------------------------------------------------------ */
+/* s2:パックがふわっと浮いて呼びかける。真ん中の ? が光る */
+[data-scene="s2"] .pack { animation: pack-bob 1.8s ease-in-out infinite; }
+@keyframes pack-bob { 50% { transform: translateY(-14px) rotate(1deg); } }
+[data-scene="s2"] .pack-mark { opacity: 1; text-shadow: 0 0 24px var(--gold); }
+[data-scene="s2"] .pack-glow { opacity: 0.4; }
+[data-scene="s2"] .pack-sub,
+[data-scene="s3"] .pack-sub,
+[data-scene="s4"] .pack-sub { display: none; }
+
+/* s3:左右のカードがパックへ向かい、ふちが光り、ホロがもれる */
+[data-scene="s3"] .mini-left  { transform: rotate(10deg) translateX(40px); box-shadow: 0 0 0 4px var(--velvet-deep), 0 0 40px 10px #e8b84a88; }
+[data-scene="s3"] .mini-right { transform: rotate(-10deg) translateX(-40px); box-shadow: 0 0 0 4px var(--velvet-deep), 0 0 40px 10px #e8b84a88; }
+[data-scene="s3"] .pack-glow { opacity: calc(0.3 + var(--progress, 0) * 0.7); }
+[data-scene="s3"] .pack-holo { opacity: calc(var(--progress, 0) * 0.45); animation: holo-spin 6s linear infinite; }
+@keyframes holo-spin { to { transform: rotate(360deg); } }
+[data-scene="s3"] .pack-mark { opacity: 0.8; }
+[data-scene="s3"] .pack { animation: pack-shake 2.4s ease-in-out infinite; }
+[data-scene="s3"][data-level="4"] .pack { animation: pack-shake-hard 0.4s linear infinite; }
+[data-scene="s3"][data-level="4"] .pack-holo { opacity: 0.6; }
+@keyframes pack-shake { 0%, 100% { transform: rotate(0); } 10% { transform: rotate(-1.5deg); } 20% { transform: rotate(1.5deg); } 30% { transform: rotate(0); } }
+@keyframes pack-shake-hard { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg) translateX(-4px); } 75% { transform: rotate(3deg) translateX(4px); } }
+[data-scene="s3"] .board { display: block; }
+[data-scene="s3"] .status-plate { display: flex; }
+
+/* s4:たんじょう(上の切り口が破れて飛び、パックが落ち、ホロのカードがせり上がる) */
+[data-scene="s4"] .pack-glow { animation: birth-flash 1s ease-out forwards; }
+@keyframes birth-flash {
+  0%   { opacity: 1; transform: scale(0.6); }
+  30%  { opacity: 1; transform: scale(1.8); background: radial-gradient(circle, #fff 0%, #7fe3f0aa 30%, #f6a6d866 55%, transparent 70%); }
+  100% { opacity: 0; transform: scale(2.2); }
+}
+[data-scene="s4"] .pack-tear { animation: tear-off 0.7s cubic-bezier(.2, .8, .4, 1) forwards; }
+@keyframes tear-off { to { transform: translate(260px, -420px) rotate(38deg); opacity: 0; } }
+[data-scene="s4"] .pack-body,
+[data-scene="s4"] .edge { animation: pack-drop 0.9s ease-in 0.15s forwards; }
+@keyframes pack-drop { to { transform: translateY(420px); opacity: 0; } }
+[data-scene="s4"] .card { display: block; animation: card-rise 0.9s cubic-bezier(.2, 1.3, .4, 1) 0.45s both; }
+@keyframes card-rise {
+  0%   { transform: translateY(260px) scale(0.6); opacity: 0; filter: brightness(2.5); }
+  70%  { transform: translateY(-12px) scale(1.03); opacity: 1; filter: brightness(1.3); }
+  100% { transform: translateY(0) scale(1); filter: brightness(1); }
+}
+[data-scene="s4"] .holo-sweep { animation: holo-sweep 2.4s ease-in-out 1.2s infinite; }
+/* 共通の光沢の帯(common.css)は付けない。このテーマはホロのきらめきが同じ役目をするため */
+[data-scene="s4"] .card-art::after { content: none; }
+@keyframes holo-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* ------------------------------------------------------------------ */
+/* 場面転換:カードの束が扇形に広がって画面を横切る                        */
+/* ------------------------------------------------------------------ */
+.fan { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+.fan-card {
+  position: absolute;
+  width: 300px;
+  height: 420px;
+  border-radius: 18px;
+  background:
+    repeating-linear-gradient(45deg, #ffffff14 0 2px, transparent 2px 14px),
+    repeating-linear-gradient(-45deg, #ffffff14 0 2px, transparent 2px 14px),
+    linear-gradient(160deg, var(--pack), var(--pack-dark));
+  border: 8px solid var(--gold);
+  box-shadow: 0 10px 20px #00000066;
+  transform: translate(-2600px, 300px) rotate(var(--r));
+}
+/* 閉じる:左下から扇形に広がって画面をおおう / 開く:右上へ飛んでいく(ページを開いたときも、ここから始まる) */
+.stage.shut .fan-card { animation: fan-in 0.32s ease-in var(--d) both; }
+.stage:not(.shut) .fan-card { animation: fan-out 0.5s ease-out var(--d) both; }
+@keyframes fan-in  { from { transform: translate(-2600px, 300px) rotate(calc(var(--r) - 60deg)); } to { transform: translate(0, 0) rotate(var(--r)); } }
+@keyframes fan-out { from { transform: translate(0, 0) rotate(var(--r)); } to { transform: translate(2600px, -300px) rotate(calc(var(--r) + 60deg)); } }
+
+/* 動きを減らす設定のときは、カードの束を出さない */
+@media (prefers-reduced-motion: reduce) {
+  .fan { display: none; }
+}
