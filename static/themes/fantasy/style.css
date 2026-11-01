@@ -318,6 +318,28 @@ body {
   opacity: 0;
 }
 
+/* effects.js の演出で使うもの */
+/* 光の粒・紙吹雪の canvas(ひびの粒は たまごの上・巣の下。紙吹雪は舞台ぜんたい) */
+.fx-particles { position: absolute; inset: 0; pointer-events: none; }
+#egg-particles { z-index: 3; }
+#fx-confetti { z-index: 9; }
+/* 誕生の瞬間の、まぶしい光 */
+.egg-flash {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: 270px;
+  width: 640px;
+  height: 640px;
+  margin: -320px 0 0 -320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #fff4dc 30%, #f28c2866 55%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+/* 誕生の演出のあいだは、CSS のゆれを止める(GSAP で揺らす) */
+#stage.fx-hold .egg { animation: none; }
+
 /* ------------------------------------------------------------------ */
 /* がったい中の立て札(あそびかた・なまえ・進み具合)                      */
 /* ------------------------------------------------------------------ */
@@ -579,23 +601,24 @@ body {
 [data-scene="s3"] .status-plate { display: flex; }
 [data-scene="s3"] .tag { display: none; }
 
-/* s4:たんじょう(まぶしく光り、上の殻がはね上がって、かけらが飛び、カードが飛び出す) */
+/* s4:たんじょう(まぶしく光り、上の殻がはね上がって、かけらが飛び、カードが飛び出す)
+   ※ effects.js(GSAP)が読めたときは <html> に fx が付き、そちらが動かす。下の CSS アニメーションは、読めなかったときの控え */
 [data-scene="s4"] .stream { opacity: 0.3; }
-[data-scene="s4"] .egg-glow { animation: birth-flash 1s ease-out forwards; }
+html:not(.fx) [data-scene="s4"] .egg-glow { animation: birth-flash 1s ease-out forwards; }
 @keyframes birth-flash {
   0%   { opacity: 1; transform: scale(0.6); }
   30%  { opacity: 1; transform: scale(1.8); background: radial-gradient(circle, #fff 0%, #fff4dc 30%, #f28c2866 55%, transparent 70%); }
   100% { opacity: 0; transform: scale(2.2); }
 }
-[data-scene="s4"] .shell-top    { animation: shell-top 0.9s cubic-bezier(.2, .8, .4, 1) forwards; }
-[data-scene="s4"] .shell-bottom { animation: shell-bottom 0.9s ease-in forwards; }
+html:not(.fx) [data-scene="s4"] .shell-top    { animation: shell-top 0.9s cubic-bezier(.2, .8, .4, 1) forwards; }
+html:not(.fx) [data-scene="s4"] .shell-bottom { animation: shell-bottom 0.9s ease-in forwards; }
 @keyframes shell-top    { to { transform: translate(-60px, -420px) rotate(-38deg); opacity: 0; } }
 @keyframes shell-bottom { to { transform: translateY(140px); opacity: 0; } }
 [data-scene="s4"] .cracks,
 [data-scene="s4"] .center-mark { display: none; }
-[data-scene="s4"] .big-nest { animation: fade-out 0.9s ease-out forwards; }
+html:not(.fx) [data-scene="s4"] .big-nest { animation: fade-out 0.9s ease-out forwards; }
 @keyframes fade-out { to { opacity: 0; } }
-[data-scene="s4"] .chip { animation: chip-fly 1s ease-out forwards; }
+html:not(.fx) [data-scene="s4"] .chip { animation: chip-fly 1s ease-out forwards; }
 [data-scene="s4"] .chip:nth-of-type(1) { --dx: -420px; --dy: -240px; --r: -160deg; }
 [data-scene="s4"] .chip:nth-of-type(2) { --dx: 400px;  --dy: -280px; --r: 180deg; }
 [data-scene="s4"] .chip:nth-of-type(3) { --dx: -470px; --dy: 80px;   --r: -220deg; }
@@ -608,7 +631,8 @@ body {
   0%   { opacity: 1; transform: translate(-50%, -50%) rotate(0); }
   100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--r)); }
 }
-[data-scene="s4"] .card { display: block; animation: card-born 0.8s cubic-bezier(.2, 1.4, .4, 1) 0.5s both; }
+[data-scene="s4"] .card { display: block; }
+html:not(.fx) [data-scene="s4"] .card { animation: card-born 0.8s cubic-bezier(.2, 1.4, .4, 1) 0.5s both; }
 @keyframes card-born {
   0%   { transform: scale(0.2) rotate(-8deg); opacity: 0; filter: brightness(3); }
   70%  { transform: scale(1.04) rotate(1deg); opacity: 1; filter: brightness(1.3); }

@@ -76,6 +76,8 @@
     <!-- 中央:大きな巣と、モンスターのたまご -->
     <div class="egg-area">
       <div class="egg-glow"></div>
+      <!-- ひびからもれる光の粒(effects.js が描く) -->
+      <div id="egg-particles" class="fx-particles" aria-hidden="true"></div>
       <div class="egg">
         <div class="shell shell-bottom"></div>
         <div class="shell shell-top"></div>
@@ -156,6 +158,9 @@
   <!-- 短いお知らせ -->
   <p id="toast" class="toast" role="status" aria-live="polite"></p>
 
+  <!-- 誕生のときに舞う葉っぱの紙吹雪(effects.js が描く) -->
+  <div id="fx-confetti" class="fx-particles" aria-hidden="true"></div>
+
   <!-- 場面転換:葉っぱの群れが画面を横切る(#stage に class="shut" が付いているあいだ、画面をおおう) -->
   <div class="leaves" aria-hidden="true">
     <span class="leaf leaf-a" style="left:-59px;top:-101px;--r:-10deg;--s:1.0;--d:0.041s"></span>
@@ -215,6 +220,11 @@
   </div>
 </div>
 
+<!-- 演出のライブラリ(ネットにつながっていなくても動くように、static/vendor/ に置いてある) -->
+<script src="/static/vendor/gsap/gsap.min.js"></script>
+<script src="/static/vendor/gsap/SplitText.min.js"></script>
+<script src="/static/vendor/tsparticles/tsparticles.bundle.min.js"></script>
+<script src="/static/themes/fantasy/effects.js"></script>
 <script src="/static/common/app.js"></script>
 </body>
 </html>

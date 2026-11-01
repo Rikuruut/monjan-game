@@ -49,6 +49,11 @@
 - **サーバー**:FastAPI + Uvicorn
 - **リアルタイム通信**:WebSocket(FastAPIの標準機能)
 - **画面**:HTML + CSS + 素のJavaScript(フレームワークは使わない)
+- **演出のライブラリ**(2026年11月1日。依頼者の指定で、まず fantasy テーマでためす)
+  - GSAP 3.15.0(SplitText も):誕生の流れ・名前が1文字ずつ跳ねる。全プラグイン無料・商用可(Webflow の標準ライセンス)
+  - tsParticles 4.5.0(bundle 版):ひびからもれる光の粒・葉っぱの紙吹雪。MIT
+  - **ネットから読まず `static/vendor/` に置いている**(モールの Wi-Fi が不安定でも動くように)。版を上げるときは置きかえる
+  - tsParticles 4 は書き方が 3 と違う(色は `particles.paint.color`。`particles.color` では白になる)
 - **画像処理**:Pillow
 - **AI**:OpenAI公式のPythonライブラリ(`openai`)
 - **設定管理**:python-dotenv(`.env`ファイル)
@@ -97,11 +102,12 @@ monjan-prototype/
 │   │   └── common.css   # 舞台の拡大縮小・開発者メニューの見た目
 │   ├── themes/          # PC用ページの見た目(テーマ)。/?theme=<名前> で切りかえ
 │   │   ├── lab/         # ひみつけんきゅうじょ(index.html / style.css / theme.json)
-│   │   ├── fantasy/     # モンスターのたまご
+│   │   ├── fantasy/     # モンスターのたまご(effects.js:GSAP と tsParticles の演出)
 │   │   ├── cardpack/    # カードパック かいふう
 │   │   ├── pot/         # まほうの おなべ
 │   │   ├── gacha/       # ガチャガチャ
 │   │   └── summon/      # しょうかんの まほうじん
+│   ├── vendor/          # 演出のライブラリ(gsap/・tsparticles/。ネットから読まないため手元に置く)
 │   ├── phone.html       # スマホ用ページ
 │   ├── phone.js
 │   └── phone.css
@@ -136,6 +142,14 @@ monjan-prototype/
     回る・ゆれる要素の中では、途中の状態のまま止まって見えた(fantasy のひび、summon の輪、gacha のメーター)
 - 場面転換は `#stage` に付く `shut` の class をテーマが CSS で見せる(lab:鉄のシャッター、fantasy:葉っぱの群れ、cardpack:扇形に広がるカード、pot:湯気、gacha:降ってくるカプセル、summon:広がる魔法陣)。
   閉じる・開く時間は、テーマの CSS 変数 `--scene-close-ms` / `--scene-open-ms` で変えられる
+- **テーマは JavaScript で演出を足してもよい**(2026年11月1日。なくても動く)
+  - `window.themeFx.birth(showCard)` を用意すると、誕生の演出をまかせられる。「ため」のあと `showCard()` で s4 にし、終わったら Promise を終える。
+    失敗しても `app.js` がかならずカードを出す
+  - 段が変わると `#stage` に `levelchange` イベント(`detail: { level, prev }`)が来る
+  - 今は fantasy だけ(`static/themes/fantasy/effects.js`):s3 でひびから光の粒(段が上がるほど増える)と、段が上がるたびに「ぴょこっ」。
+    誕生は「はげしく揺れる → ピタッと止まる → 光る → 割れる(かけらが落ちて跳ねる・葉っぱが舞う)→ カードが回って出る → 名前が1文字ずつ跳ねる」(約4秒)
+  - ライブラリが読めないときは、`<html>` に `fx` が付かず、今までの CSS の演出で動く(style.css は `html:not(.fx)` のときだけ誕生の CSS アニメーションを使う)
+  - 確認用:`/?theme=fantasy&demo=1&play=birth&img=…&name=…` で、がったい中から誕生までを API なしで流せる
 - 以下の「場面」「操作」の説明は、どのテーマでも同じ
 
 - 1920×1080 の「舞台」を作り、モニターの大きさに合わせて全体を拡大・縮小する(`pc.js` の `fitStage`)

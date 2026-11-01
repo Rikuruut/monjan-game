@@ -22,10 +22,16 @@
 //   #stage に CSS 変数 --progress(0〜1)と data-level(0〜5)を付ける。
 //   level:0 まだ / 1 なまえを考えている / 2 絵をかき始めた / 3 半分すぎ / 4 もうすぐ / 5 できた
 //   テーマはこれを CSS で見せ方に変える(研究所:液体とメーター、たまご:ひび)。JavaScript は書かなくてよい。
+//   段が変わったときは、#stage に levelchange イベント(detail: { level, prev })も送る。
+// ── テーマの演出(なくてもよい)──
+//   テーマが window.themeFx.birth(showCard) を用意していれば、誕生の演出をまかせる。
+//   テーマは「ため」の演出のあと showCard()(s4 にする)を呼び、演出が終わったら Promise を終える。
+//   用意していないテーマ・途中で失敗したときは、すぐに s4 にして CSS の演出で見せる。
 // ── 場面転換 ──
 //   切りかえのあいだ #stage に class="shut" が付く。閉じる・開く時間は、テーマの CSS 変数
 //   --scene-close-ms / --scene-open-ms で変えられる(初期値 340 / 140)。
 // 確認用:?demo=1&scene=s3&progress=0.8&photo=…&img=…&animal=…&name=… で、APIを使わずにその場面を表示する。&dev=1 で開発者メニューを開く。
+//   ?demo=1&play=birth で、がったい中から誕生までの流れを見本のデータで動かす。
 
 const el = (id) => document.getElementById(id);
 const stage = el("stage");
@@ -244,10 +250,24 @@ function birth(data) {
   state.generating = false;
   return new Promise((resolve) => {
     const img = el("card-img");
-    const show = () => { setScene("s4", { instant: true }); resolve(); };
-    if (img.complete && img.naturalWidth) show();
+    const show = () => playBirth().then(resolve);
+    if (!img.getAttribute("src") || (img.complete && img.naturalWidth)) show();
     else { img.onload = show; img.onerror = show; }
   });
+}
+
+// 誕生の演出。テーマの演出(window.themeFx.birth)があればまかせ、なければすぐ s4 にする
+async function playBirth() {
+  const fx = window.themeFx;
+  if (!fx || typeof fx.birth !== "function") return setScene("s4", { instant: true });
+  let shown = false;
+  const showCard = () => { if (!shown) { shown = true; renderScene("s4"); } };
+  try {
+    await fx.birth(showCard);
+  } catch (e) {
+    console.error("テーマの演出に失敗しました", e);
+  }
+  showCard();   // テーマが呼ばなかった・失敗したときも、かならずカードは見せる
 }
 
 // 性質ごとのアイコンと色(カードの右上のバッジ)
@@ -307,7 +327,10 @@ const TIPS = [
 function setProgress(ratio) {
   const r = Math.max(0, Math.min(1, ratio));
   stage.style.setProperty("--progress", r);
-  stage.dataset.level = r <= 0 ? 0 : r < 0.3 ? 1 : r < 0.5 ? 2 : r < 0.7 ? 3 : r < 1 ? 4 : 5;
+  const prev = Number(stage.dataset.level || 0);
+  const level = r <= 0 ? 0 : r < 0.3 ? 1 : r < 0.5 ? 2 : r < 0.7 ? 3 : r < 1 ? 4 : 5;
+  stage.dataset.level = level;
+  if (level !== prev) stage.dispatchEvent(new CustomEvent("levelchange", { detail: { level, prev } }));
 }
 
 function setSteps(now) {
@@ -658,7 +681,8 @@ async function loadAnimals() {
 
 // 確認用:?demo=1&scene=s3&photo=…&img=…&animal=…&name=… で、APIを使わずにその場面を表示する
 function runDemo() {
-  const scene = SCENES.includes(params.get("scene")) ? params.get("scene") : "s1";
+  const playBirthDemo = params.get("play") === "birth";
+  const scene = playBirthDemo ? "s3" : SCENES.includes(params.get("scene")) ? params.get("scene") : "s1";
   state.animal = params.get("animal") || "ゴリラ";
   const name = params.get("name") || "ゴリザミ";
   el("animal-name").textContent = state.animal;
@@ -666,20 +690,20 @@ function runDemo() {
   if (params.get("photo")) el("photo").src = params.get("photo");
   if (scene !== "s1") stage.classList.add("has-photo", "has-animal");
   renderScene(scene);
+  const sample = {
+    monster: { monster_name: name, element: "とがってる", object_name: "はさみ",
+               description: "はさみの つのを ふりかざし、なんでも きりひらく ちからもち。" },
+    settings: { animal: state.animal },
+    monster_url: params.get("img") || "",
+  };
   if (scene === "s3") {
     startTips();
     setSteps("drawing");
-    setProgress(parseFloat(params.get("progress") || "0.55"));
+    setProgress(parseFloat(params.get("progress") || (playBirthDemo ? "0.95" : "0.55")));
     setNameChoices([name, "ガブリザミ", "ゴリシザー"]);
   }
-  if (scene === "s4") {
-    fillCard({
-      monster: { monster_name: name, element: "とがってる", object_name: "はさみ",
-                 description: "はさみの つのを ふりかざし、なんでも きりひらく ちからもち。" },
-      settings: { animal: state.animal },
-      monster_url: params.get("img") || "",
-    });
-  }
+  if (scene === "s4") fillCard(sample);
+  if (playBirthDemo) setTimeout(() => birth(sample), 2000);
 }
 
 loadThemes();
