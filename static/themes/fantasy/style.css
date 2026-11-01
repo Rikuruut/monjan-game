@@ -166,13 +166,15 @@ body {
 .has-animal .orb-icon { display: block; }
 .has-photo  .nest-left  .orb-empty,
 .has-animal .nest-right .orb-empty { display: none; }
-/* 巣:つるで編んだおわん(写真や動物の玉を下から抱える) */
+/* 巣:つるで編んだおわん(写真や動物の玉を下から抱える)
+   ※ 2026年11月2日:巣が玉の手前に重なって、写真や動物のアイコンの下が隠れていたので、
+     巣を玉の後ろに回し、重なりも小さくした(玉は巣の上に乗って見える) */
 .nest {
   position: relative;
-  z-index: 3;
+  z-index: 1;
   width: 280px;
   height: 84px;
-  margin-top: -44px;
+  margin-top: -26px;
   border-radius: 0 0 140px 140px / 0 0 84px 84px;
   background:
     repeating-linear-gradient(24deg, #00000022 0 3px, transparent 3px 12px),
@@ -237,6 +239,24 @@ body {
 /* たんじょうのときだけ、ギザギザの線で上と下の殻に分ける(それまでは割れる位置を見せない) */
 [data-scene="s4"] .shell-top    { clip-path: polygon(0 0, 100% 0, 100% 47%, 90% 41%, 80% 49%, 70% 41%, 60% 49%, 50% 41%, 40% 49%, 30% 41%, 20% 49%, 10% 41%, 0 47%); }
 [data-scene="s4"] .shell-bottom { display: block; clip-path: polygon(0 47%, 10% 41%, 20% 49%, 30% 41%, 40% 49%, 50% 41%, 60% 49%, 70% 41%, 80% 49%, 90% 41%, 100% 47%, 100% 100%, 0 100%); }
+
+/* 画像生成の途中の絵:殻の内側に、ぼんやり透けて見える。data-partial(何枚目か)が進むほど、はっきりする
+   ※ 段ごとの見た目は静的な指定にする(transition やアニメーションは使わない。CLAUDE.md) */
+.egg-peek {
+  position: absolute;
+  z-index: 2;
+  left: 6px;
+  top: 6px;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+  object-fit: cover;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  opacity: 0;
+  pointer-events: none;
+}
+[data-scene="s3"][data-partial="1"] .egg-peek { opacity: 0.3;  filter: blur(14px) saturate(0.7); }
+[data-scene="s3"][data-partial="2"] .egg-peek { opacity: 0.5;  filter: blur(7px) saturate(0.85); }
+[data-scene="s3"][data-partial="3"] .egg-peek { opacity: 0.65; filter: blur(3px); }
 
 .cracks { position: absolute; inset: 0; z-index: 3; width: 380px; height: 480px; overflow: visible; }
 .crack {
@@ -616,6 +636,11 @@ html:not(.fx) [data-scene="s4"] .shell-bottom { animation: shell-bottom 0.9s eas
 @keyframes shell-bottom { to { transform: translateY(140px); opacity: 0; } }
 [data-scene="s4"] .cracks,
 [data-scene="s4"] .center-mark { display: none; }
+/* effects.js があるとき、誕生の演出を通さずに s4 にしたら(開発者メニューの場面ボタンなど)、
+   殻と巣が残ってカードの前に出てしまう。演出のあいだ(#stage に fx-hold が付く)以外は、はじめから隠す。
+   演出が終わったあとも、殻と巣は effects.js が見えなくしているので、見た目は変わらない */
+html.fx #stage[data-scene="s4"]:not(.fx-hold) .shell,
+html.fx #stage[data-scene="s4"]:not(.fx-hold) .big-nest { visibility: hidden; }
 html:not(.fx) [data-scene="s4"] .big-nest { animation: fade-out 0.9s ease-out forwards; }
 @keyframes fade-out { to { opacity: 0; } }
 html:not(.fx) [data-scene="s4"] .chip { animation: chip-fly 1s ease-out forwards; }

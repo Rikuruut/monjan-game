@@ -129,6 +129,10 @@ class WSManager:
         await self.broadcast(ROLE_PC, message)
         await self.broadcast(ROLE_PHONE, message)
 
+    async def notify_revealed(self, photo_id: str, image_url: str) -> None:
+        """PC の大画面でモンスターが登場し終わったことを、スマホに知らせる(スマホはここで絵を見せる)。"""
+        await self.broadcast(ROLE_PHONE, {"type": "revealed", "photo_id": photo_id, "image_url": image_url})
+
     async def notify_name_chosen(self, photo_id: str, name: str) -> None:
         """子供がスマホで名前を選んだことをPCに知らせる(カードの名前を書きかえるため)。"""
         await self.broadcast(ROLE_PC, {"type": "name_chosen", "photo_id": photo_id, "name": name})

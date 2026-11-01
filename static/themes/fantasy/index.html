@@ -80,6 +80,8 @@
       <div class="egg">
         <div class="shell shell-bottom"></div>
         <div class="shell shell-top"></div>
+        <!-- 画像生成の途中の絵(app.js が src と #stage の data-partial を付ける)。殻の内側に、ぼんやり透けて見える -->
+        <img id="partial-img" class="egg-peek" alt="">
         <!-- ひび(--progress にあわせて、てっぺんから少しずつ伸びて枝分かれする)
              --a:伸び始める進み具合 / --w:伸びきるまでの幅(どちらも 0〜1)。pathLength="100" で長さをそろえている -->
         <svg class="cracks" viewBox="0 0 380 480" aria-hidden="true">

@@ -87,29 +87,39 @@ NAME_RULES = """【モンスター名のつけ方】
 # ----------------------------------------------------------------------
 # 物の判定(テキスト用モデル)への指示文
 # ----------------------------------------------------------------------
-RECOGNIZE_INSTRUCTIONS = f"""あなたは、子供向けのゲーム「モンじゃん!」のアシスタントです。
-写真に写っている「身の回りの物」と、子供が選んだ「動物」から、合体モンスターの情報を作ります。
+# ルールは部品に分けてあり、3つの指示文で使い回す。
+#   RECOGNIZE_INSTRUCTIONS   :詳しいプロンプト(detailed)の判定。全部のルールと名前のつけ方
+#   QUICK_CHECK_INSTRUCTIONS :短いプロンプト(simple)の、すぐ要る判定(物の名前・撮り直し・人)
+#   DESCRIBE_INSTRUCTIONS    :短いプロンプト(simple)の、名前・説明(画像生成と同時に作る)
+# ※ 2026年11月2日:simple で判定を2つに分けたときに部品にした。
+#   RECOGNIZE_INSTRUCTIONS の文は、分ける前と1字も変わらない(tests/test_prompts.py で確かめている)
+# ※ 番号は組み立てるときに振る(部品には番号を書かない)
 
-次のルールを必ず守ってください。
+_RULE_OBJECT_NAME = """写真に写っている物の名前(object_name)は、小学生にわかる言葉で答える。
+   物を持っている手や指が写っていても、物の名前には含めない(「はさみと ゆび」ではなく「はさみ」)。"""
 
-1. 写真に写っている物の名前(object_name)は、小学生にわかる言葉で答える。
-   物を持っている手や指が写っていても、物の名前には含めない(「はさみと ゆび」ではなく「はさみ」)。
-2. 性質(element)は、次の6つから必ず1つだけ選ぶ。それ以外の言葉は使わない。
+_RULE_ELEMENT = f"""性質(element)は、次の6つから必ず1つだけ選ぶ。それ以外の言葉は使わない。
    {" / ".join(ELEMENTS)}
-   物の見た目や使い方から、いちばん合うものを選ぶ。
-3. モンスター名は、下の【モンスター名のつけ方】に従って、name_candidates に候補を3つ、良い順に書く。
-   monster_name には、3つの中でいちばん良いと思うもの(1つ目)を書く。
-4. 説明文(description)は、子供向けにひらがな中心で書く。40文字以内にする。
-   読みやすいように、ことばの区切りに半角スペースを入れてよい。
-5. 次のどれかに当てはまる場合は、needs_retake を true にし、retake_reason に
+   物の見た目や使い方から、いちばん合うものを選ぶ。"""
+
+_RULE_NAMES = """モンスター名は、下の【モンスター名のつけ方】に従って、name_candidates に候補を3つ、良い順に書く。
+   monster_name には、3つの中でいちばん良いと思うもの(1つ目)を書く。"""
+
+_RULE_DESCRIPTION = """説明文(description)は、子供向けにひらがな中心で書く。40文字以内にする。
+   読みやすいように、ことばの区切りに半角スペースを入れてよい。"""
+
+_RULE_RETAKE = """次のどれかに当てはまる場合は、needs_retake を true にし、retake_reason に
    子供にもわかるやさしい日本語で理由を書く(例:「ひとが うつっているよ」)。
    - 人の顔や体が写っている(物を持つ手や指だけが写っている場合は、人が写っているとみなさない)
    - 物がはっきり写っていない(暗い、ぼけている、何か判別できない)
-   - 子供に見せるのにふさわしくない物が写っている
-6. needs_retake が true のときも、他の項目は空文字ではなく、
-   わかる範囲の値か、適当な既定値を入れる。
-7. needs_retake が false のときは、retake_reason は空文字にする。
-8. 融合デザイン(design_plan)は、画像生成プロンプトにそのまま差し込む設計図。
+   - 子供に見せるのにふさわしくない物が写っている"""
+
+_RULE_RETAKE_FILL = """needs_retake が true のときも、他の項目は空文字ではなく、
+   わかる範囲の値か、適当な既定値を入れる。"""
+
+_RULE_RETAKE_REASON_EMPTY = """needs_retake が false のときは、retake_reason は空文字にする。"""
+
+_RULE_DESIGN_PLAN = """融合デザイン(design_plan)は、画像生成プロンプトにそのまま差し込む設計図。
    いちばんの目標は、小学生・中学生が見て「かっこいい!強そう!使ってみたい!」と
    わくわくするモンスターにすること。カードを引いて当たりが出たときのような特別感を出す。
    融合の型(武器・体の部位・よろい のどれか)は、ユーザーの発言で毎回指定する。
@@ -155,12 +165,61 @@ RECOGNIZE_INSTRUCTIONS = f"""あなたは、子供向けのゲーム「モンじ
        頭・背中・しっぽなどから生える武器にする
    - 物の特徴は、メインとサブの2か所にまとめる。同じパーツを全身にくり返さない。
    - 1つのパーツは、体の1か所にしか使わない。メインに使ったパーツ(持ち手・刃など)を、
-     サブでもう一度使わない。サブには、メインで使っていない別のパーツや、物の色・模様を使う。
-9. has_person は、写真の主役として人の顔や体がはっきり写っていれば true、そうでなければ false にする。
-   物を持つ手や指、写り込んだ腕など、体の一部だけが写っているときは false にし、写っている物を判定する。
-   子供は物を手に持って撮ることが多いので、手や指が写っているのはふつうのこととして扱う。
+     サブでもう一度使わない。サブには、メインで使っていない別のパーツや、物の色・模様を使う。"""
 
-{NAME_RULES}"""
+_RULE_HAS_PERSON = """has_person は、写真の主役として人の顔や体がはっきり写っていれば true、そうでなければ false にする。
+   物を持つ手や指、写り込んだ腕など、体の一部だけが写っているときは false にし、写っている物を判定する。
+   子供は物を手に持って撮ることが多いので、手や指が写っているのはふつうのこととして扱う。"""
+
+
+
+def _numbered(rules: list[str]) -> str:
+    """ルールに 1. 2. … と番号を振ってつなげる。"""
+    return "\n".join(f"{i}. {rule}" for i, rule in enumerate(rules, 1))
+
+
+_ASSISTANT = "あなたは、子供向けのゲーム「モンじゃん!」のアシスタントです。\n"
+_MUST = "\n次のルールを必ず守ってください。\n\n"
+
+RECOGNIZE_INSTRUCTIONS = (
+    _ASSISTANT
+    + "写真に写っている「身の回りの物」と、子供が選んだ「動物」から、合体モンスターの情報を作ります。\n"
+    + _MUST
+    + _numbered([_RULE_OBJECT_NAME, _RULE_ELEMENT, _RULE_NAMES, _RULE_DESCRIPTION, _RULE_RETAKE,
+                 _RULE_RETAKE_FILL, _RULE_RETAKE_REASON_EMPTY, _RULE_DESIGN_PLAN, _RULE_HAS_PERSON])
+    + "\n\n" + NAME_RULES
+)
+
+# 短いプロンプト(simple)の、すぐ要る判定。画像生成を早く始めるため、物の名前と撮り直しだけを答えてもらう
+# (名前・説明・設計図を考えさせないぶん、早く返る)
+# 物の目立つパーツ2つ(すぐ要る判定だけ。画像では物の全体ではなく、パーツごとに別々の場所へ作り変えさせる)
+# ※ 2026年11月2日:物の全体を渡すと、本物の製品まるごと(持ち手・ねじまで)をくわえる・刺さる絵になった。
+#   パーツ1つだけでは、はさみの持ち手がなくなり、何の物か分かりにくくなった。そこで2つ答えてもらう
+#   (prompts.fusion_line のコメント参照)。具体例は書かない(写されるため)
+# ※ 同じ日:「いちばん目立つパーツ」と聞くと、はさみでは毎回「持ち手」が1つ目になり、持ち手が前足の籠手になった
+#   (違和感があるので、依頼者の判断でやめた)。1つ目は、そのまま武器や体の一部にしても自然なパーツにする
+_RULE_OBJECT_PART = """物のパーツを2つ、小学生にわかる短い言葉で1つずつ答える。
+   object_part:そのまま武器や体の一部(角・爪・ひれ など)に作り変えても自然な、とがった・かたい・形のはっきりしたパーツ。
+   object_sub_part:object_part とは別の、そこを見ればその物だと分かるパーツ(形や色の特徴があるもの)。体の飾りにする。
+   どちらも物の全体ではなく、部分にする。人が主役の写真では、いちばん目立つ持ち物や服の部分にする。"""
+
+_QUICK_CHECK_RULES = [_RULE_OBJECT_NAME, _RULE_OBJECT_PART, _RULE_RETAKE, _RULE_RETAKE_FILL,
+                      _RULE_RETAKE_REASON_EMPTY, _RULE_HAS_PERSON]
+QUICK_CHECK_INSTRUCTIONS = (
+    _ASSISTANT
+    + "写真に写っている「身の回りの物」の名前と、写真を撮り直す必要があるかを、すばやく判定します。\n"
+    + _MUST
+    + _numbered(_QUICK_CHECK_RULES)
+)
+
+# 短いプロンプト(simple)の、名前・説明。画像生成と同時に作る
+DESCRIBE_INSTRUCTIONS = (
+    _ASSISTANT
+    + "子供が選んだ「動物」と、写真に写っている「身の回りの物」が合体したモンスターの、性質・名前・説明文を作ります。\n"
+    + _MUST
+    + _numbered([_RULE_ELEMENT, _RULE_NAMES, _RULE_DESCRIPTION])
+    + "\n\n" + NAME_RULES
+)
 
 
 # ----------------------------------------------------------------------
@@ -168,31 +227,66 @@ RECOGNIZE_INSTRUCTIONS = f"""あなたは、子供向けのゲーム「モンじ
 # ----------------------------------------------------------------------
 # 人が写っていても撮り直しにせず、人そのものを「物」の代わりの素材として扱う。
 # ※ 同意が取れている撮影でだけ使うこと(openai_client.allow_person のコメント参照)。
-PERSON_MODE_RECOGNIZE_NOTE = """
+
+_PERSON_NOTE_HEAD = """
 【今回だけの追加ルール(人モード)】
-- 上の 5 の「人の顔や体が写っている」は、今回は撮り直しの理由にしない。
-- 人の顔や体が主役として写っている場合は、その人を「物」の代わりの素材として扱う。
+"""
+
+_PERSON_NOTE_RETAKE = """- 上の {retake_rule} の「人の顔や体が写っている」は、今回は撮り直しの理由にしない。
+"""   # {retake_rule}:撮り直しのルールの番号
+
+_PERSON_NOTE_OBJECT = """- 人の顔や体が主役として写っている場合は、その人を「物」の代わりの素材として扱う。
   物を持つ手や指だけが写っているときは、人ではなく、その物を判定する(has_person は false)。
   object_name には、その人の見た目の特徴を子供にわかる言葉で書く
   (例:「めがねの ひと」「ぼうしの こ」「あかい ふくの ひと」)。
-- primary_fusion と secondary_fusion では、その人の髪型・めがね・帽子・服の色などを
+"""
+
+_PERSON_NOTE_FUSION = """- primary_fusion と secondary_fusion では、その人の髪型・めがね・帽子・服の色などを
   「物の特徴」として扱う。
-- monster_name と description は、本人をからかう言い方にしない。
+"""
+
+_PERSON_NOTE_NAMES = """- monster_name と description は、本人をからかう言い方にしない。
   かっこいい・かわいいと感じる書き方にする。
-- 人が写っていても、次の場合は今までどおり needs_retake を true にする。
+"""
+
+_PERSON_NOTE_STILL_RETAKE = """- 人が写っていても、次の場合は今までどおり needs_retake を true にする。
   - 顔や体がはっきり写っていない(暗い、ぶれている)
   - 子供に見せるのにふさわしくないものが一緒に写っている
 """
 
 
+PERSON_MODE_RECOGNIZE_NOTE = (
+    _PERSON_NOTE_HEAD + _PERSON_NOTE_RETAKE.format(retake_rule=5)
+    + _PERSON_NOTE_OBJECT + _PERSON_NOTE_FUSION + _PERSON_NOTE_NAMES + _PERSON_NOTE_STILL_RETAKE
+)
+
+
 def build_recognize_instructions(allow_person: bool = False) -> str:
-    """判定モデルに渡す指示文を組み立てる。
+    """判定モデルに渡す指示文を組み立てる(詳しいプロンプト用)。
 
     `allow_person` が true のときは、人が写っていても撮り直しにしない。
     """
     if allow_person:
         return RECOGNIZE_INSTRUCTIONS + PERSON_MODE_RECOGNIZE_NOTE
     return RECOGNIZE_INSTRUCTIONS
+
+
+def build_quick_check_instructions(allow_person: bool = False) -> str:
+    """すぐ要る判定(短いプロンプト用)の指示文。人モードでは、人を物の代わりに判定する。"""
+    if not allow_person:
+        return QUICK_CHECK_INSTRUCTIONS
+    retake_rule = _QUICK_CHECK_RULES.index(_RULE_RETAKE) + 1
+    return (QUICK_CHECK_INSTRUCTIONS + _PERSON_NOTE_HEAD + _PERSON_NOTE_RETAKE.format(retake_rule=retake_rule)
+            + _PERSON_NOTE_OBJECT + _PERSON_NOTE_STILL_RETAKE)
+
+
+def build_describe_instructions(person: bool = False) -> str:
+    """名前・説明(短いプロンプト用)の指示文。`person` は、人モードで写真の主役が人のとき。"""
+    if not person:
+        return DESCRIBE_INSTRUCTIONS
+    return (DESCRIBE_INSTRUCTIONS + _PERSON_NOTE_HEAD
+            + "- 写真の主役は人。物の名前のかわりに、その人の見た目の特徴を伝えている。\n"
+            + _PERSON_NOTE_NAMES)
 
 
 # ----------------------------------------------------------------------
@@ -258,7 +352,8 @@ STAGING_OPTIONS: dict[str, list[str]] = {
         "その場で胸を張って吠える",
         "後ろ足で立ち上がる",
         "低く身構えて、相手を狙う",
-        "振り返りざまに技を放つ",
+        # ※「振り返りざまに技を放つ」は外した(2026年11月2日)。体をねじるので体の形が崩れやすく、
+        #   ライオンでは前足が2本増え、サメではしっぽが2本あるように見えた
         "高い岩の上から見下ろす",
         "空中で体をひねる",
         "全速力で駆け抜ける",
@@ -277,17 +372,50 @@ STAGING_OPTIONS: dict[str, list[str]] = {
         "静かににらむ",
         "自信満々に目を輝かせる",
     ],
+    # ※ 2026年11月2日:夜の候補を減らした。それまでは8つのうち4つ(月夜・満天の星空・雪の降る夜・雷の鳴る嵐)が暗い場面で、
+    #   試した4枚のうち3枚が夜になり、夜の絵にはどれも大きな満月が描かれた(新しい「いつもの絵」になりかけた)。
+    #   月を思わせる「月夜」を外し、「雪の降る夜」は昼の雪にした。夜は「満天の星空」だけ
     "scene": [
         "朝焼け",
         "昼の青空",
         "夕焼け",
-        "月夜",
-        "満天の星空",
-        "雷の鳴る嵐",
-        "雪の降る夜",
         "霧の立ちこめる朝",
+        "雪の降る日",
+        "雨上がりの虹",
+        "雷の鳴る嵐",
+        "満天の星空",
     ],
 }
+
+# 前足(arm)に物を取り込む回では選ばないポーズ
+# ※ 2026年11月2日:前足を武器にして「振り返りざまに技を放つ」で描いたら、武器の前足を振り上げたうえに、
+#   立つための前足も描かれ、前足が2本多くなった。武器の前足と立つ足を別々に描きやすいポーズを外す
+POSES_AVOIDED_WITH_ARM: tuple[str, ...] = ("後ろ足で立ち上がる", "空中で体をひねる")
+
+# 水の中の動物(地面に立つポーズを選ばず、水の中を泳いでいる絵にする)。製品版で増えたら、ここに足す
+# ※ 2026年11月2日:サメで「高い岩の上から見下ろす」が選ばれ、サメが岩の上に立っている絵になったため
+AQUATIC_ANIMALS: tuple[str, ...] = ("サメ",)
+
+# 水の中の動物のポーズ(陸の候補ではなく、ここから選ぶ。体をねじらない、まっすぐな形のもの)
+# ※ 2026年11月2日:陸の候補から地面に立つものを外しただけでは、「振り返りざまに技を放つ」で体がねじれ、
+#   しっぽが2本あるように見えた。泳ぐ動物向けの候補を別に持つ
+AQUATIC_POSES: list[str] = [
+    "全速力で泳ぐ",
+    "大きな口を開けて前に襲いかかる",
+    "水しぶきを上げて水面から跳び上がる",
+    "ゆったり泳ぎながらにらむ",
+]
+
+
+def pose_candidates(animal: str, main_part: str) -> list[str]:
+    """その動物と取り込む場所で選ぶポーズの候補(水の中の動物は専用の候補、前足の回は足が増えやすいものを外す)。"""
+    if (animal or "").strip() in AQUATIC_ANIMALS:
+        return list(AQUATIC_POSES)
+    poses = STAGING_OPTIONS["pose"]
+    if main_part == "arm":
+        poses = [p for p in poses if p not in POSES_AVOIDED_WITH_ARM]
+    return list(poses)
+
 
 # 演出の項目名(判定への依頼文と、画像プロンプトの表示に使う)
 STAGING_LABELS: dict[str, str] = {
@@ -330,38 +458,48 @@ def build_recognize_prompt(
     return _append_recognize_options(text, fusion_type, staging)
 
 
-def build_recognize_prompt_simple(
+# すぐ要る判定(短いプロンプト用)の依頼文
+QUICK_CHECK_PROMPT = "添付した写真に写っている物の名前(object_name)と目立つパーツ2つ(object_part・object_sub_part)、撮り直しが必要か(needs_retake)を判定してください。"
+
+
+def build_describe_prompt(
     animal: str,
+    object_name: str,
     fusion_place: str | None = None,
-    staging: dict[str, str] | None = None,
 ) -> str:
-    """短い画像プロンプト(simple)のときの、判定の依頼文。
+    """名前・説明(短いプロンプト用)の依頼文。画像生成と同時に作る。
 
     ※ 2026年10月31日:説明文と画像の食い違いを直した。
       それまでは simple でも、判定に「融合の型(よろい など)」と「演出の時間帯・天気(雪の降る夜 など)」を
       伝えていたが、画像にはそれを伝えていなかった。そのため説明文に「よろいをまとい、ゆきの夜に ほえる」と
       書かれるのに、絵はちがう、ということが起きた。
-      simple では、画像に伝えるのと同じ内容(取り込む場所・ポーズ)だけを判定に伝え、
+      simple では、画像に伝えるのと同じ内容(取り込む場所・ポーズ)だけを伝え、
       説明文には画像に伝えていない見た目を書かないよう指示する。
+    ※ 2026年11月2日:判定を2つに分けたときに、判定の依頼文(build_recognize_prompt_simple)から移した。
+      物の名前は、先に終わったすぐ要る判定の答えを渡す
+    ※ 2026年11月2日:説明文を「絵の説明」から「図鑑の一文」に変えた。
+      それまでは、ポーズ・表情(「静かににらむ」など)を伝えていたので、説明文がそれを写しただけの
+      「〜の 〜で、〜を はなつ、〜な ライオン!」という同じ型になっていた(133件中ほとんど。
+      多い言葉:きらめく・かぜを・ぎんいろの・きりひらく・ひかる・はなつ)。
+      ポーズ・表情は伝えず、絵を見ても分からない、そのモンスターらしい小さなお話を1つ書いてもらう。
+      ※ 具体例は書かない(指示文に例を書くと、そのまま写されるため。CLAUDE.md)
     """
     text = (
-        f"子供が選んだ動物は「{animal}」です。\n"
-        f"添付した写真に写っている物を見て、「{animal}」と合体したモンスターの情報を作ってください。"
+        f"子供が選んだ動物は「{animal}」、写真に写っている物は「{object_name}」です。\n"
+        f"添付した写真も見て、「{animal}」と「{object_name}」が合体したモンスターの、性質・名前・説明文を作ってください。"
     )
     if fusion_place:
         text += f"\n\n物の特徴は、主に「{fusion_place}」に取り込まれます。モンスター名のヒントにしてかまいません。"
-    pose = [staging.get(k) for k in ("pose", "expression")] if staging else []
-    pose = [p for p in pose if p]
-    if pose:
-        text += f"\nモンスターは「{'、'.join(pose)}」すがたで描かれます。"
     text += (
-        "\n\n説明文(description)は、このあと描かれる絵と食い違わないように書いてください。"
-        "\n- 使ってよいのは、動物の特徴、物の特徴や使い方、物が"
-        + (f"「{fusion_place}」" if fusion_place else "体")
-        + "に取り込まれていること、そのモンスターの力や性格。"
-        "\n- 天気・時間帯・場所(夜・雪・森・海など)は書かない。"
+        "\n\n説明文(description)は、モンスター図鑑にのっている一文のように書いてください。"
+        "\n- 絵を見ただけでは分からない、このモンスターらしい小さなお話を1つ書く"
+        "(くせ・すきなこと・とくいなこと・くらしかた など)。"
+        f"「{object_name}」の使い方や、使うときの音・動きを生かすと、そのモンスターらしくなる。"
+        "\n- ポーズ・表情・目や体の光・色は書かない(絵を見れば分かるため)。"
+        "\n- 天気・時間帯・場所(夜・雪・森・海など)は書かない(絵と食い違うため)。"
         "\n- 取り込む場所以外の体の見た目(よろい・つばさ・武器などを新しく足すこと)は書かない。"
-        "\ndesign_plan は、今回は画像には使いません。かんたんに書けば十分です。"
+        "\n- 「きらめく」「ひかる」「はなつ」「ちから」「かぜ」のような、どのモンスターにも使える言葉にたよらない。"
+        "\n- 30文字くらいの、短い1文か2文にする(40文字をこえない)。"
     )
     return text
 
@@ -473,16 +611,19 @@ IMAGE_PROMPT_TEMPLATE = """{animal}と、添付した写真に写っている「
 #   - 文字を入れない(Playground では、設定資料のように文字の入った絵が出た。カードに使うので必要)
 #   - モンスター1体の全身(Playground では、複数のポーズを並べた絵が出た)
 #
-# ※ 短いプロンプトでは、判定の design_plan(設計図)・融合の型・演出は使わない。
-#   判定では引き続き作り、result.json に残す(比べるとき用)。
+# ※ 短いプロンプトでは、判定の design_plan(設計図)と融合の型は使わない。
+#   プログラムが選んだ「取り込む場所」「ポーズ・視点・表情」「背景(時間帯・天気と場所)」を1行ずつ足す。
 SIMPLE_IMAGE_PROMPT_TEMPLATE = """添付写真の{object_name}と{animal}を融合させて、新たなモンスターを生成して。
-{fusion_part_line}{pose_line}画風は2Dデジタル風で、トレーディングカードに表示されてそうな画風。
+{fusion_part_line}{pose_line}{background_line}画風は2Dデジタル風で、トレーディングカードに表示されてそうな画風。
 ターゲットは小中学生で、親しみやすいデザインにして。
 
 {person_section}守ること:
 - モンスター1体の全身を描く
+- 手足・しっぽの数は、動物本来の数のままにする(武器や飾りにした部位も数に入れ、足を足さない)
 - 画像の中に文字・ロゴ・数字を入れない
 """
+# ※ 2026年11月2日:「手足・しっぽの数」の1行を足した。前足を武器にした回で、武器の腕を振り上げたうえに
+#   ふつうの前足でも立ち、前足が2本多い絵になったため(詳しいプロンプトには、もともとこの1行があった)
 
 # ----------------------------------------------------------------------
 # 物を取り込む場所のパターン(短いプロンプト用。毎回ランダムに1つ選ぶ)
@@ -507,17 +648,18 @@ FUSION_PARTS: dict[str, dict[str, str]] = {
 }
 
 # 動物ごとに使うパターン。値は場所の言いかえ(None なら FUSION_PARTS の place をそのまま使う)。
+# ※ 2026年11月2日:四本足の動物の arm は「前足の先」と言う(「腕」と書くと、人のような腕を足して、足が増えたため)。
 # 体のつくりに合わないパターンは外している(例:サメに腕はない、ゴリラにしっぽはない)。
 # 一覧にない動物(製品版の自由入力)は、シルエット型以外のすべてから選ぶ。
 ANIMAL_FUSION_PARTS: dict[str, dict[str, str | None]] = {
-    "ライオン":         {"jaw": None, "tail": None, "back": None, "head": None, "arm": None, "armor": None},
+    "ライオン":         {"jaw": None, "tail": None, "back": None, "head": None, "arm": "前足の先", "armor": None},
     "ゾウ":             {"jaw": "鼻・牙", "tail": None, "back": "背中・大きな耳", "head": None, "armor": None},
-    "ウサギ":           {"tail": None, "back": None, "head": "頭・長い耳", "arm": None, "armor": None},
+    "ウサギ":           {"tail": None, "back": None, "head": "頭・長い耳", "arm": "前足の先", "armor": None},
     "ペンギン":         {"jaw": "くちばし", "back": "背中・翼", "head": None, "armor": None},
-    "ネコ":             {"tail": None, "back": None, "head": "頭・耳", "arm": None, "armor": None},
+    "ネコ":             {"tail": None, "back": None, "head": "頭・耳", "arm": "前足の先", "armor": None},
     "鷹":               {"jaw": "くちばし", "tail": "尾羽", "back": "背中・翼", "head": "頭・とさか", "armor": None},
-    "ワニ":             {"jaw": None, "tail": None, "back": None, "head": None, "arm": None, "armor": None},
-    "ゴリラ":           {"back": None, "head": None, "arm": None, "armor": None},
+    "ワニ":             {"jaw": None, "tail": None, "back": None, "head": None, "arm": "前足の先", "armor": None},
+    "ゴリラ":           {"back": None, "head": None, "arm": "腕の先", "armor": None},
     "サメ":             {"jaw": None, "tail": "尾びれ", "back": "背びれ", "head": None, "armor": None},
     "ティラノサウルス": {"jaw": None, "tail": None, "back": None, "head": None, "armor": None},
 }
@@ -539,6 +681,122 @@ def fusion_part_place(animal: str, part: str | None) -> str:
         return ""
     override = ANIMAL_FUSION_PARTS.get((animal or "").strip(), {}).get(part)
     return override or info["place"]
+
+
+# ----------------------------------------------------------------------
+# 取り込み方(短いプロンプト用。武器 / 体の部位 を半分ずつ選ぶ)
+# ----------------------------------------------------------------------
+# ※ 2026年11月2日:依頼者が「目指す形」として見せた3枚(このアプリの10月30日ごろの結果。ライオン × はさみ)は、
+#   どれも、はさみを部品に分け、刃を前足の武器に、黒い持ち手の輪をたてがみ・頭・肩の飾りに作り変えていた。
+#   そのときの設計図は「メインのパーツ → 武器」「サブのパーツ → 離れた部位の飾り」と、パーツごとの行き先を書いていた。
+#   そこで、すぐ要る判定でパーツを2つ答えてもらい、行き先を1行で書く。取り込み方は、依頼者の希望で
+#   「武器」と「体の部位(今までのランダムな場所)」を半分ずつにする(.env の FUSION_STYLE で固定できる)。
+FUSION_STYLES = ("weapon", "body")
+
+# 武器にする場所(動物ごと。値は FUSION_PARTS のキー)。一覧にない動物は前足
+# 前足がないか、腕に向かない動物は、武器に向いた別の部位にする
+WEAPON_PARTS: dict[str, str] = {
+    "ゾウ": "jaw",              # 鼻・牙
+    "ペンギン": "back",         # 背中・翼
+    "鷹": "back",               # 背中・翼
+    "サメ": "tail",             # 尾びれ
+    "ティラノサウルス": "tail",
+}
+DEFAULT_WEAPON_PART = "arm"
+
+# サブのパーツ(飾り)に使わない場所。口はくわえる絵に、前足は武器と重なりやすいため
+SUB_PART_EXCLUDED = ("jaw", "arm")
+
+
+def weapon_part(animal: str) -> str:
+    """武器にする場所のパターンを返す。"""
+    return WEAPON_PARTS.get((animal or "").strip(), DEFAULT_WEAPON_PART)
+
+
+def sub_part_candidates(animal: str, main_part: str) -> list[str]:
+    """サブのパーツ(飾り)を置く場所の候補。メインと同じ場所・口・前足は使わない。"""
+    return [p for p in fusion_part_candidates(animal) if p != main_part and p not in SUB_PART_EXCLUDED]
+
+
+_NO_PRODUCT = "くわえる・持つ・刺さる・上に重ねるのはしない。その動物にない部位なら、近い部位でよい"
+
+
+def fusion_line(animal: str, object_name: str, design_plan: dict) -> str:
+    """画像プロンプトの「物をどこに・どう取り込むか」の1行(短いプロンプト用)。
+
+    ※ 2026年11月2日の失敗と、そこから決めた書き方(行は増やさず、描き方の具体例は書かない):
+      - 「{物}の特徴は{場所}に取り入れて」:本物の物をくわえる・刺さる・重なる → 部位が作り変わったように描かせる
+      - 言いかえだけ:製品まるごと(持ち手・ねじまで)が残る → 物の全体ではなく、パーツで書く
+      - パーツ1つだけ:製品らしさは消えたが、はさみの持ち手がなくなり、何の物か分かりにくい → パーツを2つ、別々の場所に
+    判定で分かったパーツの数に合わせて、2つ → 1つ → 物の全体 の順に書き方を落とす。
+    """
+    place = fusion_part_place(animal, design_plan.get("fusion_part"))
+    if not place:
+        return ""
+    weapon = design_plan.get("fusion_style") == "weapon"
+    part = (design_plan.get("object_part") or "").strip()
+    sub_part = (design_plan.get("object_sub_part") or "").strip()
+    sub_place = fusion_part_place(animal, design_plan.get("sub_fusion_part"))
+
+    if part and sub_part and sub_place:
+        main_use = f"「{place}」の武器に" if weapon else f"「{place}」そのものに作り変え"
+        return (
+            f"{object_name}を部品に分けて、体に作り変えて描いて。"
+            f"「{part}」は{main_use}、「{sub_part}」は「{sub_place}」の飾りにする。"
+            f"どちらも体と同じ塗り方で体につなげ、それぞれ1か所だけに使う"
+            f"({object_name}を製品の形のまま描かない。{_NO_PRODUCT})。\n"
+        )
+    if part:
+        made_of = f"{object_name}の「{part}」でできた武器" if weapon else f"{object_name}の「{part}」"
+        return (
+            f"「{place}」そのものが、{made_of}に作り変わったように描いて。"
+            f"{object_name}の全体ではなく「{part}」だけを使い、形と色は残して、体と同じ塗り方で体につなげる"
+            f"({_NO_PRODUCT})。\n"
+        )
+    return (
+        f"「{place}」そのものが、{object_name}に作り変わったように描いて。"
+        f"{object_name}だと分かる形と色は残し、体と同じ塗り方で体につなげる({_NO_PRODUCT})。\n"
+    )
+
+
+# ----------------------------------------------------------------------
+# 背景の場所(短いプロンプト用。毎回ランダムに1つ選ぶ)
+# ----------------------------------------------------------------------
+# ※ 2026年11月2日:どのカードも同じに見えたので足した。
+#   ポーズ・視点・表情は毎回ちがうものが選ばれ、絵にも出ていたが、背景を画像モデルにまかせていたため、
+#   どの絵も「昼の青空・白い雲・岩の地面・飛び散る岩・遠くの岩山」になっていた(STAGING_OPTIONS のコメントと同じ現象)。
+#   絵の印象は背景の場所と時間帯(色)で大きく変わるので、取り込む場所と同じく1行だけ足す。
+#   書くのは「時間帯・天気の場所」の2語だけ(例:月夜の森)。複雑な指示を足すと、物の取り込みが不正確になったため。
+#   場所は、依頼者の基本「背景はモンスターに合うもの」に合わせて、動物のすみかから選ぶ。
+#   時間帯・天気は STAGING_OPTIONS["scene"] から選ぶ。
+#   町・建物は入れない(看板などの文字が描かれやすいため)。
+BACKGROUND_PLACES: dict[str, list[str]] = {
+    "ライオン":         ["サバンナ", "岩山", "草原"],
+    "ゾウ":             ["サバンナ", "ジャングル", "川辺"],
+    "ウサギ":           ["花畑", "森", "草原"],
+    "ペンギン":         ["氷の大地", "雪原", "海辺"],
+    "ネコ":             ["森", "花畑", "丘の上"],
+    "鷹":               ["山の頂上", "雲の上", "崖"],
+    "ワニ":             ["沼地", "ジャングル", "川辺"],
+    "ゴリラ":           ["ジャングル", "森", "岩山"],
+    "サメ":             ["海の中", "深い海の中", "サンゴ礁の海の中", "荒れた海の波の中"],   # 水の中だけ(AQUATIC_ANIMALS)
+    "ティラノサウルス": ["火山", "ジャングル", "岩山"],
+}
+
+# 一覧にない動物(製品版の自由入力)で選ぶ場所
+DEFAULT_BACKGROUND_PLACES: list[str] = ["森", "草原", "山", "空の上"]
+
+
+def background_place_candidates(animal: str) -> list[str]:
+    """その動物で使う背景の場所の一覧を返す。一覧にない動物は DEFAULT_BACKGROUND_PLACES。"""
+    return list(BACKGROUND_PLACES.get((animal or "").strip()) or DEFAULT_BACKGROUND_PLACES)
+
+
+def background_text(scene: str | None, place: str | None) -> str:
+    """背景の2語(例:月夜の森)。場所がなければ空文字(背景の行を入れない)。"""
+    if not place:
+        return ""
+    return f"{scene}の{place}" if scene else place
 
 
 # 画像プロンプトの書き方(.env の IMAGE_PROMPT_STYLE)
@@ -601,16 +859,10 @@ def build_image_prompt(
     person_section = PERSON_IMAGE_SECTION if (allow_person and has_person) else ""
 
     if normalize_image_prompt_style(prompt_style) == "simple":
-        # 取り込む場所(判定のときに recognizer.py で選び、design_plan に入れてある)
-        place = fusion_part_place(animal, (design_plan or {}).get("fusion_part"))
-        fusion_part_line = (
-            f"{object_name}の特徴は、主に「{place}」に取り入れて"
-            "(その動物にない部位なら、近い部位でよい)。\n"
-            if place else ""
-        )
+        # 物をどこに・どう取り込むか(判定のときに recognizer.py で選び、design_plan に入れてある)
+        fusion_part_line = fusion_line(animal, object_name, design_plan or {})
         # ポーズ・視点・表情(判定のときに recognizer.py で選び、design_plan["staging"] に入れてある)。
         # 短いプロンプトだけだと、ポーズが毎回似た構えになったので、取り込む場所と同じく1行だけ足す。
-        # 時間帯・天気(scene)は入れない(背景はモンスターに合うものを画像モデルにまかせる)。
         staging = (design_plan or {}).get("staging") or {}
         pose_parts = [
             f"{label}は「{staging[key]}」"
@@ -621,11 +873,20 @@ def build_image_prompt(
             "、".join(pose_parts) + "で描いて(その動物に無理な姿勢なら、近い姿勢でよい)。\n"
             if pose_parts else ""
         )
+        # 背景(場所と時間帯・天気の2語だけ。景色の中身は画像モデルにまかせる。BACKGROUND_PLACES のコメント参照)
+        background = background_text(staging.get("scene"), (design_plan or {}).get("background_place"))
+        if background and animal.strip() in AQUATIC_ANIMALS:
+            background_line = f"背景は「{background}」(水の中を泳いでいるように描く。地面や岩の上に立たせない)。\n"
+        elif background:
+            background_line = f"背景は「{background}」(合わなければ、近い景色でよい)。\n"
+        else:
+            background_line = ""
         return SIMPLE_IMAGE_PROMPT_TEMPLATE.format(
             animal=animal,
             object_name=object_name,
             fusion_part_line=fusion_part_line,
             pose_line=pose_line,
+            background_line=background_line,
             person_section=person_section,
         )
 

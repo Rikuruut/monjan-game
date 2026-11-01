@@ -149,3 +149,24 @@ def test_design_plan_is_filled_and_cut():
     monster, _ = validate_monster(good_raw(design_plan=plan))
     assert monster["design_plan"]["pose"]          # 空 → 既定値
     assert len(monster["design_plan"]["background"]) == 120
+
+
+# ----------------------------------------------------------------------
+# 説明文の切り方(ことばの途中で終わらない)
+# ----------------------------------------------------------------------
+def test_long_description_is_cut_at_a_break():
+    text = "とげの とさかを ひからせ、ひくく かまえて にやりと わらう ペンギンかいじゅう"
+    monster, _ = validate_monster(good_raw(description=text))
+    assert monster["description"] == "とげの とさかを ひからせ、ひくく かまえて にやりと わらう"
+
+
+def test_description_keeps_sentence_end_mark():
+    text = "ひくく かまえて にやり。せなかの ホッチキスで ねらったものを がっちり とめる"
+    cut = validate_monster(good_raw(description=text))[0]["description"]
+    assert len(cut) <= MAX_DESCRIPTION and not cut.endswith(" ")
+    assert text.startswith(cut)
+
+
+def test_too_long_object_part_is_dropped():
+    monster, notes = validate_monster(good_raw(object_part="あ" * 30))
+    assert monster["object_part"] == "" and any("object_part" in n for n in notes)

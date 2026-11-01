@@ -23,6 +23,9 @@ def safe_env(monkeypatch, tmp_path):
     monkeypatch.setenv("DRY_RUN", "true")
     monkeypatch.setenv("TEXT_MODEL", "test-text-model")
     monkeypatch.setenv("IMAGE_MODEL", "test-image-model")
+    # .env の値によらず、決まった設定で試す(詳しいプロンプトを試すテストは、その中で変える)
+    monkeypatch.setenv("IMAGE_PROMPT_STYLE", "simple")
+    monkeypatch.setenv("IMAGE_PARTIAL_IMAGES", "2")
     for module in (openai_client, recognizer, generator):
         if hasattr(module, "get_client"):
             monkeypatch.setattr(module, "get_client", _no_api)

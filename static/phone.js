@@ -36,7 +36,11 @@ function connectWebSocket() {
     if (msg.type === "capture_request") {
       // 待機中に戻る予定があれば取り消す(撮影の画面が、あとから待機中に戻されないように)
       cancelBackToWait();
+      clearPendingResult();
       showView("view-ready");
+    } else if (msg.type === "revealed") {
+      // PC の大画面で、モンスターが登場し終わった(ここで初めてスマホにも絵を見せる)
+      if (pendingResult && msg.photo_id === pendingResult.photoId) revealResult();
     } else if (msg.type === "progress") {
       // 生成の進み具合(ローディングと名前えらび。下の showProgress を参照)
       showProgress(msg);
@@ -144,10 +148,13 @@ connectWebSocket();
 // ----------------------------------------------------------------------
 // PCで「つくる!」が押されると、サーバーから進み具合(progress)が届く。
 //   naming :なまえを かんがえているよ
-//   drawing:え を かいているよ(このとき名前の候補も届くので、名前えらびを出す)
+//   drawing:え を かいているよ(詳しいプロンプトでは、このとき名前の候補も届くので、名前えらびを出す)
+//   names  :名前の候補(短いプロンプトでは、絵を作っているあいだに届く。名前えらびを出す)
+//   partial:途中の絵(スマホでは使わない)
+//   done のあと、PC で誕生の演出が終わると revealed(type)が届くので、そこで絵を見せる
 //   done   :できたよ!(モンスターの絵を見せる。まだ名前を選んでいなければ、少し待ってから今の名前に決める)
 //   retake / error:とりなおし・しっぱい
-const AUTO_DECIDE_SECONDS = 20;   // できてから、この秒数たっても選ばなければ、今の名前に決める
+const AUTO_DECIDE_SECONDS = 60;   // できてから、この秒数たっても選ばなければ、今の名前に決める(2026年11月2日:20秒では短すぎたので60秒に)
 const BACK_TO_WAIT_SECONDS = 6;   // 名前が決まってから、待機中に戻るまでの秒数
 
 let nameChoices = [];
@@ -157,6 +164,9 @@ let nameDecided = false;
 let barTimer = null;
 let autoDecideTimer = null;
 let backTimer = null;   // 少ししてから待機中に戻すタイマー(撮影の合図・次の生成が来たら取り消す)
+let pendingResult = null;        // できあがったが、まだ見せていない絵(PC の登場が終わるのを待っている)
+let revealFallbackTimer = null;
+const REVEAL_FALLBACK_SECONDS = 15;   // PC から登場の知らせが来なくても、この秒数たったら絵を見せる
 
 function setStage(html) { el("ph-stage").innerHTML = html; }
 function setBar(percent) { el("ph-bar-fill").style.width = Math.max(0, Math.min(100, percent)) + "%"; }
@@ -184,6 +194,7 @@ function showProgress(msg) {
 
   if (stage === "naming") {
     cancelBackToWait();
+    clearPendingResult();
     resetNameChooser();
     hideResult();
     showView("view-progress");
@@ -202,26 +213,26 @@ function showProgress(msg) {
       setBar(30 + Math.min(ratio, 1) * 65);
       if (ratio >= 0.7) setStage("もうすぐ!");
     }, 500);
-    // 名前えらびを出す
-    nameChoices = msg.name_choices || (msg.monster_name ? [msg.monster_name] : []);
-    namePhotoId = msg.photo_id || "";
-    nameIndex = 0;
-    if (nameChoices.length) {
-      showName();
-      el("name-chooser").classList.remove("hidden");
-    }
+    // 名前えらびを出す(詳しいプロンプトでは、名前の候補はここで届く)
+    if (msg.name_choices || msg.monster_name) startNameChooser(msg);
+
+  } else if (stage === "names") {
+    // 短いプロンプトでは、名前の候補は絵を作っているあいだに届く
+    startNameChooser(msg);
 
   } else if (stage === "done") {
     stopBarTimer();
     setBar(100);
+    // 絵はまだ見せない。PC の大画面で誕生の演出が終わってから(revealed が届いてから)見せる
+    // ※ 2026年11月2日:たまごのテーマで、たまごが割れる前にスマホにモンスターが出てしまったため
+    setStage("できたよ!<br>おおきい がめんを みてね");
     if (msg.image_url) {
-      setStage("できたよ!");
-      showResult(msg.image_url, nameDecided || !nameChoices.length ? msg.monster_name : nameChoices[nameIndex]);
-    } else {
-      setStage("できたよ!<br>おおきい がめんを みてね");
+      pendingResult = { photoId: msg.photo_id || namePhotoId, imageUrl: msg.image_url, monsterName: msg.monster_name };
+      // PC から知らせが来ないとき(PC の画面を読みこみ直したときなど)も、少し待てば見せる
+      revealFallbackTimer = setTimeout(revealResult, REVEAL_FALLBACK_SECONDS * 1000);
     }
     if (nameDecided || !nameChoices.length) {
-      if (!isShowingResult()) backToWaitLater();
+      if (!msg.image_url) backToWaitLater();
     } else {
       // しばらく選ばなければ、今出ている名前に決める
       autoDecideTimer = setTimeout(decideName, AUTO_DECIDE_SECONDS * 1000);
@@ -243,6 +254,16 @@ function showProgress(msg) {
     hideResult();
     setStage("うまく できなかったよ…");
     backToWaitLater();
+  }
+}
+
+function startNameChooser(msg) {
+  nameChoices = msg.name_choices || (msg.monster_name ? [msg.monster_name] : []);
+  namePhotoId = msg.photo_id || "";
+  nameIndex = 0;
+  if (nameChoices.length) {
+    showName();
+    el("name-chooser").classList.remove("hidden");
   }
 }
 
@@ -304,9 +325,24 @@ async function decideName() {
   // もう絵ができていれば、絵の上の名前を決めた名前にする(絵を見せたまま、待機中には戻さない)
   if (isShowingResult()) {
     el("ph-result-name").textContent = name;
-  } else if (el("ph-bar-fill").style.width === "100%") {
+  } else if (el("ph-bar-fill").style.width === "100%" && !pendingResult) {
     backToWaitLater();
   }
+}
+
+// PC で登場し終わったら、スマホにもモンスターの絵を見せる
+function revealResult() {
+  if (!pendingResult) return;
+  const result = pendingResult;
+  clearPendingResult();
+  setStage("できたよ!");
+  showResult(result.imageUrl, nameChoices.length ? nameChoices[nameIndex] : result.monsterName);
+}
+
+function clearPendingResult() {
+  pendingResult = null;
+  if (revealFallbackTimer) clearTimeout(revealFallbackTimer);
+  revealFallbackTimer = null;
 }
 
 function backToWaitLater() {

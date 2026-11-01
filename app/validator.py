@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 MAX_MONSTER_NAME = 10
 MAX_DESCRIPTION = 40
 MAX_RETAKE_REASON = 60
+MAX_OBJECT_PART = 12
 # 融合デザインの各項目の上限(画像プロンプトが長くなりすぎないように)
 MAX_DESIGN_FIELD = 120
 
@@ -135,6 +136,8 @@ DEFAULT_MONSTER: dict[str, Any] = {
     "has_person": False,
     "retake_reason": "",
     "object_name": DEFAULT_OBJECT_NAME,
+    "object_part": "",
+    "object_sub_part": "",
     "element": DEFAULT_ELEMENT,
     "monster_name": DEFAULT_MONSTER_NAME,
     "name_candidates": [],
@@ -143,16 +146,43 @@ DEFAULT_MONSTER: dict[str, Any] = {
 }
 
 
+# 説明文を切ってよい区切り(ここで終わっても、ことばの途中にならない)
+_DESCRIPTION_BREAKS = (" ", "　", "、", "。", "!", "!", "?", "?")
+# 区切りで切ったとき、これより短くなるなら、区切りを使わず文字数で切る(短すぎる説明文にしない)
+MIN_CUT_DESCRIPTION = 15
+
+
+def cut_description(text: str) -> str:
+    """説明文を MAX_DESCRIPTION 文字以内にする。
+
+    ことばの途中で終わらないように、MAX_DESCRIPTION 文字までにある最後の区切りで切る。
+    ※ 2026年11月2日:それまでは40文字で機械的に切っていたので、
+      「…ペンギンかいじゅ」「…ワニモンスタ」のように、ことばの途中で終わる説明文があった。
+    """
+    if len(text) <= MAX_DESCRIPTION:
+        return text
+    head = text[:MAX_DESCRIPTION + 1]   # 41文字目が区切りなら、40文字ちょうどで切れる
+    cut = max(head.rfind(mark) for mark in _DESCRIPTION_BREAKS)
+    if cut < MIN_CUT_DESCRIPTION:
+        return text[:MAX_DESCRIPTION]
+    # 「。」「!」などは残し、空白・「、」は落とす
+    end = cut + 1 if head[cut] in "。!!??" else cut
+    return text[:end].rstrip(" 　、")
+
+
 def _as_text(value: Any) -> str:
     """文字列として取り出す。文字列でなければ空文字にする。"""
     return value.strip() if isinstance(value, str) else ""
 
 
-def validate_monster(raw: Any, animal: str = "") -> tuple[dict[str, Any], list[str]]:
+def validate_monster(
+    raw: Any, animal: str = "", with_design_plan: bool = True
+) -> tuple[dict[str, Any], list[str]]:
     """AIの返答をチェックして補正する。
 
     戻り値は (補正後の内容, 補正した項目のメモ) 。
     メモは、何を直したかをPC画面やログで確認するために使う。
+    `with_design_plan` が False のとき(短いプロンプト。設計図を作らない)は、design_plan を空にし、既定値も入れない。
     """
     notes: list[str] = []
 
@@ -187,6 +217,17 @@ def validate_monster(raw: Any, animal: str = "") -> tuple[dict[str, Any], list[s
         has_person = False
 
     # --- 物の名前(空でないこと) ---
+    # --- 物のいちばん特徴的なパーツ(短いプロンプトの、すぐ要る判定だけ。長すぎれば使わない) ---
+    object_part = _as_text(raw.get("object_part"))
+    if len(object_part) > MAX_OBJECT_PART:
+        notes.append(f"object_part「{object_part}」が長いので使いません(物の全体で描きます)")
+        object_part = ""
+    # 2番目のパーツ(メインがないとき・メインと同じとき・長すぎるときは使わない)
+    object_sub_part = _as_text(raw.get("object_sub_part"))
+    if object_sub_part and (not object_part or object_sub_part == object_part or len(object_sub_part) > MAX_OBJECT_PART):
+        notes.append(f"object_sub_part「{object_sub_part}」は使いません(パーツ1つで描きます)")
+        object_sub_part = ""
+
     object_name = _as_text(raw.get("object_name"))
     if not object_name:
         object_name = DEFAULT_OBJECT_NAME
@@ -212,17 +253,17 @@ def validate_monster(raw: Any, animal: str = "") -> tuple[dict[str, Any], list[s
         description = DEFAULT_DESCRIPTION
         notes.append("description が空なので既定の文にしました")
     elif len(description) > MAX_DESCRIPTION:
-        description = description[:MAX_DESCRIPTION]
-        notes.append(f"description が長いので{MAX_DESCRIPTION}文字で切りました")
+        description = cut_description(description)
+        notes.append(f"description が長いので、{MAX_DESCRIPTION}文字までの区切りで切りました")
 
     # --- 融合デザイン(文の項目。空や長すぎるときは既定値・切り詰め) ---
-    raw_plan = raw.get("design_plan")
+    raw_plan = raw.get("design_plan") if with_design_plan else {}
     if not isinstance(raw_plan, dict):
         if raw_plan is not None:
             notes.append("design_plan の形式が読めないので既定値にしました")
         raw_plan = {}
     design_plan: dict[str, str] = {}
-    for key, default_value in DEFAULT_DESIGN_PLAN.items():
+    for key, default_value in (DEFAULT_DESIGN_PLAN if with_design_plan else {}).items():
         value = _as_text(raw_plan.get(key))
         if not value:
             value = default_value
@@ -237,6 +278,8 @@ def validate_monster(raw: Any, animal: str = "") -> tuple[dict[str, Any], list[s
         "has_person": has_person,
         "retake_reason": retake_reason,
         "object_name": object_name,
+        "object_part": object_part,
+        "object_sub_part": object_sub_part,
         "element": element,
         "monster_name": monster_name,
         "name_candidates": name_candidates,

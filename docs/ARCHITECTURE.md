@@ -81,15 +81,24 @@ sequenceDiagram
     S-->>P: WS photo_received(photo_id, 写真URL, animal)
     P->>S: POST /api/generate(photo_id)(「がったい!」)
     S-->>P: WS progress: naming
-    S->>O: 判定(写真 + 動物)
-    O-->>S: モンスター情報(JSON)
-    Note over S: validator でチェック・補正<br>撮り直しなら progress: retake で終わり
-    S-->>P: WS progress: drawing(名前の候補・目安の秒数)
+    S->>O: すぐ要る判定(写真)
+    O-->>S: 物の名前・撮り直しかどうか(JSON)
+    Note over S: 撮り直しなら progress: retake で終わり
+    S-->>P: WS progress: drawing(目安の秒数)
     S-->>M: WS progress: drawing
-    S->>O: 画像生成(写真 + プロンプト)
+    par 同時に
+        S->>O: 画像生成(写真 + プロンプト。ストリーミング)
+        O-->>S: 途中の絵
+        S-->>P: WS progress: partial(たまごのテーマで透かして見せる)
+    and
+        S->>O: 名前・説明(写真 + 物の名前)
+        O-->>S: 性質・名前の候補・説明文(JSON)
+        Note over S: validator でチェック・補正
+        S-->>M: WS progress: names(名前の候補)
+    end
     M->>S: POST /api/choose-name(子供が選んだ名前)
     S-->>P: WS name_chosen
-    O-->>S: 画像(base64)
+    O-->>S: できあがりの画像(base64)
     Note over S: outputs/ に保存
     S-->>P: WS progress: done(画像URL)
     S-->>M: WS progress: done
@@ -103,8 +112,9 @@ sequenceDiagram
 - **動物を選ぶのはスマホ**。写真と動物は一緒に送り、サーバーが `photo_id` に紐づけて覚える。動物名は一覧(10種類)から選ぶが、サーバーは一覧にない名前でも受け付ける(製品版で自由入力にする予定のため)
 - 写真はスマホ側で canvas を使って**長辺1024pxの JPEG** にしてから送る(容量を減らすのと、iPhone の HEIC 対策)。サーバーは Pillow で開けるかを確かめる
 - **撮り直し**(人が写っている・物がはっきりしない・子供にふさわしくない物。判定の返答を読めないときも)と判定されたら、画像生成は呼ばずに終わる
-- **名前は子供がスマホで選ぶ**。判定で作った候補(チェックに合格したもの)を順に見せる。画像ができてから20秒選ばなければ、出ている名前に決まる
-- 画像ができるまで:判定 約8〜16秒 + 画像生成 約25〜40秒(どちらもコメント・記録上の実測。**要確認**:展示で使う設定での最新の値)
+- **名前は子供がスマホで選ぶ**。判定で作った候補(チェックに合格したもの)を順に見せる。画像ができてから60秒選ばなければ、出ている名前に決まる
+- 上の図は短いプロンプト(`IMAGE_PROMPT_STYLE=simple`)の流れ。詳しいプロンプト(`detailed`)では、1回の判定で設計図まで作ってから画像生成を始め、名前の候補は `drawing` で届く
+- 画像ができるまで:simple では、すぐ要る判定 + max(名前・説明, 画像生成)。分ける前は 判定 14〜31秒 + 画像生成 18〜21秒(sunburst・medium)。**要確認**:分けたあとの実測
 - バトルへの受け渡しは**未実装**(**要確認**)
 
 ---
@@ -163,7 +173,8 @@ monjan-prototype/
 - 見た目はテーマごとに `static/themes/<名前>/` に分かれていて、`/?theme=<名前>` で切りかえる(何も付けないときは `.env` の `PC_THEME`)
 - 動きは共通の `app.js` が受け持つので、テーマはフォルダを足すだけで増やせる。テーマに用意する要素(ID)は `app.js` の先頭のコメント「テーマとの約束」にある
 - API を使わずに場面を確認できる:`/?theme=fantasy&demo=1&scene=s3&progress=0.8`、`&play=birth` で誕生の演出、`&dev=1` で開発者メニュー。`&photo=`・`&img=` を付けなければ見本の写真と絵(`static/demo/`)を使う。
-  同じことは、開発者メニューの「確認用(APIなし)」のボタン(場面・進み具合・誕生の演出・名前が選ばれた・撮り直しの表示・効果音)からもできる
+  同じことは、開発者メニューの「確認用(APIなし)」のボタン(場面・進み具合・誕生の演出・途中の絵・名前が選ばれた・撮り直しの表示・効果音)からもできる。
+  「▶ テストプレイ」は、サーバーから届くメッセージを画面の中で本番と同じ順に作り、「がったい!」から誕生後までを通しで流す(がったい中 約25秒)
 
 ---
 
@@ -180,6 +191,8 @@ monjan-prototype/
 | GET | `/static/...` | 静的ファイル |
 | GET | `/api/photo/{photo_id}` | 届いた写真(JPEG)。生成が終わると `uploads/` から消すので 404 になる |
 | GET | `/api/monster-image/{photo_id}` | できたモンスターの絵(PNG)。サーバーを再起動すると前の絵は 404 |
+| POST | `/api/revealed` | PC で誕生の演出が終わったことを知らせる(`photo_id`)。サーバーはスマホに `revealed` を送る |
+| GET | `/api/partial-image/{photo_id}/{index}` | 画像生成の途中の絵(PNG)。いま作っている1回分だけ持つ |
 
 `uploads/`・`outputs/` は丸ごとは公開しない(`outputs/` のフォルダ名は日時で推測できるため、子供の写真を守る)。
 `photo_id` は32文字の16進数で、形が違えば 400。
@@ -221,8 +234,9 @@ monjan-prototype/
 | スマホ | `upload_done` | `photo_id`。写真を受け取った |
 | PC | `phone_status` | `connected`。スマホがつながっているか |
 | PC | `photo_received` | `photo_id`、`photo_url`、`animal` |
-| PC・スマホ | `progress` | `stage`:`naming` / `drawing` / `done` / `retake` / `error`。`drawing` には `name_choices`・`expected_seconds`、`done` には `image_url` |
+| PC・スマホ | `progress` | `stage`:`naming` / `drawing` / `names` / `partial` / `done` / `retake` / `error`。`drawing` には `expected_seconds`(detailed では `name_choices` も)、`names` には `name_choices`(simple)、`partial` には `image_url`・`index`・`total`(スマホは使わない)、`done` には `image_url` |
 | PC | `name_chosen` | `photo_id`、`name` |
+| スマホ | `revealed` | `photo_id`、`image_url`。PC で誕生の演出が終わった(スマホはここで絵を見せる。届かなくても15秒後に見せる) |
 
 ---
 
@@ -260,7 +274,7 @@ monjan-prototype/
 | 判定 | `TEXT_MODEL` | `gpt-6-luna`(画像入力・構造化出力に対応) |
 | 画像生成 | `IMAGE_MODEL`・`IMAGE_QUALITY`・`IMAGE_SIZE` | `gpt-image-2.5-sunburst`(CLAUDE.md 上の現在の設定)/ `gpt-image-2` / `gpt-image-2.5-flare` / `gpt-image-1-mini` |
 
-**要確認**:展示本番で使うモデルと画質。料金は `app/pricing.py` の単価で試算しています(判定 約0.1円、`gpt-image-2` / medium / 1024×768 で画像 約7.4円。sunburst の実際の料金は `result.json` の `usage` で確認)。
+**要確認**:展示本番で使うモデルと画質。料金は `app/pricing.py` の単価で試算しています(今の設定 sunburst / medium / 1024×768・途中の絵2枚で1回 約4円。内訳は README の「料金」。本当の請求額は OpenAI の管理画面の Usage で確認)。
 
 ---
 

@@ -7,6 +7,7 @@ PCのブラウザとスマホのブラウザの両方からアクセスして使
 from __future__ import annotations
 
 import asyncio
+import functools
 import io
 import json
 import logging
@@ -15,10 +16,12 @@ import re
 import time
 import uuid
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import anyio
 import qrcode
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
@@ -28,12 +31,12 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from .animals import ANIMAL_ICONS, ANIMALS, DEFAULT_ANIMAL_ICON, normalize_animal
-from .generator import get_generator
+from .generator import GenerationResult, PartialCallback, get_generator
 from .kiosk import kiosk_enabled, open_kiosk_in_background
 from .net_utils import get_lan_ip
-from .openai_client import image_prompt_style, is_dry_run
+from .openai_client import allow_person, image_prompt_style, is_dry_run
 from .pricing import format_cost, to_yen
-from .recognizer import generate_names, recognize
+from .recognizer import choose_plan, combine, describe, generate_names, quick_check, recognize
 from .storage import MONSTER_NAME, RESULT_NAME, append_jsonl, append_usage_log, save_result
 from .ws_manager import ROLE_PC, ROLE_PHONE, WSManager
 
@@ -300,23 +303,17 @@ async def api_upload(
     })
 
 
-def build_usage(
-    recognize_usage: dict[str, Any] | None,
-    generate_usage: dict[str, Any] | None,
-) -> dict[str, Any]:
-    """判定と画像生成の使用量をまとめ、1回あたりの料金を試算する。
+def build_usage(**parts: dict[str, Any] | None) -> dict[str, Any]:
+    """処理ごとの使用量をまとめ、1回あたりの料金を試算する。
 
+    `parts` は処理の名前ごとの使用量(recognize:判定 / check:すぐ要る判定 / describe:名前と説明 / generate:画像生成)。
     どれだけAPIを使ったかを、結果のJSONとPC画面の両方で確認できるようにする。
     """
-    recognize_cost = (recognize_usage or {}).get("estimated_cost_usd")
-    generate_cost = (generate_usage or {}).get("estimated_cost_usd")
-
-    costs = [c for c in (recognize_cost, generate_cost) if c is not None]
+    costs = [u["estimated_cost_usd"] for u in parts.values() if u and u.get("estimated_cost_usd") is not None]
     total = round(sum(costs), 6) if costs else None
 
     usage = {
-        "recognize": recognize_usage or {},
-        "generate": generate_usage or {},
+        **{name: u or {} for name, u in parts.items()},
         "total_cost_usd": total,
         "total_cost_yen": None if total is None else round(to_yen(total), 2),
         "note": "料金は2026年10月28日時点の単価による試算です(app/pricing.py)",
@@ -327,8 +324,7 @@ def build_usage(
         cumulative = append_usage_log(OUTPUTS_DIR, {
             "at": datetime.now().isoformat(timespec="seconds"),
             "cost_usd": total,
-            "recognize_tokens": (recognize_usage or {}).get("total_tokens"),
-            "generate_tokens": (generate_usage or {}).get("total_tokens"),
+            **{f"{name}_tokens": (u or {}).get("total_tokens") for name, u in parts.items()},
         })
         usage["cumulative_cost_usd"] = cumulative
         usage["cumulative_cost_yen"] = round(to_yen(cumulative), 2)
@@ -406,8 +402,20 @@ _name_choices: dict[str, list[str]] = {}
 _chosen_names: dict[str, str] = {}
 _photo_outputs: dict[str, str] = {}
 
+# 途中の絵(photo_id → 何枚目か → PNG)。いま作っている1回分だけを持つ(次の生成を始めるときに消す)
+_partials: dict[str, dict[int, bytes]] = {}
+
 # 生成は1つずつ(PCのタブが2つあるときなどに、2回呼ばれて料金が2回かからないように)
 _generate_lock = asyncio.Lock()
+
+
+@app.get("/api/partial-image/{photo_id}/{index}")
+async def api_partial_image(photo_id: str, index: int) -> Response:
+    """画像生成の途中の絵(PC画面のたまごのテーマで見せる)。"""
+    png = _partials.get(_check_photo_id(photo_id), {}).get(index)
+    if png is None:
+        raise HTTPException(status_code=404, detail="その途中の絵は見つかりませんでした")
+    return Response(content=png, media_type="image/png")
 
 
 def _seconds_since(started: float) -> float:
@@ -427,6 +435,33 @@ def _report(
             "timings": timings, "usage": usage, **extra}
 
 
+@dataclass
+class _Run:
+    """1回の生成の記録(写真・設定・かかった時間・使用量)。"""
+
+    photo_id: str
+    animal: str
+    photo_bytes: bytes
+    started: float = field(default_factory=time.monotonic)
+    settings: dict[str, Any] = field(default_factory=dict)
+    timings: dict[str, float] = field(default_factory=dict)
+    usages: dict[str, dict[str, Any] | None] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.settings = {"animal": self.animal, **current_settings()}
+
+    def record(self, step: str, seconds: float, usage: dict[str, Any] | None) -> None:
+        """1つの処理の時間と使用量を残す(step:recognize / check / describe / generate)。"""
+        self.timings[step] = round(seconds, 2)
+        self.usages[step] = usage
+
+    def final_timings(self) -> dict[str, float]:
+        return {**self.timings, "total": _seconds_since(self.started)}
+
+    def report(self, monster: dict[str, Any], notes: list[str], **extra: Any) -> dict[str, Any]:
+        return _report(monster, notes, self.settings, self.final_timings(), build_usage(**self.usages), **extra)
+
+
 @app.post("/api/generate")
 async def api_generate(photo_id: str = Form(...)) -> JSONResponse:
     """判定と画像生成を実行して、結果を保存する。
@@ -434,6 +469,7 @@ async def api_generate(photo_id: str = Form(...)) -> JSONResponse:
     動物はスマホから届いたものを`photo_id`から読み出して使う。
     エラーが起きてもサーバーは止めず、内容をPCの画面に出せる形で返す。
     生成中にもう一度呼ばれたら、409 を返す(同時に2つは作らない)。
+    短いプロンプト(simple)と詳しいプロンプト(detailed)で、判定のしかたが違う(下の2つの関数)。
     """
     if _generate_lock.locked():
         return JSONResponse(
@@ -442,10 +478,15 @@ async def api_generate(photo_id: str = Form(...)) -> JSONResponse:
         )
     async with _generate_lock:
         animal, photo_bytes = _load_photo(photo_id)
+        _partials.clear()
+        run = _Run(photo_id, animal, photo_bytes)
+        logger.info("生成を開始します: photo_id=%s animal=%s", photo_id, animal)
         try:
-            return await _generate(photo_id, animal, photo_bytes)
+            if image_prompt_style() == "simple":
+                return await _generate_split(run)
+            return await _generate_detailed(run)
         except Exception as e:
-            # 判定・画像生成の失敗は _generate の中で返す。ここに来るのは保存の失敗など、思わぬエラー。
+            # 判定・画像生成の失敗は、それぞれの関数の中で返す。ここに来るのは保存の失敗など、思わぬエラー。
             # スマホがローディングのまま止まらないよう、かならず error を知らせる
             logger.exception("生成の途中で思わぬエラーが起きました")
             await ws_manager.notify_progress("error")
@@ -455,135 +496,207 @@ async def api_generate(photo_id: str = Form(...)) -> JSONResponse:
             )
 
 
-async def _generate(photo_id: str, animal: str, photo_bytes: bytes) -> JSONResponse:
-    """判定 → (撮り直しなら終了)→ 画像生成 → 保存。"""
-    global _last_generate_seconds
-    logger.info("生成を開始します: photo_id=%s animal=%s", photo_id, animal)
+async def _generate_detailed(run: _Run) -> JSONResponse:
+    """詳しいプロンプト:判定(設計図まで1回で作る)→(撮り直しなら終了)→ 画像生成 → 保存。
 
-    total_started = time.monotonic()
-    settings: dict[str, Any] = {"animal": animal, **current_settings()}
-
-    # ------------------------------------------------------------------
-    # 判定(テキスト用モデル)
-    # ------------------------------------------------------------------
+    画像プロンプトに判定の設計図(design_plan)を使うので、判定が終わってから画像生成を始める。
+    """
     # ローディング:「名前を かんがえているよ」
     await ws_manager.notify_progress("naming")
     try:
-        recognized = await run_in_threadpool(recognize, photo_bytes, animal)
-        settings["text_model"] = recognized.model
+        recognized = await run_in_threadpool(recognize, run.photo_bytes, run.animal)
     except Exception as e:
-        logger.warning("判定に失敗しました: %s", e)
-        await ws_manager.notify_progress("error")
-        return JSONResponse(
-            status_code=200,
-            content={"ok": False, "step": "判定", "error": str(e), "settings": settings},
-        )
+        return await _recognize_failed(run, e)
+    run.settings["text_model"] = recognized.model
+    run.record("recognize", recognized.elapsed_seconds, recognized.usage)
     monster, notes = recognized.monster, recognized.notes
-    recognize_seconds = round(recognized.elapsed_seconds, 2)
 
-    # ------------------------------------------------------------------
-    # 撮り直しが必要な場合は、ここで終了する
-    # ------------------------------------------------------------------
     if monster["needs_retake"]:
-        # 撮り直しのときは画像生成を呼ばないので、判定の分だけ料金がかかる
-        report = _report(
-            monster, notes, settings,
-            {"recognize": recognize_seconds, "total": _seconds_since(total_started)},
-            build_usage(recognized.usage, None),
-            needs_retake=True,
-        )
-        result = {"created_at": datetime.now().isoformat(timespec="seconds"), "animal": animal, **report}
-        await run_in_threadpool(save_result, OUTPUTS_DIR, photo_bytes, None, result)
-        _remove_upload(photo_id)
+        return await _finish_retake(run, monster, notes)
 
-        logger.info("撮り直しと判定されました: %s", monster["retake_reason"])
-        await ws_manager.notify_progress("retake", reason=monster["retake_reason"])
-        return JSONResponse({"ok": True, "retake_reason": monster["retake_reason"], **report})
-
-    # ------------------------------------------------------------------
-    # 画像生成
-    # ------------------------------------------------------------------
-    # ローディング:「え を かいているよ」。かかる時間の目安(前回の実測)も送り、
-    # 画面側で目安の7割を過ぎたら「もうすぐ!」に切り替える
+    # ローディング:「え を かいているよ」。かかる時間の目安(前回の実測)と、名前の候補も送る
     await ws_manager.notify_progress(
         "drawing",
         expected_seconds=round(_last_generate_seconds, 1),
         monster_name=monster.get("monster_name", ""),
-        photo_id=photo_id,
+        photo_id=run.photo_id,
         # 名前の候補(スマホの「ほかに さがす」で順番に見せる)。採用した名前を先頭にする
-        name_choices=_remember_name_choices(photo_id, monster),
+        name_choices=_remember_name_choices(run.photo_id, monster),
     )
     try:
-        generation = await run_in_threadpool(
-            get_generator().generate,
-            photo_bytes,
-            animal,
-            monster["object_name"],
-            monster["element"],
-            monster.get("design_plan"),
-            monster.get("has_person", False),
-        )
-        settings["image_model"] = generation.model
-        settings["image_quality"] = generation.quality
-        settings["image_size"] = generation.size
+        generation = await _draw(run, monster["object_name"], monster["element"],
+                                 monster.get("design_plan"), monster.get("has_person", False))
     except Exception as e:
-        logger.warning("画像生成に失敗しました: %s", e)
-        await ws_manager.notify_progress("error")
-        # 判定までは成功しているので、その分の料金は発生している
-        report = _report(
-            monster, notes, settings,
-            {"recognize": recognize_seconds, "total": _seconds_since(total_started)},
-            build_usage(recognized.usage, None),
-        )
-        return JSONResponse(
-            status_code=200,
-            content={"ok": False, "step": "画像生成", "error": str(e), **report},
-        )
+        return await _draw_failed(run, monster, notes, e)
+    return await _save_success(run, monster, notes, generation)
 
+
+async def _generate_split(run: _Run) -> JSONResponse:
+    """短いプロンプト:すぐ要る判定 →(撮り直しなら終了)→ 画像生成と、名前・説明を同時に → 保存。
+
+    ※ 2026年11月2日:待ち時間を短くするため、判定を2つに分けて、名前・説明を画像生成と重ねた
+      (recognizer.py の「短いプロンプトの判定」のコメント参照)。
+    """
+    await ws_manager.notify_progress("naming")
+    # 取り込む場所・演出を先に決める(画像プロンプトと、名前・説明の両方に同じものを伝える)
+    plan = choose_plan(run.animal, simple=True)
+    try:
+        check = await run_in_threadpool(quick_check, run.photo_bytes)
+    except Exception as e:
+        return await _recognize_failed(run, e)
+    run.settings["text_model"] = check.model
+    run.record("check", check.elapsed_seconds, check.usage)
+
+    # 撮り直しかどうかは、すぐ要る判定だけで決まる
+    first, first_notes = combine(run.animal, plan, check, None)
+    if first["needs_retake"]:
+        return await _finish_retake(run, first, first_notes)
+    object_name, has_person = first["object_name"], first["has_person"]
+
+    # ローディング:「え を かいているよ」(名前の候補は、名前・説明ができてから names で送る)
+    await ws_manager.notify_progress(
+        "drawing", expected_seconds=round(_last_generate_seconds, 1), photo_id=run.photo_id,
+    )
+    design_plan: dict[str, Any] = {}
+    plan.apply(design_plan, run.animal)
+    # 画像では物の全体ではなく、パーツごとに別々の場所へ作り変える(prompts.fusion_line)
+    for key in ("object_part", "object_sub_part"):
+        if first.get(key):
+            design_plan[key] = first[key]
+    draw_task = asyncio.create_task(_draw(run, object_name, "", design_plan, has_person))
+
+    # 名前・説明(画像生成と同時)。失敗しても止めず、既定の名前で続ける
+    describe_error = ""
+    try:
+        details = await run_in_threadpool(
+            describe, run.photo_bytes, run.animal, object_name, plan, has_person and allow_person(),
+        )
+        run.record("describe", details.elapsed_seconds, details.usage)
+    except Exception as e:
+        logger.warning("名前・説明を作れませんでした(既定値で続けます): %s", e)
+        details, describe_error = None, str(e)
+    monster, notes = combine(run.animal, plan, check, details)
+    for key in ("object_part", "object_sub_part"):
+        if first.get(key):
+            monster["design_plan"][key] = first[key]
+    if describe_error:
+        notes.append(f"名前・説明を作れなかったので、既定値にしました: {describe_error}")
+
+    # 名前の候補をスマホに送る(子供は、絵ができるのを待つあいだに選ぶ)
+    await ws_manager.notify_progress(
+        "names",
+        monster_name=monster.get("monster_name", ""),
+        photo_id=run.photo_id,
+        name_choices=_remember_name_choices(run.photo_id, monster),
+    )
+    try:
+        generation = await draw_task
+    except Exception as e:
+        return await _draw_failed(run, monster, notes, e)
+    return await _save_success(run, monster, notes, generation)
+
+
+def _partial_sender(photo_id: str, total: int) -> PartialCallback | None:
+    """途中の絵を受け取って、PC画面に知らせる関数を作る(画像生成のスレッドから呼ばれる)。"""
+    if total <= 0:
+        return None
+
+    def send(index: int, png: bytes) -> None:
+        _partials.setdefault(photo_id, {})[index] = png
+        # スレッドから、非同期の WebSocket の送信を呼ぶ
+        anyio.from_thread.run(functools.partial(
+            ws_manager.notify_progress, "partial",
+            photo_id=photo_id, index=index + 1, total=total,
+            image_url=f"/api/partial-image/{photo_id}/{index}",
+        ))
+
+    return send
+
+
+async def _draw(
+    run: _Run, object_name: str, element: str, design_plan: dict[str, Any] | None, has_person: bool,
+) -> GenerationResult:
+    """画像生成。設定・時間・使用量を run に残す。失敗したら例外のまま返す。"""
+    global _last_generate_seconds
+    generator = get_generator()
+    on_partial = _partial_sender(run.photo_id, getattr(generator, "partial_images", 0))
+    generation = await run_in_threadpool(
+        generator.generate, run.photo_bytes, run.animal, object_name, element,
+        design_plan, has_person, on_partial,
+    )
+    run.settings["image_model"] = generation.model
+    run.settings["image_quality"] = generation.quality
+    run.settings["image_size"] = generation.size
+    run.record("generate", generation.elapsed_seconds, generation.usage)
     # 次のローディングで使う「画像生成にかかる時間の目安」を更新する(からうちモードの0秒は使わない)
     if generation.elapsed_seconds > 1:
         _last_generate_seconds = generation.elapsed_seconds
+    return generation
 
-    # ------------------------------------------------------------------
-    # 保存
-    # ------------------------------------------------------------------
-    # 画像を作っているあいだに、子供がスマホで名前を選んでいたら、その名前にする
-    _apply_chosen_name(photo_id, monster)
 
-    total_seconds = time.monotonic() - total_started
-    usage = build_usage(recognized.usage, generation.usage)
-    report = _report(
-        monster, notes, settings,
-        {"recognize": recognize_seconds,
-         "generate": round(generation.elapsed_seconds, 2),
-         "total": round(total_seconds, 2)},
-        usage,
-        generator_notes=generation.notes,
+async def _recognize_failed(run: _Run, e: Exception) -> JSONResponse:
+    logger.warning("判定に失敗しました: %s", e)
+    await ws_manager.notify_progress("error")
+    return JSONResponse(
+        status_code=200,
+        content={"ok": False, "step": "判定", "error": str(e), "settings": run.settings},
     )
+
+
+async def _finish_retake(run: _Run, monster: dict[str, Any], notes: list[str]) -> JSONResponse:
+    """撮り直し:画像生成は呼ばずに終わる(判定の分だけ料金がかかる)。"""
+    report = run.report(monster, notes, needs_retake=True)
+    result = {"created_at": datetime.now().isoformat(timespec="seconds"), "animal": run.animal, **report}
+    await run_in_threadpool(save_result, OUTPUTS_DIR, run.photo_bytes, None, result)
+    _remove_upload(run.photo_id)
+
+    logger.info("撮り直しと判定されました: %s", monster["retake_reason"])
+    await ws_manager.notify_progress("retake", reason=monster["retake_reason"])
+    return JSONResponse({"ok": True, "retake_reason": monster["retake_reason"], **report})
+
+
+async def _draw_failed(run: _Run, monster: dict[str, Any], notes: list[str], e: Exception) -> JSONResponse:
+    logger.warning("画像生成に失敗しました: %s", e)
+    await ws_manager.notify_progress("error")
+    # 判定までは成功しているので、その分の料金は発生している
+    return JSONResponse(
+        status_code=200,
+        content={"ok": False, "step": "画像生成", "error": str(e), **run.report(monster, notes)},
+    )
+
+
+async def _save_success(
+    run: _Run, monster: dict[str, Any], notes: list[str], generation: GenerationResult,
+) -> JSONResponse:
+    """できた絵と結果を保存し、PC とスマホに知らせる。"""
+    # 画像を作っているあいだに、子供がスマホで名前を選んでいたら、その名前にする
+    _apply_chosen_name(run.photo_id, monster)
+
+    report = run.report(monster, notes, generator_notes=generation.notes)
     result = {
         "created_at": datetime.now().isoformat(timespec="seconds"),
-        "animal": animal,
+        "animal": run.animal,
         **report,
         "image_prompt": generation.prompt,
         "needs_retake": False,
     }
     out_dir = await run_in_threadpool(
-        save_result, OUTPUTS_DIR, photo_bytes, generation.image_bytes, result
+        save_result, OUTPUTS_DIR, run.photo_bytes, generation.image_bytes, result
     )
-    _photo_outputs[photo_id] = out_dir.name
-    _remove_upload(photo_id)
-    monster_url = f"/api/monster-image/{photo_id}"
+    _photo_outputs[run.photo_id] = out_dir.name
+    _remove_upload(run.photo_id)
+    monster_url = f"/api/monster-image/{run.photo_id}"
 
     # ローディング:終わり。スマホにもモンスターの絵を見せるため、画像のURLも送る
     await ws_manager.notify_progress(
         "done",
-        photo_id=photo_id,
+        photo_id=run.photo_id,
         monster_name=monster.get("monster_name", ""),
         image_url=monster_url,
     )
 
     logger.info("生成が完了しました: %s (合計 %.1f秒, 試算 %s)",
-                out_dir.name, total_seconds, format_cost(usage.get("total_cost_usd")))
+                out_dir.name, report["timings"]["total"], format_cost(report["usage"].get("total_cost_usd")))
 
     return JSONResponse({
         "ok": True,
@@ -592,6 +705,19 @@ async def _generate(photo_id: str, animal: str, photo_bytes: bytes) -> JSONRespo
         "monster_url": monster_url,
         "output_dir": out_dir.name,
     })
+
+
+@app.post("/api/revealed")
+async def api_revealed(photo_id: str = Form(...)) -> JSONResponse:
+    """PC 画面で誕生の演出が終わったことを受け取り、スマホにも絵を見せるよう知らせる。
+
+    ※ 2026年11月2日:それまでスマホは、絵ができた(done)ときにすぐ絵を見せていたので、
+      PC のたまごが割れる前に、スマホにモンスターが出てしまっていた。
+    """
+    if _check_photo_id(photo_id) not in _photo_outputs:
+        raise HTTPException(status_code=404, detail="その写真のモンスターは見つかりませんでした")
+    await ws_manager.notify_revealed(photo_id, f"/api/monster-image/{photo_id}")
+    return JSONResponse({"ok": True})
 
 
 # ----------------------------------------------------------------------

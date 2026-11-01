@@ -18,6 +18,7 @@
 //   #btn-left / #btn-center / #btn-right(中に .knob-label。押せないときは disabled、出さないときは class="empty")、
 //   #toast(class="show" が付く)、#tip、#name-help、#name-list、#st-naming / #st-drawing / #st-soon、
 //   #card-name、#card-element、#card-recipe、#card-desc、#card-img
+//   (なくてもよい)#partial-img:画像生成の途中の絵。届くと src が入り、#stage に data-partial(何枚目か。1から)が付く
 // ── 進み具合の見せ方 ──
 //   #stage に CSS 変数 --progress(0〜1)と data-level(0〜5)を付ける。
 //   level:0 まだ / 1 なまえを考えている / 2 絵をかき始めた / 3 半分すぎ / 4 もうすぐ / 5 できた
@@ -218,11 +219,7 @@ function onPhotoReceived(msg) {
 // ----------------------------------------------------------------------
 async function startFusion() {
   if (!state.photoId || state.generating) return;
-  state.generating = true;
-  resetMachine();
-  await setScene("s3");
-  startTips();
-  startNaming();
+  await beginFusion();
 
   const body = new FormData();
   body.append("photo_id", state.photoId);
@@ -237,11 +234,21 @@ async function startFusion() {
       endWithMessage("もういちど とってね", data.retake_reason || "");
     } else {
       await birth(data);
+      reportRevealed(state.photoId);   // スマホにも絵を見せてよい(誕生の演出が終わった)
     }
   } catch (e) {
     showDevError("通信に失敗しました: " + e.message);
     endWithMessage("うまく できなかったよ…", "もういちど とってね");
   }
+}
+
+// がったい中(s3)にして、ローディングを始める(本番とテストプレイで共通)
+async function beginFusion() {
+  state.generating = true;
+  resetMachine();
+  await setScene("s3");
+  startTips();
+  startNaming();
 }
 
 // 撮り直し・失敗:見出しで知らせて、少ししたら s1 に戻る
@@ -269,13 +276,29 @@ function birth(data) {
   });
 }
 
+// PC で誕生の演出が終わったことをサーバーに知らせる(サーバーがスマホに revealed を送り、スマホが絵を見せる)
+async function reportRevealed(photoId) {
+  if (!photoId) return;
+  const body = new FormData();
+  body.append("photo_id", photoId);
+  try {
+    await fetch("/api/revealed", { method: "POST", body });
+  } catch (e) {
+    // 送れなくても、スマホは少し待てば絵を見せる(phone.js の REVEAL_FALLBACK_SECONDS)
+  }
+}
+
+const CSS_BIRTH_MS = 1800;   // themeFx のないテーマで、CSS のカードの登場が終わるまで(テーマの card-born。いちばん長いガチャが 0.95秒待って 0.8秒)
+
 // 誕生の演出。テーマの演出(window.themeFx.birth)があればまかせ、なければすぐ s4 にする
 async function playBirth() {
   const fx = window.themeFx;
   if (!fx || typeof fx.birth !== "function") {
     sound("crack");
     setTimeout(() => sound("fanfare"), 500);   // CSS のカードの登場(0.5秒あと)に合わせる
-    return setScene("s4", { instant: true });
+    await setScene("s4", { instant: true });
+    // CSS のカードの登場が終わるまで待つ(終わってからスマホに絵を見せるため)
+    return new Promise((resolve) => setTimeout(resolve, CSS_BIRTH_MS));
   }
   let shown = false;
   const showCard = () => { if (!shown) { shown = true; renderScene("s4"); } };
@@ -311,6 +334,7 @@ function fillCard(data) {
 
 function restart() {
   clearTimeout(endTimer);
+  stopTestPlay();
   state.photoId = null;
   state.animal = "";
   state.generating = false;
@@ -383,10 +407,30 @@ function onProgress(msg) {
       setProgress(0.3 + Math.min(r, 1) * 0.65);
       if (r >= SOON_RATIO) setSteps("soon");
     }, 400);
+  } else if (msg.stage === "names") {
+    // 短いプロンプトでは、名前の候補は絵を作っているあいだに届く
+    setNameChoices(msg.name_choices || (msg.monster_name ? [msg.monster_name] : []));
+  } else if (msg.stage === "partial") {
+    showPartial(msg.image_url, msg.index);
   } else if (msg.stage === "done") {
     clearInterval(drawTimer);
     setProgress(1);
   }
+}
+
+// 画像生成の途中の絵。テーマに #partial-img があるときだけ見せる(今は たまご のテーマだけ)。
+// 見せ方はテーマの CSS が決める(#stage の data-partial = 何枚目か。1 から)
+function showPartial(url, index) {
+  const img = el("partial-img");
+  if (!img) return;
+  img.onload = () => { stage.dataset.partial = index; };   // 読みこめてから見せる(読みこみ中に空の枠が出ないように)
+  img.src = url;
+}
+
+function clearPartial() {
+  delete stage.dataset.partial;
+  const img = el("partial-img");
+  if (img) { img.onload = null; img.removeAttribute("src"); }
 }
 
 function setNameChoices(names) {
@@ -437,6 +481,7 @@ function resetMachine() {
   el("name-list").innerHTML = "";
   el("name-help").textContent = "スマホで えらんでね";
   el("card-name").textContent = "???";
+  clearPartial();
 }
 
 // ----------------------------------------------------------------------
@@ -489,6 +534,10 @@ document.body.insertAdjacentHTML("beforeend", `
   <section>
     <h4>確認用(APIなし)</h4>
     <p class="dev-muted">見本のデータ(ゴリラ × はさみ)で、場面や演出を動かします。料金はかかりません。</p>
+    <p class="dev-row">
+      <button id="demo-testplay"><strong>▶ テストプレイ</strong></button>
+      <span class="dev-muted">「がったい!」から誕生後まで通しで(がったい中 約25秒)</span>
+    </p>
     <p class="dev-row">場面
       <button data-demo-scene="s1">s1 とる</button>
       <button data-demo-scene="s2">s2 あわせる</button>
@@ -501,6 +550,7 @@ document.body.insertAdjacentHTML("beforeend", `
     </p>
     <p class="dev-row">
       <button id="demo-birth">誕生の演出</button>
+      <button id="demo-partial">途中の絵</button>
       <button id="demo-name">名前が選ばれた</button>
       <button id="demo-retake">撮り直しの表示</button>
       <button id="demo-reset">はじめに もどす</button>
@@ -602,7 +652,8 @@ function showDevResult(data) {
 
   const t = data.timings || {};
   el("timings").innerHTML = "";
-  [["判定", t.recognize], ["画像生成", t.generate], ["合計", t.total]].forEach(([label, sec]) => {
+  [["判定", t.recognize], ["判定(物の名前・撮り直し)", t.check], ["名前・説明", t.describe],
+   ["画像生成", t.generate], ["合計", t.total]].forEach(([label, sec]) => {
     if (sec === undefined || sec === null) return;
     const li = document.createElement("li");
     li.textContent = label + ": " + Number(sec).toFixed(1) + " 秒";
@@ -619,6 +670,7 @@ function showDevResult(data) {
    ["画像プロンプト", s.image_prompt_style === "simple" ? "短い(simple)" : s.image_prompt_style ? "詳しい(detailed)" : ""],
    ["取り込む場所", s.image_prompt_style === "simple" ? dp.fusion_part_label : ""],
    ["ポーズ", s.image_prompt_style === "simple" ? [st.pose, st.view, st.expression].filter(Boolean).join(" / ") : ""],
+   ["背景", s.image_prompt_style === "simple" && dp.background_place ? [st.scene, dp.background_place].filter(Boolean).join("の") : ""],
   ].forEach(([label, v]) => {
     if (!v) return;
     const li = document.createElement("li");
@@ -642,9 +694,13 @@ function showUsage(usage) {
     const cost = u.estimated_cost_usd;
     const yen = cost === null || cost === undefined ? "" :
                 "  →  $" + cost.toFixed(4) + "(およそ " + Number(u.estimated_cost_yen).toFixed(1) + "円)";
-    add(label + ": " + u.total_tokens + " トークン(入力 " + (u.input_tokens || 0) + " / 出力 " + (u.output_tokens || 0) + ")" + yen);
+    // 途中の絵の分(1枚 100 画像出力トークン)は、API の使用量に入っていないので、サーバーが試算に足している
+    const partial = u.partial_images ? "(途中の絵 " + u.partial_images + "枚の +" + u.partial_image_output_tokens + " トークンを含む)" : "";
+    add(label + ": " + u.total_tokens + " トークン(入力 " + (u.input_tokens || 0) + " / 出力 " + (u.output_tokens || 0) + ")" + yen + partial);
   };
   line("判定", usage.recognize);
+  line("判定(物の名前・撮り直し)", usage.check);
+  line("名前・説明", usage.describe);
   line("画像生成", usage.generate);
   if (usage.total_cost_usd !== null && usage.total_cost_usd !== undefined) {
     add("この1回の合計: $" + usage.total_cost_usd.toFixed(4) + "(およそ " + usage.total_cost_yen.toFixed(1) + "円)");
@@ -731,6 +787,7 @@ async function loadAnimals() {
 const DEMO_PHOTO = "/static/demo/photo.jpg";
 const DEMO_IMG = "/static/demo/monster.jpg";
 const DEMO_OTHER_NAMES = ["ガブリザミ", "ゴリシザー"];
+const DEMO_PARTIAL_COUNT = 2;   // 途中の絵の枚数(サーバーの IMAGE_PARTIAL_IMAGES の既定と同じ)
 
 function demoName() { return params.get("name") || "ゴリザミ"; }
 
@@ -746,6 +803,7 @@ function demoSample() {
 // 見本のデータで、その場面を表示する。progress は s3 の進み具合(0〜1)
 function showDemo(scene, { progress = 0.55 } = {}) {
   clearTimeout(endTimer);
+  stopTestPlay();
   stopTimers();
   state.generating = false;
   state.chosenName = "";
@@ -756,6 +814,7 @@ function showDemo(scene, { progress = 0.55 } = {}) {
   stage.classList.toggle("has-photo", scene !== "s1");
   stage.classList.toggle("has-animal", scene !== "s1");
   el("card-img").removeAttribute("src");
+  clearPartial();
   renderScene(scene);
   if (scene === "s3") {
     startTips();
@@ -785,7 +844,65 @@ function runDemo() {
   showDemo(scene, { progress: parseFloat(params.get("progress") || "0.55") });
 }
 
+// ----------------------------------------------------------------------
+// テストプレイ:見本のデータで、「がったい!」から誕生後までを通しで流す(API は呼ばない)
+// ----------------------------------------------------------------------
+// サーバーから届くメッセージ(progress)を、本番と同じ順・同じくらいの間で、このページの中で作って渡す。
+// 見せ方の処理(onProgress・birth など)は本番と同じものを使うので、本番の見た目をそのまま確かめられる。
+// 時間は「がったい!」から 約25秒(すぐ要る判定 3秒 + 画像生成 20秒 + 誕生の演出)。
+const TEST_PLAY_DRAW_SECONDS = 20;   // 画像生成にかかる時間(drawing の expected_seconds に入れる)
+let testPlayTimers = [];
+let testPlayRun = 0;   // 何回目のテストプレイか(止めたあとに、途中の続きが動かないように見分ける)
+
+function stopTestPlay() {
+  testPlayRun += 1;
+  testPlayTimers.forEach(clearTimeout);
+  testPlayTimers = [];
+}
+
+function afterSeconds(seconds, fn) {
+  testPlayTimers.push(setTimeout(fn, seconds * 1000));
+}
+
+function playTestRun() {
+  // s2(しゃしん × どうぶつ)から始める
+  showDemo("s2");
+  const photoId = "testplay";
+  const names = [demoName(), ...DEMO_OTHER_NAMES];
+  const img = params.get("img") || DEMO_IMG;
+  const draw = TEST_PLAY_DRAW_SECONDS;
+  const run = testPlayRun;
+
+  // 1.5秒後に「がったい!」を押したことにする
+  afterSeconds(1.5, async () => {
+    const btn = el("btn-center");
+    btn.classList.add("pressed");
+    setTimeout(() => btn.classList.remove("pressed"), 160);
+    sound("press");
+    await beginFusion();
+    if (run !== testPlayRun) return;   // 場面の切りかえ中に止められた
+    // すぐ要る判定(3秒)→ 画像生成を始める
+    afterSeconds(3, () => onProgress({ stage: "drawing", expected_seconds: draw, photo_id: photoId }));
+    // 名前・説明は、画像生成と同時に作られて先に届く
+    afterSeconds(3 + 5, () => onProgress({ stage: "names", name_choices: names, monster_name: names[0], photo_id: photoId }));
+    // 途中の絵(たまごのテーマだけ見える)
+    afterSeconds(3 + draw * 0.4, () => onProgress({ stage: "partial", image_url: img, index: 1, total: 2, photo_id: photoId }));
+    afterSeconds(3 + draw * 0.75, () => onProgress({ stage: "partial", image_url: img, index: 2, total: 2, photo_id: photoId }));
+    // 子供がスマホで名前を選んだことにする(2つ目の候補)
+    afterSeconds(3 + draw * 0.55, () => onNameChosen({ name: names[1] }));
+    // できあがり → 誕生
+    afterSeconds(3 + draw, () => {
+      onProgress({ stage: "done", photo_id: photoId, image_url: img });
+      birth(demoSample());
+    });
+  });
+}
+
 // 開発者メニューの「確認用(APIなし)」
+el("demo-testplay").addEventListener("click", () => {
+  toggleDev(false);   // メニューを閉じて、画面全体で見る
+  playTestRun();
+});
 document.querySelectorAll("[data-demo-scene]").forEach((btn) => {
   btn.addEventListener("click", () => showDemo(btn.dataset.demoScene, { progress: Number(el("demo-progress").value) }));
 });
@@ -805,6 +922,13 @@ el("demo-name").addEventListener("click", () => {
   const current = state.chosenName || names[0];   // まだ選ばれていなければ、いまの名前(先頭)の次から
   const next = names[(names.indexOf(current) + 1) % names.length];
   onNameChosen({ name: next });
+});
+el("demo-partial").addEventListener("click", () => {
+  // 途中の絵を、見本の絵で 1枚目 → 2枚目 → 1枚目… と進める(たまごのテーマだけ見える)
+  if (state.scene !== "s3") showDemo("s3", { progress: 0.6 });
+  if (!el("partial-img")) { toast("このテーマには 途中の絵が ないよ"); return; }
+  const next = (Number(stage.dataset.partial || 0) % DEMO_PARTIAL_COUNT) + 1;
+  showPartial(params.get("img") || DEMO_IMG, next);
 });
 el("demo-retake").addEventListener("click", () => {
   showDemo("s3");
