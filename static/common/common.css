@@ -125,6 +125,9 @@ body { overflow: hidden; }
 .nt-form { display: flex; flex-wrap: wrap; gap: 6px; }
 .nt-form input, .nt-form select, .nt-form button { font-family: var(--font-body); font-size: 14px; padding: 4px 8px; }
 .nt-form input[type="number"] { width: 4em; }
+.dev-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dev-row button { font-family: var(--font-body); font-size: 13px; padding: 3px 8px; cursor: pointer; }
+.dev-row input[type="range"] { flex: 1; min-width: 140px; }
 .dev table { border-collapse: collapse; margin-top: 8px; font-size: 13px; }
 .dev th, .dev td { border: 1px solid #d8d3c6; padding: 3px 6px; text-align: left; vertical-align: top; }
 .dev th { background: #ebe6d9; }

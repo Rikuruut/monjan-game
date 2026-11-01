@@ -34,7 +34,8 @@
 //   切りかえのあいだ #stage に class="shut" が付く。閉じる・開く時間は、テーマの CSS 変数
 //   --scene-close-ms / --scene-open-ms で変えられる(初期値 340 / 140)。
 // 確認用:?demo=1&scene=s3&progress=0.8&photo=…&img=…&animal=…&name=… で、APIを使わずにその場面を表示する。&dev=1 で開発者メニューを開く。
-//   ?demo=1&play=birth で、がったい中から誕生までの流れを見本のデータで動かす。
+//   ?demo=1&play=birth で、割れる直前から誕生後までの流れを見本のデータで動かす。
+//   同じことは、開発者メニューの「確認用(APIなし)」のボタンからもできる(ふつうの画面のまま使える)。
 
 const el = (id) => document.getElementById(id);
 const sound = (name) => { if (window.sfx) window.sfx.play(name); };
@@ -157,6 +158,10 @@ document.addEventListener("keydown", (ev) => {
   const tag = (ev.target.tagName || "").toLowerCase();
   if (tag === "input" || tag === "select" || tag === "textarea") return;
   if (ev.repeat) return;
+  // 開発者メニューのボタンを押したあとは、そこにフォーカスが残る。
+  // そのまま Enter・Space を押すと、メニューのボタンと大きなボタンの両方が動くので、D キーだけを受け付ける
+  const inDev = ev.target.closest && ev.target.closest("#dev");
+  if (inDev && ev.key !== "d" && ev.key !== "D") return;
 
   if (ev.key === "ArrowLeft") press("left");
   else if (ev.key === "ArrowRight") press("right");
@@ -482,6 +487,32 @@ document.body.insertAdjacentHTML("beforeend", `
     <p><select id="theme-select"></select></p>
   </section>
   <section>
+    <h4>確認用(APIなし)</h4>
+    <p class="dev-muted">見本のデータ(ゴリラ × はさみ)で、場面や演出を動かします。料金はかかりません。</p>
+    <p class="dev-row">場面
+      <button data-demo-scene="s1">s1 とる</button>
+      <button data-demo-scene="s2">s2 あわせる</button>
+      <button data-demo-scene="s3">s3 がったい</button>
+      <button data-demo-scene="s4">s4 たんじょう</button>
+    </p>
+    <p class="dev-row">進み具合
+      <input id="demo-progress" type="range" min="0" max="1" step="0.05" value="0.55">
+      <span id="demo-progress-value">0.55</span>
+    </p>
+    <p class="dev-row">
+      <button id="demo-birth">誕生の演出</button>
+      <button id="demo-name">名前が選ばれた</button>
+      <button id="demo-retake">撮り直しの表示</button>
+      <button id="demo-reset">はじめに もどす</button>
+    </p>
+    <p class="dev-row">効果音
+      <button data-demo-sfx="press">press</button>
+      <button data-demo-sfx="tick">tick</button>
+      <button data-demo-sfx="crack">crack</button>
+      <button data-demo-sfx="fanfare">fanfare</button>
+    </p>
+  </section>
+  <section>
     <h4>スマホ</h4>
     <p>接続:<span id="phone-status" class="status status-off">未接続</span></p>
     <p><code id="phone-url">読み込み中...</code></p>
@@ -696,33 +727,93 @@ async function loadAnimals() {
 
 // 確認用:?demo=1&scene=s3&photo=…&img=…&animal=…&name=… で、APIを使わずにその場面を表示する
 // photo・img を付けないときは、見本の写真と絵(static/demo/)を使う
+// 開発者メニューの「確認用(APIなし)」のボタンも、同じ関数を使う
 const DEMO_PHOTO = "/static/demo/photo.jpg";
 const DEMO_IMG = "/static/demo/monster.jpg";
-function runDemo() {
-  const playBirthDemo = params.get("play") === "birth";
-  const scene = playBirthDemo ? "s3" : SCENES.includes(params.get("scene")) ? params.get("scene") : "s1";
-  state.animal = params.get("animal") || "ゴリラ";
-  const name = params.get("name") || "ゴリザミ";
-  el("animal-name").textContent = state.animal;
-  el("animal-icon").textContent = iconFor(state.animal) || "🦍";
-  el("photo").src = params.get("photo") || DEMO_PHOTO;
-  if (scene !== "s1") stage.classList.add("has-photo", "has-animal");
-  renderScene(scene);
-  const sample = {
-    monster: { monster_name: name, element: "とがってる", object_name: "はさみ",
+const DEMO_OTHER_NAMES = ["ガブリザミ", "ゴリシザー"];
+
+function demoName() { return params.get("name") || "ゴリザミ"; }
+
+function demoSample() {
+  return {
+    monster: { monster_name: demoName(), element: "とがってる", object_name: "はさみ",
                description: "はさみの つのを ふりかざし、なんでも きりひらく ちからもち。" },
     settings: { animal: state.animal },
     monster_url: params.get("img") || DEMO_IMG,
   };
+}
+
+// 見本のデータで、その場面を表示する。progress は s3 の進み具合(0〜1)
+function showDemo(scene, { progress = 0.55 } = {}) {
+  clearTimeout(endTimer);
+  stopTimers();
+  state.generating = false;
+  state.chosenName = "";
+  state.animal = params.get("animal") || "ゴリラ";
+  el("animal-name").textContent = state.animal;
+  el("animal-icon").textContent = iconFor(state.animal) || "🦍";
+  el("photo").src = params.get("photo") || DEMO_PHOTO;
+  stage.classList.toggle("has-photo", scene !== "s1");
+  stage.classList.toggle("has-animal", scene !== "s1");
+  el("card-img").removeAttribute("src");
+  renderScene(scene);
   if (scene === "s3") {
     startTips();
-    setSteps("drawing");
-    setProgress(parseFloat(params.get("progress") || (playBirthDemo ? "0.95" : "0.55")));
-    setNameChoices([name, "ガブリザミ", "ゴリシザー"]);
+    setSteps(progress >= SOON_RATIO ? "soon" : "drawing");
+    setProgress(progress);
+    setNameChoices([demoName(), ...DEMO_OTHER_NAMES]);
+    el("demo-progress").value = progress;
+    el("demo-progress-value").textContent = Number(progress).toFixed(2);
   }
-  if (scene === "s4") fillCard(sample);
-  if (playBirthDemo) setTimeout(() => birth(sample), 2000);
+  if (scene === "s4") fillCard(demoSample());
 }
+
+// 誕生の演出を、割れる直前(ひびが出そろった所)から誕生後(カードと名前が出た所)まで流す。
+// 終わったら s4 のまま止まる(「はじめに もどす」か場面のボタンで戻る)
+const BIRTH_DEMO_DELAY_MS = 300;   // がったい中の画面が描かれるのを待つだけの短い間
+function playBirthDemo() {
+  showDemo("s3", { progress: 1 });
+  setTimeout(() => birth(demoSample()), BIRTH_DEMO_DELAY_MS);
+}
+
+function runDemo() {
+  if (params.get("play") === "birth") {
+    playBirthDemo();
+    return;
+  }
+  const scene = SCENES.includes(params.get("scene")) ? params.get("scene") : "s1";
+  showDemo(scene, { progress: parseFloat(params.get("progress") || "0.55") });
+}
+
+// 開発者メニューの「確認用(APIなし)」
+document.querySelectorAll("[data-demo-scene]").forEach((btn) => {
+  btn.addEventListener("click", () => showDemo(btn.dataset.demoScene, { progress: Number(el("demo-progress").value) }));
+});
+el("demo-progress").addEventListener("input", () => {
+  const value = Number(el("demo-progress").value);
+  el("demo-progress-value").textContent = value.toFixed(2);
+  if (state.scene !== "s3") showDemo("s3", { progress: value });
+  else {
+    setSteps(value >= SOON_RATIO ? "soon" : "drawing");
+    setProgress(value);
+  }
+});
+el("demo-birth").addEventListener("click", playBirthDemo);
+el("demo-name").addEventListener("click", () => {
+  // 名前の候補を順番に「選ばれた」ことにする(スマホで名前を選んだときと同じ動き)
+  const names = state.nameChoices.length ? state.nameChoices : [demoName(), ...DEMO_OTHER_NAMES];
+  const current = state.chosenName || names[0];   // まだ選ばれていなければ、いまの名前(先頭)の次から
+  const next = names[(names.indexOf(current) + 1) % names.length];
+  onNameChosen({ name: next });
+});
+el("demo-retake").addEventListener("click", () => {
+  showDemo("s3");
+  endWithMessage("もういちど とってね", "ひとが うつっているよ");
+});
+el("demo-reset").addEventListener("click", restart);
+document.querySelectorAll("[data-demo-sfx]").forEach((btn) => {
+  btn.addEventListener("click", () => sound(btn.dataset.demoSfx));
+});
 
 loadThemes();
 loadAnimals().then(() => { if (params.get("demo")) runDemo(); });
