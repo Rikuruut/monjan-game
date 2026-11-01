@@ -695,6 +695,9 @@ async function loadAnimals() {
 }
 
 // 確認用:?demo=1&scene=s3&photo=…&img=…&animal=…&name=… で、APIを使わずにその場面を表示する
+// photo・img を付けないときは、見本の写真と絵(static/demo/)を使う
+const DEMO_PHOTO = "/static/demo/photo.jpg";
+const DEMO_IMG = "/static/demo/monster.jpg";
 function runDemo() {
   const playBirthDemo = params.get("play") === "birth";
   const scene = playBirthDemo ? "s3" : SCENES.includes(params.get("scene")) ? params.get("scene") : "s1";
@@ -702,14 +705,14 @@ function runDemo() {
   const name = params.get("name") || "ゴリザミ";
   el("animal-name").textContent = state.animal;
   el("animal-icon").textContent = iconFor(state.animal) || "🦍";
-  if (params.get("photo")) el("photo").src = params.get("photo");
+  el("photo").src = params.get("photo") || DEMO_PHOTO;
   if (scene !== "s1") stage.classList.add("has-photo", "has-animal");
   renderScene(scene);
   const sample = {
     monster: { monster_name: name, element: "とがってる", object_name: "はさみ",
                description: "はさみの つのを ふりかざし、なんでも きりひらく ちからもち。" },
     settings: { animal: state.animal },
-    monster_url: params.get("img") || "",
+    monster_url: params.get("img") || DEMO_IMG,
   };
   if (scene === "s3") {
     startTips();
