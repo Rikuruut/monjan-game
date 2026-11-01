@@ -15,6 +15,8 @@ import threading
 import time
 from pathlib import Path
 
+from .env import env_flag
+
 logger = logging.getLogger("monjan")
 
 # 探すブラウザ(上から順に。展示のPCは Windows なので Edge を先にする)
@@ -32,7 +34,7 @@ PROFILE_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "monjan-kiosk"
 
 def kiosk_enabled() -> bool:
     """.env の KIOSK_MODE(既定 true)。"""
-    return os.getenv("KIOSK_MODE", "true").strip().lower() in ("1", "true", "yes", "on")
+    return env_flag("KIOSK_MODE", default=True)
 
 
 def find_browser() -> Path | None:

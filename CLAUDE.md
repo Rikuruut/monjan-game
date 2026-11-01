@@ -50,7 +50,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 
 - WebSocket は `/ws?role=pc|phone`。メッセージ:`capture_request` / `photo_received` / `phone_status` / `upload_done` /
   `progress`(`stage`:naming・drawing・done・retake・error。drawing に `name_choices`・`expected_seconds`、done に `image_url`)/ `name_chosen`
-- そのほかの API:`/api/capture-request`・`/api/name-test`(名前だけを作る。1回0.1円以下)・`/api/themes`・`/api/qr`・`/api/info`
+- そのほかの API:`/api/photo/{photo_id}`・`/api/monster-image/{photo_id}`(写真と絵。`uploads/`・`outputs/` は公開しない)・`/api/capture-request`・`/api/name-test`(名前だけを作る。1回0.1円以下)・`/api/themes`・`/api/qr`・`/api/info`
 - 動物は一覧(`animals.py`:ライオン・ゾウ・ウサギ・ペンギン・ネコ・鷹・ワニ・ゴリラ・サメ・ティラノサウルス)から選ぶが、
   製品版は自由入力の予定なので、**どこでも任意の文字列として動くようにする**
 
@@ -79,7 +79,8 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 - `TEXT_MODEL=gpt-6-luna`(画像入力・構造化出力に対応を確認済み)。`client.responses.parse(text_format=...)` で JSON を受け取る。実測 約8〜16秒
 - 返す内容:`needs_retake`・`retake_reason`・`has_person`・`object_name`・`element`・`monster_name`・`name_candidates`(3つ)・`description`・`design_plan`(6項目。詳しくは `recognizer.MonsterInfo`)
 - 性質 `element` は6つから1つ:あつい / みず / でんき / かたい / とがってる / やわらかい。**画像プロンプトには入れない**(バトル用に保存するだけ)
-- 撮り直し:人が写っている・物がはっきりしない・子供にふさわしくない物。**物を持つ手や指だけなら人とみなさない**(指だけで人モードになり、人の特徴が描かれた)
+- 撮り直し:人が写っている・物がはっきりしない・子供にふさわしくない物。**物を持つ手や指だけなら人とみなさない**(指だけで人モードになり、人の特徴が描かれた)。
+  判定の返答を読めない(モデルが断った)ときも撮り直し(不適切な写真で断られることが多いため)
 - 説明文は子供向けにひらがな中心
 - 判定に考えさせる項目を増やすと時間が伸びる(30秒を超えてタイムアウトしたことがある)
 
@@ -88,7 +89,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 |---|---|---|
 | `element` | 6種類のどれか | かたい |
 | `name_candidates` | カタカナだけ・2〜10文字・NG語なし・小さい文字が続かない・物と動物を並べただけでない | 合格したものから 50/30/20% の重みで1つを `monster_name` に |
-| `monster_name` | 10文字以内 | 切る。空なら「なぞのモンスター」 |
+| `monster_name` | 候補がすべて不合格のときだけ使う。10文字以内で、候補と同じチェック | 切る。不合格・空なら「なぞのモンスター」 |
 | `description` | 40文字以内 | 切る |
 | `object_name` | 空でない | なにかのもの |
 | `design_plan` の各項目 | 120文字以内 | 切る。空なら既定値 |

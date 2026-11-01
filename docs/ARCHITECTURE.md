@@ -102,7 +102,7 @@ sequenceDiagram
 
 - **動物を選ぶのはスマホ**。写真と動物は一緒に送り、サーバーが `photo_id` に紐づけて覚える。動物名は一覧(10種類)から選ぶが、サーバーは一覧にない名前でも受け付ける(製品版で自由入力にする予定のため)
 - 写真はスマホ側で canvas を使って**長辺1024pxの JPEG** にしてから送る(容量を減らすのと、iPhone の HEIC 対策)。サーバーは Pillow で開けるかを確かめる
-- **撮り直し**(人が写っている・物がはっきりしない・子供にふさわしくない物)と判定されたら、画像生成は呼ばずに終わる
+- **撮り直し**(人が写っている・物がはっきりしない・子供にふさわしくない物。判定の返答を読めないときも)と判定されたら、画像生成は呼ばずに終わる
 - **名前は子供がスマホで選ぶ**。判定で作った候補(チェックに合格したもの)を順に見せる。画像ができてから20秒選ばなければ、出ている名前に決まる
 - 画像ができるまで:判定 約8〜16秒 + 画像生成 約25〜40秒(どちらもコメント・記録上の実測。**要確認**:展示で使う設定での最新の値)
 - バトルへの受け渡しは**未実装**(**要確認**)
@@ -141,7 +141,7 @@ monjan-prototype/
 ├── uploads/             スマホから届いた写真の一時置き場(Git に入れない)
 ├── outputs/             生成結果(Git に入れない)
 ├── .env.example         設定のひな形(.env にコピーして使う。.env は Git に入れない)
-├── requirements.txt     Python のライブラリ
+├── requirements.txt     Python のライブラリ(requirements-dev.txt はテスト用を足したもの)
 ├── README.md            起動手順・料金など
 └── CLAUDE.md            開発のルールと仕様
 ```
@@ -176,7 +176,12 @@ monjan-prototype/
 |---|---|---|
 | GET | `/` | PC 用ページ。`?theme=` でテーマを選ぶ |
 | GET | `/phone` | スマホ用ページ |
-| GET | `/static/...`・`/uploads/...`・`/outputs/...` | 静的ファイル・届いた写真・生成結果 |
+| GET | `/static/...` | 静的ファイル |
+| GET | `/api/photo/{photo_id}` | 届いた写真(JPEG)。生成が終わると `uploads/` から消すので 404 になる |
+| GET | `/api/monster-image/{photo_id}` | できたモンスターの絵(PNG)。サーバーを再起動すると前の絵は 404 |
+
+`uploads/`・`outputs/` は丸ごとは公開しない(`outputs/` のフォルダ名は日時で推測できるため、子供の写真を守る)。
+`photo_id` は32文字の16進数で、形が違えば 400。
 
 ### API
 
@@ -184,7 +189,7 @@ monjan-prototype/
 |---|---|---|---|
 | POST | `/api/capture-request` | なし | `{ok, sent}`。スマホに `capture_request` を送る。スマホがつながっていなければ 409 `{ok:false, error}` |
 | POST | `/api/upload` | `photo`(画像ファイル)、`animal`(文字列) | `{ok, photo_id, photo_url, animal}`。空・画像でないときは 400 |
-| POST | `/api/generate` | `photo_id` | 下の「/api/generate の返事」。`photo_id` がなければ 404 |
+| POST | `/api/generate` | `photo_id` | 下の「/api/generate の返事」。`photo_id` がなければ 404。生成中にもう一度呼ぶと 409(同時に2つは作らない) |
 | POST | `/api/choose-name` | `photo_id`、`name` | `{ok, name}`。候補にない名前は 400、候補がなければ 404。画像ができたあとなら `result.json` も書きかえる |
 | POST | `/api/name-test` | `animal`、`object_name`、`count`(1〜10) | `{ok, animal, object_name, runs[], total_cost_usd, total_cost_yen, cumulative_cost_yen}`。写真も画像生成も使わず、名前だけを作る(開発用) |
 | GET | `/api/animals` | なし | `{animals[], icons{}, default_icon}` |
@@ -200,7 +205,7 @@ monjan-prototype/
 |---|---|
 | 成功 | `ok: true`、`needs_retake: false`、`monster`、`monster_url`、`output_dir`、`settings`、`timings`、`usage`、`validator_notes`、`generator_notes` |
 | 撮り直し | `ok: true`、`needs_retake: true`、`retake_reason`、`monster`、`timings`、`usage` |
-| 失敗 | `ok: false`、`step`(「判定」か「画像生成」)、`error`、(判定まで済んでいれば)`monster`・`usage` |
+| 失敗 | `ok: false`、`step`(「判定」「画像生成」、保存などの思わぬエラーは「サーバー」)、`error`、(判定まで済んでいれば)`monster`・`usage`。どの失敗でも WebSocket で `progress: error` を送る |
 
 `monster` の主な項目:`object_name`(物の名前)・`element`(性質:あつい / みず / でんき / かたい / とがってる / やわらかい)・`monster_name`・`name_candidates`・`description`・`needs_retake`・`retake_reason`・`has_person`・`design_plan`(絵の設計図)。
 性質 `element` は絵には使っておらず、バトル用に保存しているだけです(**要確認**:バトルでの使い方)。
@@ -231,9 +236,10 @@ monjan-prototype/
 | python-multipart | フォーム・ファイルの受け取り |
 | python-dotenv | `.env` から設定を読む |
 | Pillow | 写真が開けるかの確認、からうちモードのダミー画像 |
-| openai | OpenAI API(判定・画像生成) |
+| openai | OpenAI API(判定・画像生成)。`responses.parse` を使うので 3.40.0 以上(動作を確かめた版) |
+| pydantic | 判定の返答の形(fastapi と一緒に入る) |
 | qrcode | スマホ用 URL の QR コード |
-| pytest・httpx | テスト |
+| pytest・httpx | テスト(`requirements-dev.txt`) |
 
 ### 画面(`static/vendor/` に置いてある。ネットから読まない)
 
@@ -268,7 +274,7 @@ Windows で動かすことを前提にしています(キオスクモードは E
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-# ライブラリを入れる
+# ライブラリを入れる(テストもするときは requirements-dev.txt)
 pip install -r requirements.txt
 
 # 設定ファイルを作り、OPENAI_API_KEY などを書く

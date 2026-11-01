@@ -25,7 +25,7 @@ from .openai_client import (
     image_prompt_style,
     is_dry_run,
 )
-from .pricing import estimate_cost, format_cost
+from .pricing import format_cost, read_usage
 from .prompts import build_image_prompt
 
 logger = logging.getLogger(__name__)
@@ -178,7 +178,8 @@ class OpenAIImageGenerator:
                 f"生成結果から画像を取り出せませんでした: {type(e).__name__}: {e}"
             ) from e
 
-        usage = self._read_usage(response)
+        # 画像生成は料金が大きいので、1回ごとの使用量を必ず記録しておく
+        usage = read_usage(response, self.model)
 
         logger.info("画像生成が完了しました(%.1f秒): model=%s quality=%s size=%s %dKB 試算=%s",
                     elapsed, self.model, used_quality, self.size, len(image_bytes) // 1024,
@@ -194,42 +195,6 @@ class OpenAIImageGenerator:
             notes=notes,
             usage=usage,
         )
-
-    # ------------------------------------------------------------------
-    def _read_usage(self, response) -> dict:
-        """返答に含まれるトークン数を読み、料金を試算する。
-
-        画像生成は料金が大きいので、1回ごとの使用量を必ず記録しておく。
-        """
-        usage = getattr(response, "usage", None)
-        if usage is None:
-            return {}
-
-        input_tokens = getattr(usage, "input_tokens", 0) or 0
-        output_tokens = getattr(usage, "output_tokens", 0) or 0
-
-        # 入力の内訳(テキストと画像)が取れる場合は分けて試算する
-        details = getattr(usage, "input_tokens_details", None)
-        text_in = getattr(details, "text_tokens", None) if details else None
-        image_in = getattr(details, "image_tokens", None) if details else None
-        if text_in is None or image_in is None:
-            text_in, image_in = input_tokens, 0
-
-        cost = estimate_cost(
-            self.model,
-            text_input_tokens=text_in,
-            image_input_tokens=image_in,
-            output_tokens=output_tokens,
-        )
-
-        return {
-            "input_tokens": input_tokens,
-            "input_text_tokens": text_in,
-            "input_image_tokens": image_in,
-            "output_tokens": output_tokens,
-            "total_tokens": getattr(usage, "total_tokens", input_tokens + output_tokens) or 0,
-            "estimated_cost_usd": None if cost is None else round(cost, 6),
-        }
 
     # ------------------------------------------------------------------
     def _call(self, client, photo_bytes: bytes, prompt: str, send_quality: bool):

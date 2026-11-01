@@ -11,14 +11,14 @@ import logging
 import os
 import random
 import time
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from pydantic import BaseModel
 
 from .openai_client import allow_person, get_client, image_prompt_style, is_dry_run
-from .pricing import estimate_cost, format_cost
+from .pricing import format_cost, read_usage
 from .prompts import (
-    ELEMENTS,
     FUSION_PARTS,
     FUSION_TYPES,
     NAME_TEST_INSTRUCTIONS,
@@ -30,7 +30,7 @@ from .prompts import (
     fusion_part_candidates,
     fusion_part_place,
 )
-from .validator import choose_monster_name, validate_monster
+from .validator import DEFAULT_RETAKE_REASON, choose_monster_name, validate_monster
 
 logger = logging.getLogger(__name__)
 
@@ -76,29 +76,6 @@ def _to_data_url(photo_bytes: bytes) -> str:
     """写真をdata URL(base64)にして、画像入力として渡せる形にする。"""
     b64 = base64.b64encode(photo_bytes).decode("ascii")
     return f"data:image/jpeg;base64,{b64}"
-
-
-def _read_usage(response: Any, model: str) -> dict[str, Any]:
-    """返答に含まれるトークン数を読み、料金を試算する。
-
-    料金を把握しておきたいので、使ったトークン数は必ず記録する。
-    """
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return {}
-
-    input_tokens = getattr(usage, "input_tokens", 0) or 0
-    output_tokens = getattr(usage, "output_tokens", 0) or 0
-
-    # 画像入力の分は内訳として分かれていないので、まとめてテキスト入力として試算する
-    cost = estimate_cost(model, text_input_tokens=input_tokens, output_tokens=output_tokens)
-
-    return {
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "total_tokens": getattr(usage, "total_tokens", input_tokens + output_tokens) or 0,
-        "estimated_cost_usd": None if cost is None else round(cost, 6),
-    }
 
 
 # 直前に選んだ融合の型(同じ型が続かないようにするため。サーバーを再起動すると忘れる)
@@ -158,13 +135,19 @@ def choose_staging() -> dict[str, str]:
     return {key: random.choice(options) for key, options in STAGING_OPTIONS.items()}
 
 
-def recognize(
-    photo_bytes: bytes, animal: str
-) -> tuple[dict[str, Any], list[str], float, str, dict[str, Any]]:
-    """写真と動物からモンスター情報を作る。
+@dataclass
+class RecognizeResult:
+    """判定の結果。"""
 
-    戻り値は (モンスター情報, 補正のメモ, かかった秒数, 使ったモデル名, 使用量) 。
-    """
+    monster: dict[str, Any]          # モンスター情報(validator で補正したもの)
+    notes: list[str]                 # 補正のメモ
+    elapsed_seconds: float           # かかった時間
+    model: str                       # 使ったモデル名
+    usage: dict[str, Any] = field(default_factory=dict)   # 使ったトークン数と料金の試算
+
+
+def recognize(photo_bytes: bytes, animal: str) -> RecognizeResult:
+    """写真と動物からモンスター情報を作る。"""
     model = (os.getenv("TEXT_MODEL") or "").strip()
     if not model:
         raise RecognizeError(".envの TEXT_MODEL が設定されていません")
@@ -207,7 +190,12 @@ def recognize(
         monster["design_plan"]["staging"] = staging
         _set_fusion_part(monster["design_plan"], animal, fusion_part)
         notes = notes + ["からうちモード(DRY_RUN)のため、APIは呼んでいません"]
-        return monster, notes, 0.0, f"{model}(からうち)", {}
+        return RecognizeResult(monster, notes, 0.0, f"{model}(からうち)")
+
+    if simple:
+        prompt = build_recognize_prompt_simple(animal, fusion_part_place(animal, fusion_part), staging)
+    else:
+        prompt = build_recognize_prompt(animal, fusion_type, staging, fusion_part_place(animal, fusion_part))
 
     client = get_client()
     started = time.monotonic()
@@ -221,11 +209,7 @@ def recognize(
                 {
                     "role": "user",
                     "content": [
-                        {"type": "input_text", "text": (
-                            build_recognize_prompt_simple(animal, fusion_part_place(animal, fusion_part), staging)
-                            if simple else
-                            build_recognize_prompt(animal, fusion_type, staging, fusion_part_place(animal, fusion_part))
-                        )},
+                        {"type": "input_text", "text": prompt},
                         {"type": "input_image", "image_url": _to_data_url(photo_bytes)},
                     ],
                 }
@@ -241,9 +225,14 @@ def recognize(
 
     parsed = response.output_parsed
     if parsed is None:
-        # 形式が読めなかった場合は、validator側ですべて既定値にする
-        logger.warning("判定の返答を読み取れませんでした(refusal など)")
+        # 形式が読めなかった場合(モデルが断ったときなど)は、撮り直しにする。
+        # ※ 2026年11月2日:それまでは既定値のまま画像生成まで進んでいた。
+        #   モデルが断るのは、子供にふさわしくない写真のときが多いので、撮り直しの判定を通り抜けていた
+        logger.warning("判定の返答を読み取れませんでした(refusal など)。撮り直しにします")
         monster, notes = validate_monster(None, animal)
+        monster["needs_retake"] = True
+        monster["retake_reason"] = DEFAULT_RETAKE_REASON
+        notes.append("判定の返答を読み取れなかったので、撮り直しにしました")
     else:
         monster, notes = validate_monster(parsed.model_dump(), animal)
     if fusion_type:
@@ -251,12 +240,12 @@ def recognize(
     monster["design_plan"]["staging"] = staging
     _set_fusion_part(monster["design_plan"], animal, fusion_part)
 
-    usage = _read_usage(response, model)
+    usage = read_usage(response, model)
 
     logger.info("判定が完了しました(%.1f秒, %sトークン, 試算 %s): %s",
                 elapsed, usage.get("total_tokens", "?"),
                 format_cost(usage.get("estimated_cost_usd")), monster)
-    return monster, notes, elapsed, model, usage
+    return RecognizeResult(monster, notes, elapsed, model, usage)
 
 
 # ----------------------------------------------------------------------
@@ -310,4 +299,4 @@ def generate_names(animal: str, object_name: str) -> dict[str, Any]:
     candidates = parsed.name_candidates if parsed is not None else []
     name, checked, notes = choose_monster_name(candidates, "", animal, object_name)
     return {**result, "name": name, "candidates": checked, "notes": notes,
-            "seconds": round(elapsed, 2), "model": model, "usage": _read_usage(response, model)}
+            "seconds": round(elapsed, 2), "model": model, "usage": read_usage(response, model)}

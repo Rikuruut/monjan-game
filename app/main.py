@@ -11,6 +11,7 @@ import io
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -33,7 +34,7 @@ from .net_utils import get_lan_ip
 from .openai_client import image_prompt_style, is_dry_run
 from .pricing import format_cost, to_yen
 from .recognizer import generate_names, recognize
-from .storage import append_usage_log, save_result
+from .storage import MONSTER_NAME, RESULT_NAME, append_jsonl, append_usage_log, save_result
 from .ws_manager import ROLE_PC, ROLE_PHONE, WSManager
 
 # .envの読み込み
@@ -65,13 +66,12 @@ ws_manager = WSManager()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """起動したときに、スマホで開くURLをターミナルに表示する。"""
-    ip = get_lan_ip()
     print("", flush=True)
     print("=" * 56)
     print("  モンじゃん! プロトタイプ サーバーを起動しました")
     print("=" * 56)
     print(f"  PC用ページ   : http://localhost:{PORT}/")
-    print(f"  スマホ用ページ: http://{ip}:{PORT}/phone", flush=True)
+    print(f"  スマホ用ページ: {phone_url()}", flush=True)
     print("", flush=True)
     print("  ※ PCとスマホを同じWi-Fiにつないでください")
     print("=" * 56)
@@ -98,14 +98,29 @@ async def no_cache_for_pages(request, call_next):
     return response
 
 
+# uploads/ と outputs/ は丸ごとは公開しない(届いた写真と、できた絵だけを下の API で返す)。
+# ※ 2026年11月2日:それまでは両方を公開していて、outputs/ のフォルダ名は日時なので、
+#   同じ Wi-Fi の誰でも、子供の写真(photo.jpg)や記録のファイルを推測して開けた
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
-app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
 
 
-# ----------------------------------------------------------------------
-# ページ
-# ----------------------------------------------------------------------
+def phone_url() -> str:
+    """スマホで開くURL。"""
+    return f"http://{get_lan_ip()}:{PORT}/phone"
+
+
+def current_settings() -> dict[str, str]:
+    """いまの .env の設定(モデル名・画質など)。PC画面と result.json に出す。"""
+    return {
+        "text_model": os.getenv("TEXT_MODEL", ""),
+        "image_model": os.getenv("IMAGE_MODEL", ""),
+        "image_quality": os.getenv("IMAGE_QUALITY", ""),
+        "image_size": os.getenv("IMAGE_SIZE", ""),
+        # 画像プロンプトの書き方(detailed / simple)。比べるときに、どちらで作ったか分かるように残す
+        "image_prompt_style": image_prompt_style(),
+    }
+
+
 # ----------------------------------------------------------------------
 # PC用ページのテーマ(見た目)
 # ----------------------------------------------------------------------
@@ -200,25 +215,17 @@ async def api_animals() -> dict:
 @app.get("/api/info")
 async def api_info() -> dict:
     """PC画面に出す情報(スマホ用URL、設定値、接続状態)を返す。"""
-    ip = get_lan_ip()
     return {
-        "phone_url": f"http://{ip}:{PORT}/phone",
+        "phone_url": phone_url(),
         "phone_connected": ws_manager.phone_connected(),
-        "text_model": os.getenv("TEXT_MODEL", ""),
-        "image_model": os.getenv("IMAGE_MODEL", ""),
-        "image_quality": os.getenv("IMAGE_QUALITY", ""),
-        "image_size": os.getenv("IMAGE_SIZE", ""),
-        # 画像プロンプトの書き方(detailed / simple)。比べるときに、どちらで作ったか分かるように残す
-        "image_prompt_style": image_prompt_style(),
+        **current_settings(),
     }
 
 
 @app.get("/api/qr")
 async def api_qr() -> Response:
     """スマホ用URLのQRコードをPNGで返す。"""
-    ip = get_lan_ip()
-    url = f"http://{ip}:{PORT}/phone"
-    img = qrcode.make(url)
+    img = qrcode.make(phone_url())
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")
@@ -279,7 +286,7 @@ async def api_upload(
     logger.info("写真を受け取りました: photo_id=%s animal=%s size=%dKB",
                 photo_id, animal_name, len(data) // 1024)
 
-    photo_url = f"/uploads/{photo_id}.jpg"
+    photo_url = f"/api/photo/{photo_id}"
 
     # PCに「写真が届いた」と知らせる / スマホに受け取り完了を伝える
     await ws_manager.notify_photo_received(photo_id, photo_url, animal_name)
@@ -329,17 +336,61 @@ def build_usage(
     return usage
 
 
-def load_photo_animal(photo_id: str) -> str:
-    """`photo_id`に紐づけて覚えておいた動物の名前を読み出す。"""
+# photo_id の形(アップロードのときに uuid4().hex で作る、32文字の16進数)
+_PHOTO_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+
+
+def _check_photo_id(photo_id: str) -> str:
+    """photo_id の形を確かめる。
+
+    ファイルの場所に使うので、uploads/ の外を指す値(../ など)は受け付けない。
+    """
+    if not _PHOTO_ID_PATTERN.match(photo_id or ""):
+        raise HTTPException(status_code=400, detail="写真のIDの形が正しくありません")
+    return photo_id
+
+
+def _load_photo(photo_id: str) -> tuple[str, bytes]:
+    """`photo_id`の写真と、紐づけて覚えておいた動物の名前を読み出す。"""
+    _check_photo_id(photo_id)
     meta_path = UPLOADS_DIR / f"{photo_id}.json"
-    if not meta_path.exists():
+    photo_path = UPLOADS_DIR / f"{photo_id}.jpg"
+    if not meta_path.exists() or not photo_path.exists():
         raise HTTPException(status_code=404, detail="その写真は見つかりませんでした")
     try:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
     except Exception as e:
         logger.warning("写真の情報を読めませんでした: %s", e)
         raise HTTPException(status_code=500, detail="写真の情報を読めませんでした")
-    return normalize_animal(meta.get("animal"))
+    return normalize_animal(meta.get("animal")), photo_path.read_bytes()
+
+
+def _remove_upload(photo_id: str) -> None:
+    """生成が終わった写真を uploads/ から消す(写真は outputs/ に保存してあるので、ここにはためない)。"""
+    for suffix in (".jpg", ".json"):
+        try:
+            (UPLOADS_DIR / f"{photo_id}{suffix}").unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning("届いた写真を消せませんでした(処理は続けます): %s", e)
+
+
+@app.get("/api/photo/{photo_id}")
+async def api_photo(photo_id: str) -> FileResponse:
+    """スマホから届いた写真(PC画面に出す)。"""
+    path = UPLOADS_DIR / f"{_check_photo_id(photo_id)}.jpg"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="その写真は見つかりませんでした")
+    return FileResponse(path, media_type="image/jpeg")
+
+
+@app.get("/api/monster-image/{photo_id}")
+async def api_monster_image(photo_id: str) -> FileResponse:
+    """できたモンスターの絵(PC画面とスマホに出す)。サーバーを再起動すると、前の絵はここからは見られない。"""
+    out_name = _photo_outputs.get(_check_photo_id(photo_id))
+    path = OUTPUTS_DIR / out_name / MONSTER_NAME if out_name else None
+    if path is None or not path.is_file():
+        raise HTTPException(status_code=404, detail="その絵は見つかりませんでした")
+    return FileResponse(path, media_type="image/png")
 
 
 # 画像生成にかかる時間の目安(秒)。ローディングの「もうすぐ!」の切り替えに使う。
@@ -350,10 +401,30 @@ _last_generate_seconds: float = 30.0
 # 名前を子供が選ぶための記録(photo_id ごと。サーバーを再起動すると消える)
 #   _name_choices :選べる名前の候補(判定が終わったときに決まる)
 #   _chosen_names :子供がスマホで選んだ名前
-#   _photo_outputs:保存先のフォルダ(画像ができたあとに名前を選んだとき、result.json を書きかえるため)
+#   _photo_outputs:保存先のフォルダ(名前を選んだときに result.json を書きかえるためと、絵を返すため)
 _name_choices: dict[str, list[str]] = {}
 _chosen_names: dict[str, str] = {}
 _photo_outputs: dict[str, str] = {}
+
+# 生成は1つずつ(PCのタブが2つあるときなどに、2回呼ばれて料金が2回かからないように)
+_generate_lock = asyncio.Lock()
+
+
+def _seconds_since(started: float) -> float:
+    return round(time.monotonic() - started, 2)
+
+
+def _report(
+    monster: dict[str, Any],
+    notes: list[str],
+    settings: dict[str, Any],
+    timings: dict[str, float],
+    usage: dict[str, Any],
+    **extra: Any,
+) -> dict[str, Any]:
+    """result.json と画面への返事に共通する項目。"""
+    return {"monster": monster, "validator_notes": notes, "settings": settings,
+            "timings": timings, "usage": usage, **extra}
 
 
 @app.post("/api/generate")
@@ -362,27 +433,35 @@ async def api_generate(photo_id: str = Form(...)) -> JSONResponse:
 
     動物はスマホから届いたものを`photo_id`から読み出して使う。
     エラーが起きてもサーバーは止めず、内容をPCの画面に出せる形で返す。
+    生成中にもう一度呼ばれたら、409 を返す(同時に2つは作らない)。
     """
+    if _generate_lock.locked():
+        return JSONResponse(
+            status_code=409,
+            content={"ok": False, "step": "受付", "error": "ほかの生成が終わるまで待ってください"},
+        )
+    async with _generate_lock:
+        animal, photo_bytes = _load_photo(photo_id)
+        try:
+            return await _generate(photo_id, animal, photo_bytes)
+        except Exception as e:
+            # 判定・画像生成の失敗は _generate の中で返す。ここに来るのは保存の失敗など、思わぬエラー。
+            # スマホがローディングのまま止まらないよう、かならず error を知らせる
+            logger.exception("生成の途中で思わぬエラーが起きました")
+            await ws_manager.notify_progress("error")
+            return JSONResponse(
+                status_code=200,
+                content={"ok": False, "step": "サーバー", "error": f"{type(e).__name__}: {e}"},
+            )
+
+
+async def _generate(photo_id: str, animal: str, photo_bytes: bytes) -> JSONResponse:
+    """判定 → (撮り直しなら終了)→ 画像生成 → 保存。"""
     global _last_generate_seconds
-    animal = load_photo_animal(photo_id)
-
-    photo_path = UPLOADS_DIR / f"{photo_id}.jpg"
-    if not photo_path.exists():
-        raise HTTPException(status_code=404, detail="その写真は見つかりませんでした")
-    photo_bytes = photo_path.read_bytes()
-
     logger.info("生成を開始します: photo_id=%s animal=%s", photo_id, animal)
 
     total_started = time.monotonic()
-    settings: dict[str, Any] = {
-        "animal": animal,
-        "text_model": os.getenv("TEXT_MODEL", ""),
-        "image_model": os.getenv("IMAGE_MODEL", ""),
-        "image_quality": os.getenv("IMAGE_QUALITY", ""),
-        "image_size": os.getenv("IMAGE_SIZE", ""),
-        # 画像プロンプトの書き方(detailed / simple)。比べるときに、どちらで作ったか分かるように残す
-        "image_prompt_style": image_prompt_style(),
-    }
+    settings: dict[str, Any] = {"animal": animal, **current_settings()}
 
     # ------------------------------------------------------------------
     # 判定(テキスト用モデル)
@@ -390,10 +469,8 @@ async def api_generate(photo_id: str = Form(...)) -> JSONResponse:
     # ローディング:「名前を かんがえているよ」
     await ws_manager.notify_progress("naming")
     try:
-        monster, notes, recognize_seconds, text_model, recognize_usage = await run_in_threadpool(
-            recognize, photo_bytes, animal
-        )
-        settings["text_model"] = text_model
+        recognized = await run_in_threadpool(recognize, photo_bytes, animal)
+        settings["text_model"] = recognized.model
     except Exception as e:
         logger.warning("判定に失敗しました: %s", e)
         await ws_manager.notify_progress("error")
@@ -401,39 +478,27 @@ async def api_generate(photo_id: str = Form(...)) -> JSONResponse:
             status_code=200,
             content={"ok": False, "step": "判定", "error": str(e), "settings": settings},
         )
+    monster, notes = recognized.monster, recognized.notes
+    recognize_seconds = round(recognized.elapsed_seconds, 2)
 
     # ------------------------------------------------------------------
     # 撮り直しが必要な場合は、ここで終了する
     # ------------------------------------------------------------------
     if monster["needs_retake"]:
-        total_seconds = time.monotonic() - total_started
-        timings = {"recognize": round(recognize_seconds, 2), "total": round(total_seconds, 2)}
         # 撮り直しのときは画像生成を呼ばないので、判定の分だけ料金がかかる
-        usage = build_usage(recognize_usage, None)
-        result = {
-            "created_at": datetime.now().isoformat(timespec="seconds"),
-            "animal": animal,
-            "monster": monster,
-            "validator_notes": notes,
-            "settings": settings,
-            "timings": timings,
-            "usage": usage,
-            "needs_retake": True,
-        }
+        report = _report(
+            monster, notes, settings,
+            {"recognize": recognize_seconds, "total": _seconds_since(total_started)},
+            build_usage(recognized.usage, None),
+            needs_retake=True,
+        )
+        result = {"created_at": datetime.now().isoformat(timespec="seconds"), "animal": animal, **report}
         await run_in_threadpool(save_result, OUTPUTS_DIR, photo_bytes, None, result)
+        _remove_upload(photo_id)
 
         logger.info("撮り直しと判定されました: %s", monster["retake_reason"])
         await ws_manager.notify_progress("retake", reason=monster["retake_reason"])
-        return JSONResponse({
-            "ok": True,
-            "needs_retake": True,
-            "retake_reason": monster["retake_reason"],
-            "monster": monster,
-            "validator_notes": notes,
-            "settings": settings,
-            "timings": timings,
-            "usage": usage,
-        })
+        return JSONResponse({"ok": True, "retake_reason": monster["retake_reason"], **report})
 
     # ------------------------------------------------------------------
     # 画像生成
@@ -464,64 +529,57 @@ async def api_generate(photo_id: str = Form(...)) -> JSONResponse:
     except Exception as e:
         logger.warning("画像生成に失敗しました: %s", e)
         await ws_manager.notify_progress("error")
+        # 判定までは成功しているので、その分の料金は発生している
+        report = _report(
+            monster, notes, settings,
+            {"recognize": recognize_seconds, "total": _seconds_since(total_started)},
+            build_usage(recognized.usage, None),
+        )
         return JSONResponse(
             status_code=200,
-            content={
-                "ok": False,
-                "step": "画像生成",
-                "error": str(e),
-                "monster": monster,
-                "validator_notes": notes,
-                "settings": settings,
-                "timings": {"recognize": round(recognize_seconds, 2),
-                            "total": round(time.monotonic() - total_started, 2)},
-                # 判定までは成功しているので、その分の料金は発生している
-                "usage": build_usage(recognize_usage, None),
-            },
+            content={"ok": False, "step": "画像生成", "error": str(e), **report},
         )
 
     # 次のローディングで使う「画像生成にかかる時間の目安」を更新する(からうちモードの0秒は使わない)
     if generation.elapsed_seconds > 1:
         _last_generate_seconds = generation.elapsed_seconds
 
-    total_seconds = time.monotonic() - total_started
-    timings = {
-        "recognize": round(recognize_seconds, 2),
-        "generate": round(generation.elapsed_seconds, 2),
-        "total": round(total_seconds, 2),
-    }
-
     # ------------------------------------------------------------------
     # 保存
     # ------------------------------------------------------------------
-    usage = build_usage(recognize_usage, generation.usage)
-
-    result = {
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "animal": animal,
-        "monster": monster,
-        "validator_notes": notes,
-        "generator_notes": generation.notes,
-        "settings": settings,
-        "timings": timings,
-        "usage": usage,
-        "image_prompt": generation.prompt,
-        "needs_retake": False,
-    }
     # 画像を作っているあいだに、子供がスマホで名前を選んでいたら、その名前にする
     _apply_chosen_name(photo_id, monster)
 
+    total_seconds = time.monotonic() - total_started
+    usage = build_usage(recognized.usage, generation.usage)
+    report = _report(
+        monster, notes, settings,
+        {"recognize": recognize_seconds,
+         "generate": round(generation.elapsed_seconds, 2),
+         "total": round(total_seconds, 2)},
+        usage,
+        generator_notes=generation.notes,
+    )
+    result = {
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "animal": animal,
+        **report,
+        "image_prompt": generation.prompt,
+        "needs_retake": False,
+    }
     out_dir = await run_in_threadpool(
         save_result, OUTPUTS_DIR, photo_bytes, generation.image_bytes, result
     )
     _photo_outputs[photo_id] = out_dir.name
+    _remove_upload(photo_id)
+    monster_url = f"/api/monster-image/{photo_id}"
 
     # ローディング:終わり。スマホにもモンスターの絵を見せるため、画像のURLも送る
     await ws_manager.notify_progress(
         "done",
         photo_id=photo_id,
         monster_name=monster.get("monster_name", ""),
-        image_url=f"/outputs/{out_dir.name}/monster.png",
+        image_url=monster_url,
     )
 
     logger.info("生成が完了しました: %s (合計 %.1f秒, 試算 %s)",
@@ -530,13 +588,8 @@ async def api_generate(photo_id: str = Form(...)) -> JSONResponse:
     return JSONResponse({
         "ok": True,
         "needs_retake": False,
-        "monster": monster,
-        "validator_notes": notes,
-        "generator_notes": generation.notes,
-        "settings": settings,
-        "timings": timings,
-        "usage": usage,
-        "monster_url": f"/outputs/{out_dir.name}/monster.png",
+        **report,
+        "monster_url": monster_url,
         "output_dir": out_dir.name,
     })
 
@@ -582,7 +635,7 @@ async def api_choose_name(photo_id: str = Form(...), name: str = Form(...)) -> J
 
     out_name = _photo_outputs.get(photo_id)
     if out_name:
-        result_path = OUTPUTS_DIR / out_name / "result.json"
+        result_path = OUTPUTS_DIR / out_name / RESULT_NAME
         try:
             data = json.loads(result_path.read_text(encoding="utf-8"))
             data["monster"]["monster_name"] = name
@@ -642,12 +695,7 @@ async def api_name_test(
     }
     # からうちモードのダミーの名前は残さない
     if not is_dry_run():
-        try:
-            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-            with (OUTPUTS_DIR / NAME_TEST_LOG_NAME).open("a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        except Exception as e:
-            logger.warning("名前のテストの記録に失敗しました(処理は続けます): %s", e)
+        append_jsonl(OUTPUTS_DIR / NAME_TEST_LOG_NAME, entry)
 
     cumulative = None
     if total_usd:

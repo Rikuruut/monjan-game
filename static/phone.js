@@ -34,6 +34,8 @@ function connectWebSocket() {
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === "capture_request") {
+      // 待機中に戻る予定があれば取り消す(撮影の画面が、あとから待機中に戻されないように)
+      cancelBackToWait();
       showView("view-ready");
     } else if (msg.type === "progress") {
       // 生成の進み具合(ローディングと名前えらび。下の showProgress を参照)
@@ -154,6 +156,7 @@ let namePhotoId = "";
 let nameDecided = false;
 let barTimer = null;
 let autoDecideTimer = null;
+let backTimer = null;   // 少ししてから待機中に戻すタイマー(撮影の合図・次の生成が来たら取り消す)
 
 function setStage(html) { el("ph-stage").innerHTML = html; }
 function setBar(percent) { el("ph-bar-fill").style.width = Math.max(0, Math.min(100, percent)) + "%"; }
@@ -180,6 +183,7 @@ function showProgress(msg) {
   const stage = msg.stage;
 
   if (stage === "naming") {
+    cancelBackToWait();
     resetNameChooser();
     hideResult();
     showView("view-progress");
@@ -231,14 +235,14 @@ function showProgress(msg) {
     setStage("もういちど<br>とってね");
     el("ph-name-decided").textContent = msg.reason || "";
     el("ph-name-decided").classList.remove("hidden");
-    setTimeout(() => showView("view-wait"), BACK_TO_WAIT_SECONDS * 1000);
+    backToWaitLater();
 
   } else if (stage === "error") {
     stopBarTimer();
     resetNameChooser();
     hideResult();
     setStage("うまく できなかったよ…");
-    setTimeout(() => showView("view-wait"), BACK_TO_WAIT_SECONDS * 1000);
+    backToWaitLater();
   }
 }
 
@@ -306,8 +310,15 @@ async function decideName() {
 }
 
 function backToWaitLater() {
-  setTimeout(() => {
+  cancelBackToWait();
+  backTimer = setTimeout(() => {
+    backTimer = null;
     resetNameChooser();
     showView("view-wait");
   }, BACK_TO_WAIT_SECONDS * 1000);
+}
+
+function cancelBackToWait() {
+  if (backTimer) clearTimeout(backTimer);
+  backTimer = null;
 }

@@ -77,6 +77,17 @@ def test_choose_falls_back_when_no_candidate_passes():
     assert name == DEFAULT_MONSTER_NAME
 
 
+def test_fallback_name_with_ng_word_is_not_used():
+    # 候補がすべて不合格のとき、モデルの monster_name もチェックに通す(NGの言葉なら使わない)
+    name, _, _ = choose_monster_name(["バカオン"], "バカガオン", "ライオン", "はさみ")
+    assert name == DEFAULT_MONSTER_NAME
+
+
+def test_fallback_name_that_passes_is_used():
+    name, _, _ = choose_monster_name(["ばかおん"], "シザレオン", "ライオン", "はさみ")
+    assert name == "シザレオン"
+
+
 # ----------------------------------------------------------------------
 # 返答全体の補正
 # ----------------------------------------------------------------------
@@ -85,6 +96,14 @@ def test_good_raw_has_no_notes():
     assert notes == []
     assert monster["element"] == "とがってる"
     assert monster["monster_name"] in ("シザレオン", "チョキオン", "ハサミガオン")
+
+
+def test_defaults_are_not_shared():
+    # 既定値の design_plan を書きかえても、次の既定値には残らない
+    monster, _ = validate_monster(None)
+    monster["design_plan"]["staging"] = {"pose": "前に跳びかかる"}
+    again, _ = validate_monster(None)
+    assert "staging" not in again["design_plan"]
 
 
 def test_not_a_dict_gives_defaults():

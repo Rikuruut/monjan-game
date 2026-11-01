@@ -11,6 +11,8 @@ import os
 
 from openai import OpenAI
 
+from .env import env_flag
+
 # タイムアウトの既定値(秒)
 #
 # ※ 2026年10月29日:30秒 → 60秒に上げた。
@@ -39,7 +41,7 @@ def is_dry_run() -> bool:
     画面の動作確認やスマホの接続確認など、絵の中身が関係ない作業は
     このモードで行うことで、無駄な料金が発生しないようにする。
     """
-    return (os.getenv("DRY_RUN") or "").strip().lower() in ("1", "true", "yes", "on")
+    return env_flag("DRY_RUN")
 
 
 def allow_person() -> bool:
@@ -54,7 +56,7 @@ def allow_person() -> bool:
       - OpenAIの画像モデルは実在の人物の扱いに制限があり、
         コンテンツフィルターで拒否されることがある(その場合は素直にエラー表示)。
     """
-    return (os.getenv("ALLOW_PERSON") or "").strip().lower() in ("1", "true", "yes", "on")
+    return env_flag("ALLOW_PERSON")
 
 
 def image_prompt_style() -> str:

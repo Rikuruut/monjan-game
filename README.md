@@ -14,7 +14,7 @@
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -r requirements.txt   # テストもするときは requirements-dev.txt
 Copy-Item .env.example .env   # できた .env に値を書く
 ```
 

@@ -198,6 +198,7 @@ async function requestCapture() {
 
 function onPhotoReceived(msg) {
   if (state.generating) return;   // がったい中は、新しい写真で場面を変えない
+  clearTimeout(endTimer);         // 撮り直し・失敗のあとに s1 へ戻る予定があれば取り消す(届いた写真を消さないように)
   state.photoId = msg.photo_id;
   state.animal = msg.animal || "";
   el("photo").src = msg.photo_url + "?t=" + Date.now();
@@ -239,12 +240,14 @@ async function startFusion() {
 }
 
 // 撮り直し・失敗:見出しで知らせて、少ししたら s1 に戻る
+let endTimer = null;
 function endWithMessage(headline, detail) {
   state.generating = false;
   stopTimers();
   el("headline").textContent = headline;
   if (detail) toast(detail, 4.5);
-  setTimeout(restart, 5000);
+  clearTimeout(endTimer);
+  endTimer = setTimeout(restart, 5000);
 }
 
 // たんじょう:カードを用意し、画像を読みこんでから、ガラスが割れる演出で見せる
@@ -302,6 +305,7 @@ function fillCard(data) {
 }
 
 function restart() {
+  clearTimeout(endTimer);
   state.photoId = null;
   state.animal = "";
   state.generating = false;
@@ -603,9 +607,10 @@ function showUsage(usage) {
   };
   const line = (label, u) => {
     if (!u || u.total_tokens === undefined) return;
+    // 円の目安はサーバーが計算したもの(換算は app/pricing.py の YEN_PER_USD)
     const cost = u.estimated_cost_usd;
     const yen = cost === null || cost === undefined ? "" :
-                "  →  $" + cost.toFixed(4) + "(およそ " + (cost * 150).toFixed(1) + "円)";
+                "  →  $" + cost.toFixed(4) + "(およそ " + Number(u.estimated_cost_yen).toFixed(1) + "円)";
     add(label + ": " + u.total_tokens + " トークン(入力 " + (u.input_tokens || 0) + " / 出力 " + (u.output_tokens || 0) + ")" + yen);
   };
   line("判定", usage.recognize);

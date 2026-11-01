@@ -5,7 +5,7 @@ CLAUDE.md のチェックのルールに従って、不正な値をデフォル�
 | 項目 | ルール | 不正なときの扱い |
 |---|---|---|
 | element | 6種類のどれか | 「かたい」にする |
-| monster_name | 10文字以内 | 10文字で切る。空なら「なぞのモンスター」 |
+| monster_name | 10文字以内 | 10文字で切る。候補がすべて不合格で、これもチェックに不合格なら「なぞのモンスター」 |
 | name_candidates | カタカナだけ・2〜10文字・NGの言葉なし・言いやすい・単語を並べただけでない | 合格した候補からランダムに1つを monster_name にする |
 | description | 40文字以内 | 40文字で切る |
 | object_name | 空でない | 「なにかのもの」にする |
@@ -15,6 +15,7 @@ CLAUDE.md のチェックのルールに従って、不正な値をデフォル�
 
 from __future__ import annotations
 
+import copy
 import logging
 import random
 import re
@@ -108,17 +109,17 @@ def choose_monster_name(
         weights = (NAME_PICK_WEIGHTS + [NAME_PICK_WEIGHTS[-1]] * len(passed))[:len(passed)]
         return random.choices(passed, weights=weights, k=1)[0], checked, notes
 
-    # 合格した候補がない:モデルが選んだ名前を、これまでどおりのルールで使う
+    # 合格した候補がない:モデルが選んだ名前(fallback)を、同じチェックに通して使う。
+    # ※ 2026年11月2日:それまでは、チェックに不合格でもそのまま使っていたので、
+    #   NGの言葉が入った名前が子供の画面に出るおそれがあった。不合格なら既定の名前にする
     name = _as_text(fallback)
-    if not name:
-        notes.append(f"使える名前がないので「{DEFAULT_MONSTER_NAME}」にしました")
-        return DEFAULT_MONSTER_NAME, checked, notes
     if len(name) > MAX_MONSTER_NAME:
         name = name[:MAX_MONSTER_NAME]
         notes.append(f"monster_name が長いので{MAX_MONSTER_NAME}文字で切りました")
     reason = check_monster_name(name, animal, object_name)
     if reason:
-        notes.append(f"使える候補がないので「{name}」をそのまま使います({reason})")
+        notes.append(f"使える名前がないので「{DEFAULT_MONSTER_NAME}」にしました(monster_name「{name}」:{reason})")
+        return DEFAULT_MONSTER_NAME, checked, notes
     return name, checked, notes
 
 
@@ -126,6 +127,7 @@ def choose_monster_name(
 DEFAULT_OBJECT_NAME = "なにかのもの"
 DEFAULT_MONSTER_NAME = "なぞのモンスター"
 DEFAULT_DESCRIPTION = "なぞに つつまれた モンスター"
+DEFAULT_RETAKE_REASON = "もういちど とってみてね"
 
 # 形式がまったく読めなかったときに返す内容
 DEFAULT_MONSTER: dict[str, Any] = {
@@ -157,7 +159,8 @@ def validate_monster(raw: Any, animal: str = "") -> tuple[dict[str, Any], list[s
     # JSON全体の形式が正しくない場合は、すべてデフォルト値にする
     if not isinstance(raw, dict):
         logger.warning("判定の返答が辞書ではありません: %r", type(raw))
-        return dict(DEFAULT_MONSTER), ["返答の形式が読めなかったので、すべて既定値にしました"]
+        # 深いコピーにする(design_plan をあとで書きかえても、既定値が変わらないように)
+        return copy.deepcopy(DEFAULT_MONSTER), ["返答の形式が読めなかったので、すべて既定値にしました"]
 
     # --- 撮り直しの判定 ---
     needs_retake = raw.get("needs_retake")
@@ -170,7 +173,7 @@ def validate_monster(raw: Any, animal: str = "") -> tuple[dict[str, Any], list[s
         retake_reason = retake_reason[:MAX_RETAKE_REASON]
         notes.append(f"retake_reason が長いので{MAX_RETAKE_REASON}文字で切りました")
     if needs_retake and not retake_reason:
-        retake_reason = "もういちど とってみてね"
+        retake_reason = DEFAULT_RETAKE_REASON
         notes.append("撮り直しの理由が空だったので、既定の文にしました")
     if not needs_retake and retake_reason:
         # 撮り直しでないのに理由が入っている場合は消す

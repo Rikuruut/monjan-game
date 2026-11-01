@@ -3,8 +3,8 @@ uvicorn[standard]>=0.30.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.9
 Pillow>=10.0.0
-openai>=1.50.0
+# client.responses.parse(text_format=...) を使う。1.50 にはない。動作を確かめた版を下限にしている
+openai>=3.40.0
+# 判定の返答の形(recognizer.py の BaseModel・model_dump)。fastapi と一緒に入るが、直接使うので書いておく
+pydantic>=2.0
 qrcode[pil]>=7.4.2
-# テスト用(python -m pytest。APIは呼ばない)
-pytest>=8.0.0
-httpx>=0.27.0

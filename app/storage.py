@@ -25,6 +25,18 @@ RESULT_NAME = "result.json"
 USAGE_LOG_NAME = "api_usage_log.jsonl"
 
 
+def append_jsonl(path: Path, entry: dict[str, Any]) -> bool:
+    """記録のファイル(1行に1つのJSON)に1行足す。失敗しても処理は止めず、False を返す。"""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        return True
+    except Exception as e:
+        logger.warning("%s への記録に失敗しました(処理は続けます): %s", path.name, e)
+        return False
+
+
 def append_usage_log(base_dir: Path, entry: dict[str, Any]) -> float:
     """APIを使った記録を1行足し、これまでの合計の料金(ドル)を返す。
 
@@ -32,12 +44,7 @@ def append_usage_log(base_dir: Path, entry: dict[str, Any]) -> float:
     からうちモード(料金0円)のときは記録しない。
     """
     log_path = base_dir / USAGE_LOG_NAME
-
-    try:
-        with log_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception as e:
-        logger.warning("使用量の記録に失敗しました(処理は続けます): %s", e)
+    if not append_jsonl(log_path, entry):
         return 0.0
 
     # これまでの合計を数える

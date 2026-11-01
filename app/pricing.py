@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,45 @@ def estimate_cost(
         + image_input_tokens * p.image_input
         + output_tokens * p.output
     ) / 1_000_000
+
+
+def read_usage(response: Any, model: str) -> dict[str, Any]:
+    """APIの返答に含まれるトークン数を読み、料金を試算する(判定と画像生成の両方で使う)。
+
+    料金を把握しておきたいので、使ったトークン数は必ず記録する。
+    入力の内訳(テキストと画像)が取れるとき(画像生成)は分けて試算し、
+    取れないとき(判定。画像入力の分が分かれていない)は、まとめてテキスト入力として試算する。
+    """
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return {}
+
+    input_tokens = getattr(usage, "input_tokens", 0) or 0
+    output_tokens = getattr(usage, "output_tokens", 0) or 0
+
+    details = getattr(usage, "input_tokens_details", None)
+    text_in = getattr(details, "text_tokens", None) if details else None
+    image_in = getattr(details, "image_tokens", None) if details else None
+    if text_in is None or image_in is None:
+        text_in, image_in = input_tokens, 0
+
+    cost = estimate_cost(
+        model,
+        text_input_tokens=text_in,
+        image_input_tokens=image_in,
+        output_tokens=output_tokens,
+    )
+
+    return {
+        "input_tokens": input_tokens,
+        "input_text_tokens": text_in,
+        "input_image_tokens": image_in,
+        "output_tokens": output_tokens,
+        "total_tokens": getattr(usage, "total_tokens", input_tokens + output_tokens) or 0,
+        "estimated_cost_usd": None if cost is None else round(cost, 6),
+        # 画面に出す円の目安(換算は YEN_PER_USD。画面側で計算しなくて済むように)
+        "estimated_cost_yen": None if cost is None else round(to_yen(cost), 2),
+    }
 
 
 def to_yen(usd: float | None) -> float | None:
