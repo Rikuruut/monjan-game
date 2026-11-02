@@ -72,3 +72,21 @@ export function shuffleStars(random: RandomSource = Math.random): StarMap {
 export function pickCpuHand(random: RandomSource = Math.random): Hand {
   return HANDS[normalizedIndex(random, HANDS.length)];
 }
+
+/** 開発者メニューの「勝ち負けを決める」。normal はふつう(ランダム)。 */
+export type ForcedResult = 'normal' | 'win' | 'lose' | 'tie';
+
+/** 決めた結果になる CPU の手。かつ:プレイヤーの手に負ける手 / まける:勝つ手 / あいこ:同じ手。 */
+export function cpuHandFor(playerHand: Hand, mode: ForcedResult, random: RandomSource = Math.random): Hand {
+  if (mode === 'win') return beats[playerHand];
+  if (mode === 'lose') return HANDS.find((hand) => beats[hand] === playerHand) ?? playerHand;
+  if (mode === 'tie') return playerHand;
+  return pickCpuHand(random);
+}
+
+/** 星の並びはそのまま(1〜3 を1つずつ)で、hand の星を star にする(入れかえる)。あいこを「完全なあいこ」にするため。 */
+export function withStarAt(stars: StarMap, hand: Hand, star: Star): StarMap {
+  const other = HANDS.find((h) => stars[h] === star);
+  if (!other || other === hand) return stars;
+  return { ...stars, [hand]: star, [other]: stars[hand] };
+}

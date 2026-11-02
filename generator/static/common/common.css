@@ -132,8 +132,41 @@ body { overflow: hidden; }
 .dev th, .dev td { border: 1px solid #d8d3c6; padding: 3px 6px; text-align: left; vertical-align: top; }
 .dev th { background: #ebe6d9; }
 
+/* 作ったモンスターで戦う(バトルの開発者メニュー battle/src/styles.css と同じ見た目) */
+.dev-monsters { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.dev-monsters button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px;
+  font-family: var(--font-body);
+  text-align: left;
+  background: #fff;
+  border: 1px solid #d8d3c6;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.dev-monsters img { flex: none; object-fit: cover; }
+.dev-monsters span { display: grid; }
+.dev-monsters small { color: #6b7a93; }
+.dev-autoplay-badge {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  z-index: 60;
+  margin: 0;
+  padding: 4px 14px;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: 14px;
+  background: #1F2F4Fcc;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
 /* 開発者メニューは、どのテーマでも同じ見た目にする */
-.dev, .dev-toggle {
+.dev, .dev-toggle, .dev-autoplay-badge {
   --paper: #F7F4EE;
   --navy: #1F2F4F;
   --steel: #3F6E9E;

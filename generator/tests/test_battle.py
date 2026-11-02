@@ -86,6 +86,47 @@ def test_battle_monster_api_demo(client):
     assert len(client.get("/api/battle-monster/demo", params={"name": "ア" * 100}).json()["name"]) == 20
 
 
+def make_output(name, *, retake=False, image=True, monster_name="ゴリシザー"):
+    """outputs/ に、前に作ったモンスターのフォルダを作る(テストでは一時フォルダ)。"""
+    d = main.OUTPUTS_DIR / name
+    d.mkdir(parents=True)
+    result = {
+        "created_at": "2026-11-02T10:00:00", "animal": "ゴリラ", "needs_retake": retake,
+        "monster": {"monster_name": monster_name, "object_name": "はさみ", "element": "とがってる"},
+        "battle": {"attack": 3000, "hp": 5000},
+    }
+    (d / "result.json").write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    if image:
+        (d / "monster.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+
+def test_recent_monsters_lists_finished_ones_newest_first(client):
+    make_output("20261101_090000", monster_name="ふるい")
+    make_output("20261102_090000", monster_name="あたらしい")
+    make_output("20261102_090000_2", retake=True)   # 撮り直しになったもの
+    make_output("20261102_100000", image=False)      # 絵がないもの
+    monsters = client.get("/api/recent-monsters").json()["monsters"]
+    assert [m["name"] for m in monsters] == ["あたらしい", "ふるい"]
+    assert monsters[0]["id"] == "20261102_090000"
+    assert client.get(monsters[0]["image"]).status_code == 200
+
+
+def test_battle_monster_api_by_output_folder(client):
+    # サーバーを再起動したあと(_photo_outputs が空)でも、フォルダ名で前のモンスターと戦える
+    make_output("20261102_090000")
+    m = client.get("/api/battle-monster/20261102_090000").json()
+    assert m["name"] == "ゴリシザー"
+    assert (m["attack"], m["hp"]) == (3000, 5000)
+    assert m["image"] == "/api/output-image/20261102_090000"
+    assert client.get("/api/battle-monster/20261102_000000").status_code == 404
+
+
+def test_output_image_rejects_bad_names(client):
+    assert client.get("/api/output-image/nai").status_code == 400
+    assert client.get("/api/output-image/..%2F..%2Fapp").status_code in (400, 404)
+    assert client.get("/api/output-image/20261102_000000").status_code == 404
+
+
 def test_battle_page_is_served(client):
     if not (main.BATTLE_DIR / "index.html").is_file():
         pytest.skip("static/battle/ がまだビルドされていない")

@@ -24,11 +24,12 @@ def make_battle_stats(rng: random.Random | None = None) -> dict[str, int]:
     return {"attack": rng.choice(ATTACK_CHOICES), "hp": rng.choice(HP_CHOICES)}
 
 
-def to_battle_monster(photo_id: str, result: dict[str, Any]) -> dict[str, Any]:
+def to_battle_monster(photo_id: str, result: dict[str, Any], image: str | None = None) -> dict[str, Any]:
     """result.json の中身を、バトルが読む形にする。
 
     名前は子供がスマホで選んだもの(選んだときに result.json の monster_name が書きかわる)。
     性質(あつい など)は attribute にそのまま入れる(バトルでは勝ち負けに使わず、見た目だけに使う)。
+    image は絵の URL。なければ、いま作った絵(/api/monster-image/<photo_id>)。
     """
     monster = result.get("monster") or {}
     stats = result.get("battle") or {}
@@ -43,7 +44,21 @@ def to_battle_monster(photo_id: str, result: dict[str, Any]) -> dict[str, Any]:
         "attack": stats.get("attack") if stats.get("attack") in ATTACK_CHOICES else ATTACK_CHOICES[0],
         "hp": stats.get("hp") if stats.get("hp") in HP_CHOICES else HP_CHOICES[0],
         "description": monster.get("description") or "",
-        "image": f"/api/monster-image/{photo_id}",
+        "image": image or f"/api/monster-image/{photo_id}",
+    }
+
+
+def recent_monster_entry(out_name: str, result: dict[str, Any]) -> dict[str, Any]:
+    """開発者メニューの「作ったモンスターで戦う」の一覧の1行。id は outputs/ のフォルダ名。"""
+    monster = result.get("monster") or {}
+    return {
+        "id": out_name,
+        "name": monster.get("monster_name") or "なぞのモンスター",
+        "animal": result.get("animal") or "",
+        "object": monster.get("object_name") or "",
+        "element": monster.get("element") or "",
+        "created_at": result.get("created_at") or "",
+        "image": f"/api/output-image/{out_name}",
     }
 
 

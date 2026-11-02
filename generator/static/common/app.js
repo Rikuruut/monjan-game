@@ -537,6 +537,28 @@ document.body.insertAdjacentHTML("beforeend", `
     <button id="dev-close" class="dev-close" aria-label="とじる">×</button>
   </header>
   <section>
+    <h4>ページ</h4>
+    <p class="dev-row">
+      <button data-dev-page="/battle/">タイトル</button>
+      <button data-dev-page="/">撮影</button>
+      <button data-dev-page="/?autotest=1">テストプレイ</button>
+      <button data-dev-page="/battle/?play=demo">見本でバトル</button>
+    </p>
+  </section>
+  <section>
+    <h4>通しの自動プレイ</h4>
+    <p class="dev-muted">タイトル → テストプレイ → バトル → 結果 → タイトル を、自動でくり返します(API は使いません)。</p>
+    <p class="dev-row">
+      <button id="dev-autoplay"></button>
+      <span id="dev-autoplay-state"></span>
+    </p>
+  </section>
+  <section>
+    <h4>作ったモンスターで戦う</h4>
+    <ul id="dev-monsters" class="dev-monsters"></ul>
+    <p id="dev-monsters-msg" class="dev-muted"></p>
+  </section>
+  <section>
     <h4>テーマ</h4>
     <p><select id="theme-select"></select></p>
   </section>
@@ -635,6 +657,7 @@ async function loadThemes() {
 function toggleDev(force) {
   const dev = el("dev");
   dev.hidden = typeof force === "boolean" ? !force : !dev.hidden;
+  if (!dev.hidden) loadRecentMonsters();   // 作ったモンスターの一覧は、開くたびに読み直す
 }
 el("dev-toggle").addEventListener("click", () => toggleDev());
 el("dev-close").addEventListener("click", () => toggleDev(false));
@@ -873,7 +896,8 @@ function afterSeconds(seconds, fn) {
   testPlayTimers.push(setTimeout(fn, seconds * 1000));
 }
 
-function playTestRun() {
+// onDone:誕生の演出が終わったら呼ぶ(通しの自動プレイで、そのあと「たたかう!」へ進むため)
+function playTestRun(onDone) {
   // s2(しゃしん × どうぶつ)から始める
   showDemo("s2");
   const photoId = "testplay";
@@ -902,7 +926,7 @@ function playTestRun() {
     // できあがり → 誕生
     afterSeconds(3 + draw, () => {
       onProgress({ stage: "done", photo_id: photoId, image_url: img });
-      birth(demoSample());
+      birth(demoSample()).then(() => { if (run === testPlayRun && onDone) onDone(); });
     });
   });
 }
@@ -948,8 +972,105 @@ document.querySelectorAll("[data-demo-sfx]").forEach((btn) => {
   btn.addEventListener("click", () => sound(btn.dataset.demoSfx));
 });
 
+// ----------------------------------------------------------------------
+// 開発者メニューの共通の項目(バトルの開発者メニュー battle/src/DevMenu.tsx と同じ中身)
+// ----------------------------------------------------------------------
+document.querySelectorAll("[data-dev-page]").forEach((btn) => {
+  btn.addEventListener("click", () => { location.href = btn.dataset.devPage; });
+});
+
+// 通しの自動プレイ。/ と /battle/ で sessionStorage を共有して受け渡す(battle/src/devTools.ts と同じ形)
+const AUTOPLAY_KEY = "monjan-autoplay";
+const AUTOPLAY_BATTLE_DELAY_MS = 3000;   // 誕生のあと、「たたかう!」を押すまで
+
+function readAutoplay() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(AUTOPLAY_KEY) || "null");
+    return value && value.on === true ? { on: true, loops: Number(value.loops) || 0 } : { on: false, loops: 0 };
+  } catch (e) {
+    return { on: false, loops: 0 };
+  }
+}
+
+function writeAutoplay(autoplay) {
+  try {
+    if (autoplay.on) sessionStorage.setItem(AUTOPLAY_KEY, JSON.stringify(autoplay));
+    else sessionStorage.removeItem(AUTOPLAY_KEY);
+  } catch (e) { /* 保存できなくても、このページの中では動く */ }
+  showAutoplay();
+}
+
+function showAutoplay() {
+  const a = readAutoplay();
+  el("dev-autoplay").innerHTML = a.on ? "■ 停止" : "<strong>▶ 開始</strong>";
+  el("dev-autoplay-state").textContent = a.on ? "動いています(" + a.loops + "周)" : "止まっています";
+  let badge = el("dev-autoplay-badge");
+  if (a.on && !badge) {
+    document.body.insertAdjacentHTML("beforeend", '<p id="dev-autoplay-badge" class="dev-autoplay-badge"></p>');
+    badge = el("dev-autoplay-badge");
+  }
+  if (badge) {
+    badge.hidden = !a.on;
+    badge.textContent = "自動プレイ中 " + a.loops + "周(D でメニュー → 停止)";
+  }
+}
+
+// テストプレイを流し、誕生が終わったら少し待って「たたかう!」へ(止められていたら進まない)
+function runAutoplayStep() {
+  playTestRun(() => setTimeout(() => { if (readAutoplay().on) goBattle(); }, AUTOPLAY_BATTLE_DELAY_MS));
+}
+
+el("dev-autoplay").addEventListener("click", () => {
+  const on = !readAutoplay().on;
+  writeAutoplay({ on, loops: 0 });
+  if (on) {
+    toggleDev(false);
+    runAutoplayStep();
+  } else {
+    stopTestPlay();
+  }
+});
+
+// 作ったモンスターで戦う(outputs/ に残っている絵から選ぶ)。メニューを開くたびに読み直す
+async function loadRecentMonsters() {
+  const list = el("dev-monsters");
+  const msg = el("dev-monsters-msg");
+  try {
+    const data = await fetch("/api/recent-monsters").then((r) => r.json());
+    list.innerHTML = "";
+    data.monsters.forEach((m) => {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      const img = document.createElement("img");
+      img.src = m.image;
+      img.width = img.height = 56;
+      img.loading = "lazy";
+      img.alt = "";
+      const text = document.createElement("span");
+      const name = document.createElement("strong");
+      name.textContent = m.name;
+      const sub = document.createElement("small");
+      sub.textContent = m.animal + " × " + m.object + "・" + String(m.created_at).replace("T", " ");
+      text.append(name, sub);
+      btn.append(img, text);
+      btn.addEventListener("click", () => { location.href = "/battle/?photo=" + encodeURIComponent(m.id); });
+      li.appendChild(btn);
+      list.appendChild(li);
+    });
+    msg.textContent = data.monsters.length ? "" : "まだ ありません(outputs/ が空)。";
+  } catch (e) {
+    msg.textContent = "一覧を読めませんでした。";
+  }
+}
+
 loadThemes();
-loadAnimals().then(() => { if (params.get("demo")) runDemo(); });
+showAutoplay();
+loadAnimals().then(() => {
+  if (params.get("demo")) runDemo();
+  // 通しの自動プレイの途中(バトルのタイトルから来た)・ページの「テストプレイ」(?autotest=1)
+  else if (readAutoplay().on) runAutoplayStep();
+  else if (params.get("autotest")) playTestRun();
+});
 if (params.get("dev")) toggleDev(true);   // 確認用:?dev=1 で開発者メニューを開いた状態にする
 renderScene("s1");
 if (!params.get("demo")) {

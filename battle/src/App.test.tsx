@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   App,
   ATTACK_DISPLAY_MS,
+  AUTOPLAY_TITLE_MS,
   IMPACT_DISPLAY_MS,
   JANKEN_BEAT_MS,
   NEXT_ROUND_DISPLAY_MS,
@@ -569,5 +570,77 @@ describe('撮影・合体の画面とのつなぎと、会場の3つのボタン
     // 演出中に押しても、二重に選ばない
     press('ArrowLeft');
     expect(vi.mocked(playGameSound).mock.calls.filter(([kind]) => kind === 'select')).toHaveLength(1);
+  });
+});
+
+describe('開発者メニュー(D キー)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDataFetch();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    window.sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    window.sessionStorage.clear();
+  });
+
+  const openMenu = () => fireEvent.keyDown(window, { key: 'd' });
+
+  it('D で開き、画面へとべて、モンスターの中身が見える', async () => {
+    render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
+    await screen.findByRole('button', { name: /スタート！/ });
+    openMenu();
+    const menu = screen.getByRole('complementary', { name: '開発者メニュー' });
+    expect(menu).toHaveTextContent('ボトルマンタ');
+    expect(menu).toHaveTextContent('パンチイーグル');
+
+    fireEvent.click(within(menu).getByRole('button', { name: 'かち' }));
+    expect(screen.getByRole('heading', { name: 'しょうり！' })).toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole('button', { name: 'ありがとう' }));
+    expect(screen.getByText(/あそんでくれて ありがとう/)).toBeInTheDocument();
+
+    openMenu();
+    expect(screen.queryByRole('complementary', { name: '開発者メニュー' })).not.toBeInTheDocument();
+  });
+
+  it('「かつ」にすると、ふつうなら あいこ になる手でも勝つ', async () => {
+    render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
+    await screen.findByRole('button', { name: /スタート！/ });
+    vi.useFakeTimers();
+    openMenu();
+    fireEvent.click(screen.getByRole('radio', { name: 'かつ' }));
+    fireEvent.click(screen.getByRole('button', { name: 'バトル' }));
+    fireEvent.click(screen.getByRole('button', { name: 'とじる' }));
+    await advance(RARITY_ROLL_MS);
+
+    // Math.random が 0 なので、ふつうなら CPU もグー
+    fireEvent.click(screen.getByRole('button', { name: /グー 星/ }));
+    await advanceSelectedToReveal();
+    await advanceRevealToAttack(false);
+    await advance(ATTACK_DISPLAY_MS);
+    await advance(IMPACT_DISPLAY_MS);
+    expect(screen.getByRole('status')).toHaveTextContent('あなたの かち');
+  });
+
+  it('通しの自動プレイ中は、タイトルで少し待ってから撮影の画面へ進む', async () => {
+    render(<App launch={{ photoId: null, skipTitle: false, toGenerator: true }} />);
+    await screen.findByRole('button', { name: /スタート！/ });
+    vi.useFakeTimers();
+    openMenu();
+    fireEvent.click(screen.getByRole('button', { name: /開始/ }));
+    expect(JSON.parse(window.sessionStorage.getItem('monjan-autoplay') ?? '{}')).toEqual({ on: true, loops: 0 });
+    // メニューを開いているあいだは止まっている
+    await advance(AUTOPLAY_TITLE_MS);
+    expect(navigateTo).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'とじる' }));
+    expect(screen.getByText(/自動プレイ中 0周/)).toBeInTheDocument();
+    await advance(AUTOPLAY_TITLE_MS - 1);
+    expect(navigateTo).not.toHaveBeenCalled();
+    await advance(1);
+    expect(navigateTo).toHaveBeenCalledWith('/');
   });
 });

@@ -31,7 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from .animals import ANIMAL_ICONS, ANIMALS, DEFAULT_ANIMAL_ICON, normalize_animal
-from .battle import DEMO_ID, demo_battle_monster, make_battle_stats, to_battle_monster
+from .battle import DEMO_ID, demo_battle_monster, make_battle_stats, recent_monster_entry, to_battle_monster
 from .generator import GenerationResult, PartialCallback, get_generator
 from .kiosk import kiosk_enabled, open_kiosk_in_background
 from .net_utils import get_lan_ip
@@ -740,17 +740,70 @@ async def api_battle_monster_demo(name: str | None = None) -> JSONResponse:
 
 @app.get("/api/battle-monster/{photo_id}")
 async def api_battle_monster(photo_id: str) -> JSONResponse:
-    """できたモンスターを、じゃんけんバトルが読む形で返す(バトルの /battle/?photo=<photo_id> が読む)。"""
+    """できたモンスターを、じゃんけんバトルが読む形で返す(バトルの /battle/?photo=<photo_id> が読む)。
+
+    photo_id の代わりに outputs/ のフォルダ名も受け付ける(開発者メニューの「作ったモンスターで戦う」。
+    サーバーを再起動したあとでも、前に作ったモンスターで戦える)。
+    """
+    if _OUTPUT_NAME_PATTERN.match(photo_id or ""):
+        result = _read_result(photo_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="そのモンスターは見つかりませんでした")
+        return JSONResponse(to_battle_monster(photo_id, result, image=f"/api/output-image/{photo_id}"))
+
     out_name = _photo_outputs.get(_check_photo_id(photo_id))
-    result_path = OUTPUTS_DIR / out_name / RESULT_NAME if out_name else None
-    if result_path is None or not result_path.is_file():
+    result = _read_result(out_name) if out_name else None
+    if result is None:
         raise HTTPException(status_code=404, detail="その写真のモンスターは見つかりませんでした")
-    try:
-        result = json.loads(result_path.read_text(encoding="utf-8"))
-    except Exception as e:
-        logger.warning("result.json を読めませんでした: %s", e)
-        raise HTTPException(status_code=500, detail="モンスターの記録を読めませんでした")
     return JSONResponse(to_battle_monster(photo_id, result))
+
+
+# ----------------------------------------------------------------------
+# 開発者メニューの「作ったモンスターで戦う」(outputs/ に残っている絵から選ぶ。API は呼ばない)
+# ----------------------------------------------------------------------
+# outputs/ のフォルダ名の形(storage.make_output_dir。同じ秒に2回作ると _2 などが付く)
+_OUTPUT_NAME_PATTERN = re.compile(r"^\d{8}_\d{6}(_\d+)?$")
+RECENT_MONSTERS_LIMIT = 30
+
+
+def _read_result(out_name: str) -> dict[str, Any] | None:
+    """outputs/<out_name>/result.json を読む。ないか読めなければ None。"""
+    path = OUTPUTS_DIR / out_name / RESULT_NAME
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning("result.json を読めませんでした(%s): %s", out_name, e)
+        return None
+
+
+@app.get("/api/recent-monsters")
+async def api_recent_monsters() -> dict:
+    """outputs/ にある、絵までできたモンスター(新しい順に最大30件)。"""
+    monsters = []
+    dirs = sorted(OUTPUTS_DIR.iterdir(), reverse=True) if OUTPUTS_DIR.is_dir() else []
+    for d in dirs:
+        if not _OUTPUT_NAME_PATTERN.match(d.name) or not (d / MONSTER_NAME).is_file():
+            continue
+        result = _read_result(d.name)
+        if result is None or result.get("needs_retake"):
+            continue
+        monsters.append(recent_monster_entry(d.name, result))
+        if len(monsters) >= RECENT_MONSTERS_LIMIT:
+            break
+    return {"monsters": monsters}
+
+
+@app.get("/api/output-image/{out_name}")
+async def api_output_image(out_name: str) -> FileResponse:
+    """outputs/<out_name>/ のモンスターの絵。フォルダ名の形を確かめて、outputs/ の外は読ませない。"""
+    if not _OUTPUT_NAME_PATTERN.match(out_name or ""):
+        raise HTTPException(status_code=400, detail="フォルダの名前の形が正しくありません")
+    path = OUTPUTS_DIR / out_name / MONSTER_NAME
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="その絵は見つかりませんでした")
+    return FileResponse(path, media_type="image/png")
 
 
 # ----------------------------------------------------------------------

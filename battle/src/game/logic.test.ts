@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { decideWinner, getGameOutcome, pickCpuHand, resolveRound, shuffleStars } from './logic';
+import { cpuHandFor, decideWinner, getGameOutcome, pickCpuHand, resolveRound, shuffleStars, withStarAt } from './logic';
 
 describe('じゃんけん判定', () => {
   it.each([
@@ -119,3 +119,20 @@ describe('テスト可能な乱数処理', () => {
   });
 });
 
+
+describe('開発者メニューの「勝ち負けを決める」', () => {
+  it('かつ・まける・あいこ になる CPU の手を返す', () => {
+    for (const hand of ['rock', 'scissors', 'paper'] as const) {
+      expect(decideWinner(hand, cpuHandFor(hand, 'win'), 1, 3).winner).toBe('player');
+      expect(decideWinner(hand, cpuHandFor(hand, 'lose'), 3, 1).winner).toBe('cpu');
+      expect(cpuHandFor(hand, 'tie')).toBe(hand);
+    }
+    expect(cpuHandFor('rock', 'normal', () => 0.99)).toBe('paper');
+  });
+
+  it('星の並びをくずさずに、その手の星を入れかえる', () => {
+    const stars = { rock: 1, scissors: 2, paper: 3 } as const;
+    expect(withStarAt(stars, 'rock', 3)).toEqual({ rock: 3, scissors: 2, paper: 1 });
+    expect(withStarAt(stars, 'rock', 1)).toBe(stars);
+  });
+});

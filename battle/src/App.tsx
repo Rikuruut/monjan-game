@@ -14,7 +14,17 @@ import {
   startGameBgm,
 } from './audio/gameBgm';
 import { loadGameData, type GameData } from './data/loadGameData';
-import { getGameOutcome, pickCpuHand, resolveRound, shuffleStars } from './game/logic';
+import { DevMenu, type DevJump } from './DevMenu';
+import { readAutoplay, writeAutoplay, type Autoplay } from './devTools';
+import {
+  cpuHandFor,
+  getGameOutcome,
+  pickCpuHand,
+  resolveRound,
+  shuffleStars,
+  withStarAt,
+  type ForcedResult,
+} from './game/logic';
 import {
   assetUrl,
   BASE_URL,
@@ -55,6 +65,11 @@ export const REVEAL_DISPLAY_MS = 1000;
 export const STAR_SHOWDOWN_MS = 1200;
 export const ATTACK_DISPLAY_MS = 480;
 export const IMPACT_DISPLAY_MS = 420;
+// 通しの自動プレイ(開発者メニュー)で、ボタンを押すまでに待つ時間
+export const AUTOPLAY_TITLE_MS = 2000;
+export const AUTOPLAY_RULES_MS = 800;
+export const AUTOPLAY_HAND_MS = 1000;
+export const AUTOPLAY_WAIT_MS = 3000;
 
 type AttributeTheme = 'fire' | 'water' | 'nature' | 'light' | 'dark' | 'wind' | 'earth' | 'neutral';
 
@@ -822,6 +837,14 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const sequenceRef = useRef(0);
   const tutorialOpen = tutorialMode !== null;
   const autoStartedRef = useRef(false);
+  // 開発者メニュー(D キー・⚙)
+  const [devOpen, setDevOpen] = useState(false);
+  const [forced, setForced] = useState<ForcedResult>('normal');
+  const [autoplay, setAutoplayState] = useState<Autoplay>(() => readAutoplay());
+  const setAutoplay = (next: Autoplay) => {
+    writeAutoplay(next);
+    setAutoplayState(next);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -984,12 +1007,15 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const chooseHand = (hand: Hand) => {
     if (!data || lockRef.current || tutorialOpen || phase !== 'choosing') return;
     lockRef.current = true;
-    const chosenCpuHand = pickCpuHand();
+    // 開発者メニューで勝ち負けを決めているときは、その結果になる手にする(あいこは星もそろえて完全なあいこ)
+    const chosenCpuHand = forced === 'normal' ? pickCpuHand() : cpuHandFor(hand, forced);
+    const roundCpuStars = forced === 'tie' ? withStarAt(cpuStars, chosenCpuHand, playerStars[hand]) : cpuStars;
+    if (roundCpuStars !== cpuStars) setCpuStars(roundCpuStars);
     const nextResult = resolveRound({
       playerHand: hand,
       cpuHand: chosenCpuHand,
       playerStar: playerStars[hand],
-      cpuStar: cpuStars[chosenCpuHand],
+      cpuStar: roundCpuStars[chosenCpuHand],
       playerAttack: statCount(data.player.attack),
       cpuAttack: statCount(data.cpu.attack),
       playerHp,
@@ -1101,6 +1127,68 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   };
   usePadButtons(pressPad);
 
+  // 開発者メニュー:D キーで開く・閉じる(会場の3つのボタンでは開かない)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.key === 'd' || event.key === 'D') && !event.repeat) setDevOpen((current) => !current);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // 開発者メニューの「画面へとぶ」
+  const jumpTo = (target: DevJump) => {
+    if (!data) return;
+    if (target === 'title') {
+      returnToTitle();
+      return;
+    }
+    if (target === 'rules') {
+      startGame();
+      return;
+    }
+    clearTimers();
+    setTutorialMode(null);
+    if (target === 'battle') {
+      setPlayerHp(statCount(data.player.hp));
+      setCpuHp(statCount(data.cpu.hp));
+      setScreen('battle');
+      startRarityRoll();
+      return;
+    }
+    setScreen(target);
+  };
+
+  // 通しの自動プレイ:画面ごとに、少し待ってから会場のボタンを押したのと同じことをする。
+  // メニューを開いているあいだは止まる(停止ボタンを押せるように)
+  useEffect(() => {
+    if (!autoplay.on || !data || devOpen) return;
+    let action: (() => void) | null = null;
+    let delay = AUTOPLAY_WAIT_MS;
+    if (screen === 'title') {
+      action = pressStart;
+      delay = AUTOPLAY_TITLE_MS;
+    } else if (screen === 'battle') {
+      if (tutorialMode === 'intro') {
+        action = closeTutorial;
+        delay = AUTOPLAY_RULES_MS;
+      } else if (!tutorialOpen && phase === 'choosing') {
+        action = () => chooseHand(HANDS[Math.floor(Math.random() * HANDS.length)]);
+        delay = AUTOPLAY_HAND_MS;
+      }
+    } else if (screen === 'thanks') {
+      action = () => {
+        setAutoplay({ on: true, loops: autoplay.loops + 1 });
+        returnToTitle();
+      };
+    } else {
+      action = finishGame;
+    }
+    if (!action) return;
+    const timer = window.setTimeout(action, delay);
+    return () => window.clearTimeout(timer);
+  }, [autoplay, data, devOpen, screen, phase, tutorialMode]);
+
   if (error) {
     return (
       <main className="screen error-screen" role="alert">
@@ -1153,6 +1241,18 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         onSfxVolumeChange={changeSfxVolume}
       />
       {content}
+      <DevMenu
+        open={devOpen}
+        data={data}
+        autoplay={autoplay}
+        forced={forced}
+        onClose={() => setDevOpen(false)}
+        onToggle={() => setDevOpen((current) => !current)}
+        onJump={jumpTo}
+        onForced={setForced}
+        onLowHp={(side) => (side === 'player' ? setPlayerHp(1) : setCpuHp(1))}
+        onAutoplay={(on) => setAutoplay({ on, loops: 0 })}
+      />
     </>
   );
 }
