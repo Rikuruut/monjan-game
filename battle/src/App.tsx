@@ -825,7 +825,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
   useEffect(() => {
     let alive = true;
-    loadGameData(fetch, { photoId: launch.photoId })
+    loadGameData(fetch, { photoId: launch.photoId, playerName: launch.playerName })
       .then((loaded) => { if (alive) setData(loaded); })
       .catch((reason: unknown) => {
         if (alive) setError(reason instanceof Error ? reason.message : 'データを読み込めませんでした。');

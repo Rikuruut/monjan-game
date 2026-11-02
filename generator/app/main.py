@@ -31,7 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from .animals import ANIMAL_ICONS, ANIMALS, DEFAULT_ANIMAL_ICON, normalize_animal
-from .battle import make_battle_stats, to_battle_monster
+from .battle import DEMO_ID, demo_battle_monster, make_battle_stats, to_battle_monster
 from .generator import GenerationResult, PartialCallback, get_generator
 from .kiosk import kiosk_enabled, open_kiosk_in_background
 from .net_utils import get_lan_ip
@@ -729,6 +729,13 @@ async def api_revealed(photo_id: str = Form(...)) -> JSONResponse:
         raise HTTPException(status_code=404, detail="その写真のモンスターは見つかりませんでした")
     await ws_manager.notify_revealed(photo_id, f"/api/monster-image/{photo_id}")
     return JSONResponse({"ok": True})
+
+
+@app.get(f"/api/battle-monster/{DEMO_ID}")
+async def api_battle_monster_demo(name: str | None = None) -> JSONResponse:
+    """テストプレイ・確認用の見本(ゴリラ × はさみ)を、バトルが読む形で返す(バトルの /battle/?play=demo が読む)。
+    下の {photo_id} より先に書く(先に書いたほうが使われる)。"""
+    return JSONResponse(demo_battle_monster(name))
 
 
 @app.get("/api/battle-monster/{photo_id}")

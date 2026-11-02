@@ -65,7 +65,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 ### PC(`/`。展示の大画面 1920×1080)
 - 1920×1080 の舞台を、モニターに合わせて拡大縮小(`app.js` の `fitStage`)。操作は3つのボタン = ← / Enter・Space / →。D キーか歯車で開発者メニュー(テストプレイ:見本のゴリラ × はさみで「がったい!」から誕生後まで通しで流す(がったい中 約25秒)・確認用の場面・演出・効果音のボタン(APIなし)・判定の JSON・時間・料金・名前のテスト)
 - 場面は `#stage` の `data-scene`:s1 しゃしんを とろう / s2 しゃしん × どうぶつ = ? / s3 がったい中 / s4 たんじょう(左 もう一回・中 たたかう!・右 いんさつ)
-  - バトルのタイトルの「スタート!」で s1 に来る。「たたかう!」は `/battle/?photo=<photo_id>` へ(テストプレイ・確認用は `?play=sample` で見本のモンスター)
+  - バトルのタイトルの「スタート!」で s1 に来る。「たたかう!」は `/battle/?photo=<photo_id>` へ(テストプレイ・確認用は `?play=demo&name=<名前>` で、見本のゴリラ × はさみのまま戦う)
 - **見た目はテーマで切りかえる**:`static/themes/<名前>/`(index.html・style.css・theme.json)。`/?theme=名前`、なければ `.env` の `PC_THEME`(既定 lab)。フォルダを足すだけで選べる
   - 今あるテーマ:lab(ひみつけんきゅうじょ)/ fantasy(たまご)/ cardpack / pot / gacha / summon / fusion(もりのつむじかぜ。写真と動物がうずのまわりを回りながら吸いこまれ、一点に縮んでから風がはじけて葉と花びらが舞う)。背景は1枚の絵 `static/themes/fusion/bg.webp`(依頼者が用意した絵を 1920×1080 の WebP に整えたもの)
   - テーマに用意する要素(ID)は `app.js` 先頭の「テーマとの約束」

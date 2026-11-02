@@ -91,10 +91,12 @@ function buttonsFor(scene) {
 }
 
 // じゃんけんバトル(友人の担当。/battle/)へ。できたモンスターは、バトルが /api/battle-monster/<photo_id> から読む。
-// テストプレイ・確認用の見本(写真の ID がない)では、バトルの見本のモンスターで戦う
+// テストプレイ・確認用の見本(写真の ID がない)では、見本のゴリラ × はさみで戦う(名前は選んだことにしたもの)
 function goBattle() {
   const id = state.photoId || "";
-  location.href = /^[0-9a-f]{32}$/.test(id) ? "/battle/?photo=" + id : "/battle/?play=sample";
+  location.href = /^[0-9a-f]{32}$/.test(id)
+    ? "/battle/?photo=" + id
+    : "/battle/?play=demo&name=" + encodeURIComponent(state.chosenName || demoName());
 }
 
 let currentButtons = buttonsFor("s1");

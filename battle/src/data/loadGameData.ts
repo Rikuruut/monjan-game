@@ -17,6 +17,8 @@ type Fetcher = (input: RequestInfo | URL) => Promise<Response>;
 export interface LoadOptions {
   /** 生成したモンスターの ID。あればプレイヤーをサーバーから読み、CPU は見本から選ぶ */
   photoId?: string | null;
+  /** 見本(テストプレイ)のときの名前。サーバーに渡す */
+  playerName?: string | null;
   /** CPU を見本から選ぶ方法(テスト用に差しかえられる) */
   pickIndex?: (length: number) => number;
 }
@@ -78,7 +80,7 @@ export async function loadGameData(fetcher: Fetcher = fetch, options: LoadOption
 
   if (options.photoId) {
     // 撮影・合体の画面で生まれたモンスター。画像はサーバーの API(/api/monster-image/…)なので、そのまま使う
-    const player = parseMonster(await fetchJson(fetcher, battleMonsterUrl(options.photoId)));
+    const player = parseMonster(await fetchJson(fetcher, battleMonsterUrl(options.photoId, options.playerName)));
     // 相手は見本のモンスターから毎回ランダムに選ぶ(最初に出す相手は仕様で未決定。結合のときに決めた)
     const pickIndex = options.pickIndex ?? ((length: number) => Math.floor(Math.random() * length));
     const cpu = monsters[pickIndex(monsters.length)];

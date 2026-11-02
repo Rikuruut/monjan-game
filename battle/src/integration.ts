@@ -18,9 +18,13 @@ export function assetUrl(path: string): string {
 }
 
 /** 生成したモンスターを返すサーバーの API(generator/app/main.py の /api/battle-monster)。 */
-export function battleMonsterUrl(photoId: string): string {
-  return `/api/battle-monster/${encodeURIComponent(photoId)}`;
+export function battleMonsterUrl(photoId: string, name?: string | null): string {
+  const url = `/api/battle-monster/${encodeURIComponent(photoId)}`;
+  return name ? `${url}?name=${encodeURIComponent(name)}` : url;
 }
+
+// 撮影・合体の画面のテストプレイで使う見本(ゴリラ × はさみ)の ID(generator/app/battle.py の DEMO_ID)
+export const DEMO_PHOTO_ID = 'demo';
 
 /** 別のページ(撮影・合体の画面)へ移る。 */
 export function navigateTo(url: string) {
@@ -30,6 +34,8 @@ export function navigateTo(url: string) {
 export interface Launch {
   /** 生成したモンスターの ID(`?photo=`)。null なら見本のモンスターで戦う */
   photoId: string | null;
+  /** 見本(`?play=demo`)のときの名前。テストプレイで選んだことにしたもの */
+  playerName?: string | null;
   /** タイトルを飛ばして、すぐバトル(ルール説明)から始めるか */
   skipTitle: boolean;
   /** スタートで撮影の画面へ進むか。false なら、これまでどおり見本のモンスターでバトルへ */
@@ -39,15 +45,18 @@ export interface Launch {
 /**
  * URL から、どう始めるかを決める。
  * - `?photo=<id>`   … 撮影・合体の画面の「たたかう!」から来た。そのモンスターで、すぐバトル
- * - `?play=sample`  … 開発者メニューのテストプレイから来た。見本のモンスターで、すぐバトル
+ * - `?play=demo&name=<名前>` … 開発者メニューのテストプレイから来た。見本のゴリラ × はさみで、すぐバトル
+ * - `?play=sample`  … バトルの見本のモンスターで、すぐバトル
  * - `?standalone=1` … サーバーにつながず、単体で遊ぶ(スタートで撮影の画面へ行かない)
  * ビルドしていない開発用(npm.cmd run dev)とテストは、これまでどおり単体で動く。
  */
 export function readLaunch(search: string = window.location.search, integrated: boolean = import.meta.env.PROD): Launch {
   const params = new URLSearchParams(search);
-  const photoId = params.get('photo') || null;
+  const demo = params.get('play') === 'demo';
+  const photoId = demo ? DEMO_PHOTO_ID : params.get('photo') || null;
   return {
     photoId,
+    playerName: demo ? params.get('name') : null,
     skipTitle: photoId !== null || params.get('play') === 'sample',
     toGenerator: integrated && !params.has('standalone'),
   };

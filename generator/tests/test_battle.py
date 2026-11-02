@@ -74,6 +74,18 @@ def test_battle_monster_api_unknown_and_bad_id(client):
     assert client.get("/api/battle-monster/nai").status_code == 400
 
 
+def test_battle_monster_api_demo(client):
+    # 開発者メニューのテストプレイの「たたかう!」(/battle/?play=demo)。見本のゴリラ × はさみを、選んだ名前で返す
+    m = client.get("/api/battle-monster/demo", params={"name": "ゴリシザー"}).json()
+    assert m["name"] == "ゴリシザー"
+    assert m["source"] == {"animal": "ゴリラ", "object": "はさみ"}
+    assert m["attack"] in ATTACK_CHOICES and m["hp"] in HP_CHOICES
+    assert client.get(m["image"]).status_code == 200
+    # 名前がなければ見本の名前。長すぎる名前は切る
+    assert client.get("/api/battle-monster/demo").json()["name"] == "ゴリザミ"
+    assert len(client.get("/api/battle-monster/demo", params={"name": "ア" * 100}).json()["name"]) == 20
+
+
 def test_battle_page_is_served(client):
     if not (main.BATTLE_DIR / "index.html").is_file():
         pytest.skip("static/battle/ がまだビルドされていない")

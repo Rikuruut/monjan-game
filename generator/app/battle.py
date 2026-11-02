@@ -45,3 +45,24 @@ def to_battle_monster(photo_id: str, result: dict[str, Any]) -> dict[str, Any]:
         "description": monster.get("description") or "",
         "image": f"/api/monster-image/{photo_id}",
     }
+
+
+# 撮影・合体の画面のテストプレイ・確認用の見本(ゴリラ × はさみ)。
+# 名前・性質・説明・絵は static/common/app.js の demoSample と同じにしている
+DEMO_ID = "demo"
+DEMO_NAME = "ゴリザミ"
+DEMO_NAME_MAX = 20   # URL から来る名前なので、長すぎるものは切る
+
+
+def demo_battle_monster(name: str | None = None) -> dict[str, Any]:
+    """見本のモンスターを、バトルが読む形で返す。name はテストプレイで選んだことにした名前。"""
+    return {
+        "id": DEMO_ID,
+        "name": (name or "").strip()[:DEMO_NAME_MAX] or DEMO_NAME,
+        "source": {"animal": "ゴリラ", "object": "はさみ"},
+        "attribute": "とがってる",
+        "attack": ATTACK_CHOICES[1],
+        "hp": HP_CHOICES[1],
+        "description": "はさみの つのを ふりかざし、なんでも きりひらく ちからもち。",
+        "image": "/static/demo/monster.jpg",
+    }
