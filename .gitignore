@@ -1,0 +1,6 @@
+# 戦闘画面(battle/)の Node の生成物
+battle/node_modules/
+battle/dist/
+*.tsbuildinfo
+battle/vite.config.js
+battle/vite.config.d.ts

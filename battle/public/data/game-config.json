@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "samplePlayerMonsterId": "MON-0001",
+  "sampleCpuMonsterId": "MON-0002",
+  "monsters": [
+    "/data/monsters/monster_bottle_ray.json",
+    "/data/monsters/monster_punch_eagle.json",
+    "/data/monsters/monster_bottle_grasshopper.json"
+  ]
+}
