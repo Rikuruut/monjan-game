@@ -89,7 +89,7 @@ class ImageGenerator(Protocol):
 DEFAULT_IMAGE_SIZE = "1024x768"
 IMAGE_FORMAT = "png"
 
-# 16の倍数かどうかを確かめるための正規表現
+# IMAGE_SIZE の形(幅x高さ)
 _SIZE_PATTERN = re.compile(r"^(\d+)x(\d+)$")
 
 # 画質を指定しないことを表す値

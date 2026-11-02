@@ -3,7 +3,6 @@ export type GameSound =
   | 'select'
   | 'summon'
   | 'rarity'
-  | 'janken'
   | 'janken-jan'
   | 'janken-ken'
   | 'janken-pon'
@@ -232,10 +231,6 @@ function scheduleGameSound(context: AudioContext, kind: GameSound, options: Game
       [880, 1108.73, 1318.51].forEach((frequency, index) =>
         scheduleTone(context, now + index * 0.09, frequency, 0.1, 0.038, 'sine'));
       break;
-    case 'janken':
-      [240, 290, 360].forEach((frequency, index) =>
-        scheduleTone(context, now + index * 0.095, frequency, 0.08, 0.05, 'triangle'));
-      break;
     case 'janken-jan':
       scheduleTone(context, now, 220, 0.18, 0.06, 'triangle', 180);
       break;
@@ -313,18 +308,6 @@ export function playGameSound(kind: GameSound, options: GameSoundOptions = {}): 
     if (!running || context !== audioContext || muted || sfxVolume <= 0) return false;
     return safelyScheduleGameSound(context, kind, options);
   });
-}
-
-export function playHitSound() {
-  playGameSound('impact');
-}
-
-export function playVictorySound() {
-  playGameSound('victory');
-}
-
-export function playSoundToggle() {
-  playGameSound('toggle');
 }
 
 export function closeGameAudio() {

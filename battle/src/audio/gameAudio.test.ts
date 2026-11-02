@@ -35,7 +35,6 @@ const ALL_SOUNDS: GameSound[] = [
   'select',
   'summon',
   'rarity',
-  'janken',
   'janken-jan',
   'janken-ken',
   'janken-pon',

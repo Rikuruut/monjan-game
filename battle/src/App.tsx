@@ -894,6 +894,11 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     disposeGameBgm();
   }, []);
 
+  // 音を切っていないときだけ効果音を鳴らす
+  const playSound = (...args: Parameters<typeof playGameSound>) => {
+    if (soundEnabledRef.current) playGameSound(...args);
+  };
+
   const schedule = (callback: () => void, delay: number, sequence = sequenceRef.current) => {
     const timer = window.setTimeout(() => {
       timersRef.current.delete(timer);
@@ -906,6 +911,11 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     sequenceRef.current += 1;
     timersRef.current.forEach((timer) => window.clearTimeout(timer));
     timersRef.current.clear();
+  };
+
+  const fillHp = (loaded: GameData) => {
+    setPlayerHp(statCount(loaded.player.hp));
+    setCpuHp(statCount(loaded.cpu.hp));
   };
 
   const resetRound = () => {
@@ -923,7 +933,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setCpuHand(null);
     setResult(null);
     setPhase('rarity');
-    if (soundEnabledRef.current) playGameSound('rarity');
+    playSound('rarity');
     schedule(() => {
       setPhase('choosing');
       lockRef.current = false;
@@ -962,8 +972,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const startGame = () => {
     if (!data) return;
     clearTimers();
-    setPlayerHp(statCount(data.player.hp));
-    setCpuHp(statCount(data.cpu.hp));
+    fillHp(data);
     resetRound();
     setTutorialMode('intro');
     setScreen('battle');
@@ -980,7 +989,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       startGame();
       return;
     }
-    if (soundEnabledRef.current) playGameSound('start');
+    playSound('start');
     navigateTo(GENERATOR_URL);
   };
 
@@ -994,7 +1003,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setTutorialMode(null);
     setPhase('summon');
     lockRef.current = true;
-    if (soundEnabledRef.current) playGameSound('summon');
+    playSound('summon');
     schedule(startRarityRoll, SUMMON_DISPLAY_MS);
   };
 
@@ -1025,27 +1034,23 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setCpuHand(chosenCpuHand);
     setResult(nextResult);
     setPhase('selected');
-    if (soundEnabledRef.current) playGameSound('select');
+    playSound('select');
 
     const beginAttack = () => {
       setPhase('attack');
-      if (soundEnabledRef.current) {
-        const attackAttribute = nextResult.winner === 'player'
-          ? data.player.attribute
-          : nextResult.winner === 'cpu'
-            ? data.cpu.attribute
-            : undefined;
-        playGameSound('attack', attackAttribute ? { attribute: attackAttribute } : {});
-      }
+      const attackAttribute = nextResult.winner === 'player'
+        ? data.player.attribute
+        : nextResult.winner === 'cpu'
+          ? data.cpu.attribute
+          : undefined;
+      playSound('attack', attackAttribute ? { attribute: attackAttribute } : {});
 
       schedule(() => {
         setPlayerHp(nextResult.playerHp);
         setCpuHp(nextResult.cpuHp);
         setPhase('impact');
-        if (soundEnabledRef.current) {
-          playGameSound('impact');
-          playGameSound('hp-loss');
-        }
+        playSound('impact');
+        playSound('hp-loss');
 
         schedule(() => {
           setPhase('result');
@@ -1054,7 +1059,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
             if (outcome === 'ongoing') {
               prepareNextRound();
             } else {
-              if (soundEnabledRef.current) playGameSound(outcome);
+              playSound(outcome);
               setScreen(outcome);
             }
           }, RESULT_DISPLAY_MS);
@@ -1064,26 +1069,24 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
     schedule(() => {
       setPhase('janken-jan');
-      if (soundEnabledRef.current) playGameSound('janken-jan');
+      playSound('janken-jan');
 
       schedule(() => {
         setPhase('janken-ken');
-        if (soundEnabledRef.current) playGameSound('janken-ken');
+        playSound('janken-ken');
 
         schedule(() => {
           setPhase('janken-pon');
-          if (soundEnabledRef.current) playGameSound('janken-pon');
+          playSound('janken-pon');
 
           schedule(() => {
             setPhase('reveal');
-            if (soundEnabledRef.current) playGameSound('reveal');
+            playSound('reveal');
 
             schedule(() => {
               if (nextResult.reason !== 'hand') {
                 setPhase('star-showdown');
-                if (soundEnabledRef.current) {
-                  playGameSound(nextResult.reason === 'perfect-tie' ? 'tie' : 'star-showdown');
-                }
+                playSound(nextResult.reason === 'perfect-tie' ? 'tie' : 'star-showdown');
                 schedule(beginAttack, STAR_SHOWDOWN_MS);
               } else {
                 beginAttack();
@@ -1107,7 +1110,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   };
 
   const finishGame = () => {
-    if (soundEnabledRef.current) playGameSound('card-get');
+    playSound('card-get');
     setScreen('thanks');
   };
 
@@ -1150,8 +1153,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     clearTimers();
     setTutorialMode(null);
     if (target === 'battle') {
-      setPlayerHp(statCount(data.player.hp));
-      setCpuHp(statCount(data.cpu.hp));
+      fillHp(data);
       setScreen('battle');
       startRarityRoll();
       return;
@@ -1203,12 +1205,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     content = <TitleScreen onStart={pressStart} />;
   } else if (screen === 'thanks') {
     content = <ThanksScreen monster={data.player} onTitle={returnToTitle} />;
-  } else if (screen === 'victory') {
-    content = <ResultScreen kind="victory" monster={data.player} onContinue={finishGame} />;
-  } else if (screen === 'defeat') {
-    content = <ResultScreen kind="defeat" monster={data.player} onContinue={finishGame} />;
-  } else if (screen === 'draw') {
-    content = <ResultScreen kind="draw" monster={data.player} onContinue={finishGame} />;
+  } else if (screen !== 'battle') {
+    content = <ResultScreen kind={screen} monster={data.player} onContinue={finishGame} />;
   } else {
     content = (
       <BattleScreen
@@ -1235,7 +1233,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         enabled={soundEnabled}
         bgmVolume={bgmVolume}
         sfxVolume={sfxVolume}
-        compact={screen === 'victory' || screen === 'defeat' || screen === 'draw' || screen === 'thanks'}
+        compact={screen !== 'title' && screen !== 'battle'}
         onToggle={toggleSound}
         onBgmVolumeChange={changeBgmVolume}
         onSfxVolumeChange={changeSfxVolume}

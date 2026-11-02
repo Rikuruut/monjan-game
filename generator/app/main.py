@@ -431,19 +431,6 @@ def _seconds_since(started: float) -> float:
     return round(time.monotonic() - started, 2)
 
 
-def _report(
-    monster: dict[str, Any],
-    notes: list[str],
-    settings: dict[str, Any],
-    timings: dict[str, float],
-    usage: dict[str, Any],
-    **extra: Any,
-) -> dict[str, Any]:
-    """result.json と画面への返事に共通する項目。"""
-    return {"monster": monster, "validator_notes": notes, "settings": settings,
-            "timings": timings, "usage": usage, **extra}
-
-
 @dataclass
 class _Run:
     """1回の生成の記録(写真・設定・かかった時間・使用量)。"""
@@ -464,11 +451,11 @@ class _Run:
         self.timings[step] = round(seconds, 2)
         self.usages[step] = usage
 
-    def final_timings(self) -> dict[str, float]:
-        return {**self.timings, "total": _seconds_since(self.started)}
-
     def report(self, monster: dict[str, Any], notes: list[str], **extra: Any) -> dict[str, Any]:
-        return _report(monster, notes, self.settings, self.final_timings(), build_usage(**self.usages), **extra)
+        """result.json と画面への返事に共通する項目。"""
+        return {"monster": monster, "validator_notes": notes, "settings": self.settings,
+                "timings": {**self.timings, "total": _seconds_since(self.started)},
+                "usage": build_usage(**self.usages), **extra}
 
 
 @app.post("/api/generate")
@@ -561,6 +548,8 @@ async def _generate_split(run: _Run) -> JSONResponse:
     if first["needs_retake"]:
         return await _finish_retake(run, first, first_notes)
     object_name, has_person = first["object_name"], first["has_person"]
+    # 画像では物の全体ではなく、パーツごとに別々の場所へ作り変える(prompts.fusion_line)
+    parts = {key: first[key] for key in ("object_part", "object_sub_part") if first.get(key)}
 
     # ローディング:「え を かいているよ」(名前の候補は、名前・説明ができてから names で送る)
     await ws_manager.notify_progress(
@@ -568,10 +557,7 @@ async def _generate_split(run: _Run) -> JSONResponse:
     )
     design_plan: dict[str, Any] = {}
     plan.apply(design_plan, run.animal)
-    # 画像では物の全体ではなく、パーツごとに別々の場所へ作り変える(prompts.fusion_line)
-    for key in ("object_part", "object_sub_part"):
-        if first.get(key):
-            design_plan[key] = first[key]
+    design_plan.update(parts)
     draw_task = asyncio.create_task(_draw(run, object_name, "", design_plan, has_person))
 
     # 名前・説明(画像生成と同時)。失敗しても止めず、既定の名前で続ける
@@ -585,9 +571,7 @@ async def _generate_split(run: _Run) -> JSONResponse:
         logger.warning("名前・説明を作れませんでした(既定値で続けます): %s", e)
         details, describe_error = None, str(e)
     monster, notes = combine(run.animal, plan, check, details)
-    for key in ("object_part", "object_sub_part"):
-        if first.get(key):
-            monster["design_plan"][key] = first[key]
+    monster["design_plan"].update(parts)
     if describe_error:
         notes.append(f"名前・説明を作れなかったので、既定値にしました: {describe_error}")
 

@@ -26,9 +26,6 @@ from .prompts import (
     QUICK_CHECK_PROMPT,
     STAGING_OPTIONS,
     background_place_candidates,
-    sub_part_candidates,
-    pose_candidates,
-    weapon_part,
     build_describe_instructions,
     build_describe_prompt,
     build_name_test_prompt,
@@ -37,6 +34,9 @@ from .prompts import (
     build_recognize_prompt,
     fusion_part_candidates,
     fusion_part_place,
+    pose_candidates,
+    sub_part_candidates,
+    weapon_part,
 )
 from .validator import DEFAULT_RETAKE_REASON, choose_monster_name, validate_monster
 
@@ -135,6 +135,11 @@ def _set_fusion_part(design_plan: dict[str, Any], animal: str, part: str) -> Non
     )
 
 
+# 直前に選んだ時間帯・天気と、背景の場所(同じものが続かないようにするため)
+_last_scene: str | None = None
+_last_background_place: str | None = None
+
+
 def choose_staging(poses: list[str] | None = None) -> dict[str, str]:
     """演出(ポーズ・視点・表情・時間帯と天気)を、項目ごとにランダムに1つずつ選ぶ。
 
@@ -148,11 +153,6 @@ def choose_staging(poses: list[str] | None = None) -> dict[str, str]:
     scenes = [s for s in STAGING_OPTIONS["scene"] if s != _last_scene] or STAGING_OPTIONS["scene"]
     staging["scene"] = _last_scene = random.choice(scenes)
     return staging
-
-
-# 直前に選んだ時間帯・天気と、背景の場所(同じものが続かないようにするため)
-_last_scene: str | None = None
-_last_background_place: str | None = None
 
 
 def choose_background_place(animal: str) -> str:
