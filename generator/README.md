@@ -35,7 +35,7 @@ Copy-Item .env.example .env   # できた .env に値を書く
 | `ALLOW_PERSON` | 人が写った写真も生成するか(既定 `false`。下の「4. 注意」) |
 | `IMAGE_PROMPT_STYLE` | 画像プロンプトの書き方。`detailed`(設計図つき)/ `simple`(短いもの) |
 | `FUSION_TYPE` / `FUSION_PART` | 物を取り込む型・場所を固定する(空なら毎回ランダム。くわしくは `.env.example`) |
-| `PC_THEME` | PC 画面の見た目。`lab` / `fantasy` / `cardpack` / `pot` / `gacha` / `summon`(既定 `lab`) |
+| `PC_THEME` | PC 画面の見た目。今は `fusion`(もりの つむじかぜ)だけ(既定 `fusion`。ほかは `archive/20261102_before_fusion_only/`) |
 | `KIOSK_MODE` / `KIOSK_BROWSER` | 起動時に PC 用ページを全画面で開くか(既定 `true`)/ 使うブラウザ(空なら Edge → Chrome) |
 | `PORT` | ポート番号(既定 8000) |
 
@@ -72,7 +72,7 @@ python -m app.main
 | ← / Enter・Space / → | 画面下の3つのボタン |
 | D(または右下の歯車) | 開発者メニュー(判定の JSON・時間・料金・テーマの切りかえ・名前のテスト) |
 
-- テーマは `/?theme=fantasy` のように URL でも切りかえられる
+- テーマは `/?theme=fusion` のように URL でも切りかえられる
 - 名前のテスト(開発者メニュー):写真も画像生成も使わずに、モンスター名だけを作る(1回0.1円以下。結果は `outputs/name_tests.jsonl`)
 
 ---

@@ -66,13 +66,13 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 - 1920×1080 の舞台を、モニターに合わせて拡大縮小(`app.js` の `fitStage`)。操作は3つのボタン = ← / Enter・Space / →。D キーか歯車で開発者メニュー(テストプレイ:見本のゴリラ × はさみで「がったい!」から誕生後まで通しで流す(がったい中 約25秒)・確認用の場面・演出・効果音のボタン(APIなし)・判定の JSON・時間・料金・名前のテスト)
 - 場面は `#stage` の `data-scene`:s1 しゃしんを とろう / s2 しゃしん × どうぶつ = ? / s3 がったい中 / s4 たんじょう(左 もう一回・中 たたかう!・右 いんさつ)
   - バトルのタイトルの「スタート!」で s1 に来る。「たたかう!」は `/battle/?photo=<photo_id>` へ(テストプレイ・確認用は `?play=demo&name=<名前>` で、見本のゴリラ × はさみのまま戦う)
-- **見た目はテーマで切りかえる**:`static/themes/<名前>/`(index.html・style.css・theme.json)。`/?theme=名前`、なければ `.env` の `PC_THEME`(既定 lab)。フォルダを足すだけで選べる
-  - 今あるテーマ:lab(ひみつけんきゅうじょ)/ fantasy(たまご)/ cardpack / pot / gacha / summon / fusion(もりのつむじかぜ。写真と動物がうずのまわりを回りながら吸いこまれ、一点に縮んでから風がはじけて葉と花びらが舞う)。背景は1枚の絵 `static/themes/fusion/bg.webp`(依頼者が用意した絵を 1920×1080 の WebP に整えたもの)
+- **見た目はテーマで切りかえる**:`static/themes/<名前>/`(index.html・style.css・theme.json)。`/?theme=名前`、なければ `.env` の `PC_THEME`(既定 fusion。`.env` が知らない名前のときも fusion)。フォルダを足すだけで選べる
+  - 今あるテーマは fusion だけ(もりのつむじかぜ。2026年11月2日に依頼者がこれに決めた。lab・fantasy・cardpack・pot・gacha・summon と元の背景 bg.png は `archive/20261102_before_fusion_only/` に控えてある。写真と動物がうずのまわりを回りながら吸いこまれ、一点に縮んでから風がはじけて葉と花びらが舞う)。背景は1枚の絵 `static/themes/fusion/bg.webp`(依頼者が用意した絵を 1920×1080 の WebP に整えたもの)
   - テーマに用意する要素(ID)は `app.js` 先頭の「テーマとの約束」
   - 進み具合は `#stage` の `--progress`(0〜1)と `data-level`(0〜5)を CSS で見せる。**段ごとの見た目は静的な指定で出し、transition やアニメーションを使わない**(回る・ゆれる要素の中で途中のまま止まって見えた)
   - 場面転換は `#stage.shut` を CSS で見せる。時間は `--scene-close-ms` / `--scene-open-ms`
   - JavaScript の演出は任意:`window.themeFx.birth(showCard)` で誕生をまかせられる(失敗しても `app.js` がカードを出す)。段が変わると `#stage` に `levelchange`。
-    今は fantasy・fusion の `effects.js`(GSAP・tsParticles)。ライブラリが読めないときは `<html>` に `fx` が付かず、CSS の演出で動く
+    今は fusion の `effects.js`(GSAP・tsParticles)。ライブラリが読めないときは `<html>` に `fx` が付かず、CSS の演出で動く
   - 効果音 `window.sfx.play(名前)`:press・tick(段が上がった)・crack・fanfare。themeFx のあるテーマは誕生の音を自分で鳴らす。`?sound=0` で消す
 - 確認用(API なし):`/?theme=…&demo=1&scene=s3&progress=0.8&photo=…&img=…&animal=…&name=…`、`&play=birth` で割れる直前から誕生後まで流す、`&dev=1` で開発者メニュー。`photo`・`img` を付けなければ見本(`static/demo/`)を使う
 

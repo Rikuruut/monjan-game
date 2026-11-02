@@ -138,10 +138,10 @@ def current_settings() -> dict[str, str]:
 # ----------------------------------------------------------------------
 # 見た目はテーマごとに static/themes/<テーマ名>/(index.html と style.css)に分けてあり、
 # 動き(撮影・生成・場面の進行)は static/common/app.js が共通で受け持つ。
-# /?theme=lab のように付けると、そのテーマで表示する。何も付けないときは .env の PC_THEME。
+# /?theme=fusion のように付けると、そのテーマで表示する。何も付けないときは .env の PC_THEME。
 # 新しいテーマは、static/themes/ にフォルダを足すだけで選べるようになる(theme.json に表示名を書ける)。
 THEMES_DIR = STATIC_DIR / "themes"
-DEFAULT_PC_THEME = "lab"
+DEFAULT_PC_THEME = "fusion"
 
 
 def list_themes() -> list[dict[str, str]]:
@@ -162,7 +162,7 @@ def list_themes() -> list[dict[str, str]]:
 
 
 def resolve_theme(theme: str | None) -> str:
-    """指定されたテーマ名を、実際にあるテーマにそろえる。なければ PC_THEME、それもなければ lab。"""
+    """指定されたテーマ名を、実際にあるテーマにそろえる。なければ PC_THEME、それもなければ fusion。"""
     available = {t["id"] for t in list_themes()}
     for candidate in (theme, os.getenv("PC_THEME"), DEFAULT_PC_THEME):
         if candidate and candidate.strip() in available:

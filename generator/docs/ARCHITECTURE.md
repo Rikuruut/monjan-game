@@ -142,7 +142,7 @@ monjan-prototype/
 │   │   ├── sound.js     効果音
 │   │   └── common.css   舞台の拡大縮小・開発者メニューの見た目
 │   ├── themes/<名前>/   PC 画面の見た目(テーマ)。index.html・style.css・theme.json
-│   │                    lab / fantasy / cardpack / pot / gacha / summon。fantasy は effects.js で演出を足している
+│   │                    fusion(もりの つむじかぜ)だけ。effects.js で演出を足している。ほかは archive/20261102_before_fusion_only/
 │   ├── phone.html / phone.js / phone.css   スマホ用ページ
 │   ├── vendor/          ライブラリとフォント(ネットから読まないよう手元に置いている)
 │   └── sounds/          効果音(今は仮の音)
@@ -172,7 +172,7 @@ monjan-prototype/
 
 - 見た目はテーマごとに `static/themes/<名前>/` に分かれていて、`/?theme=<名前>` で切りかえる(何も付けないときは `.env` の `PC_THEME`)
 - 動きは共通の `app.js` が受け持つので、テーマはフォルダを足すだけで増やせる。テーマに用意する要素(ID)は `app.js` の先頭のコメント「テーマとの約束」にある
-- API を使わずに場面を確認できる:`/?theme=fantasy&demo=1&scene=s3&progress=0.8`、`&play=birth` で誕生の演出、`&dev=1` で開発者メニュー。`&photo=`・`&img=` を付けなければ見本の写真と絵(`static/demo/`)を使う。
+- API を使わずに場面を確認できる:`/?theme=fusion&demo=1&scene=s3&progress=0.8`、`&play=birth` で誕生の演出、`&dev=1` で開発者メニュー。`&photo=`・`&img=` を付けなければ見本の写真と絵(`static/demo/`)を使う。
   同じことは、開発者メニューの「確認用(APIなし)」のボタン(場面・進み具合・誕生の演出・途中の絵・名前が選ばれた・撮り直しの表示・効果音)からもできる。
   「▶ テストプレイ」は、サーバーから届くメッセージを画面の中で本番と同じ順に作り、「がったい!」から誕生後までを通しで流す(がったい中 約25秒)
 
