@@ -19,7 +19,7 @@
 ## 起動とビルド
 この PC の `python` は Microsoft Store の仮のコマンドなので、`generator/.venv` の Python を使う(最初の1回は `py -m venv .venv` → `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`)。
 ```powershell
-cd generator; .\.venv\Scripts\python.exe -m app.main     # 展示。キオスクで /battle/(タイトル)が開く
+cd generator; .\.venv\Scripts\python.exe -m app.main     # 展示。キオスクで /battle/ が開く(直下の start.bat でも同じ)
 cd generator; .\.venv\Scripts\python.exe -m pytest       # API は呼ばない
 cd battle; npm.cmd install                # 最初の1回(版は package.json で固定してある)
 cd battle; npm.cmd test                   # vitest
