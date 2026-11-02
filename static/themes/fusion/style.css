@@ -1,0 +1,777 @@
+/* ==================================================================
+   テーマ:fusion「もりの つむじかぜ」(2026年11月2日)
+   ------------------------------------------------------------------
+   - 同じ日に 宇宙のうず → しぜんのうず → いまの形 と作りかえた(元は archive/ の 20261102_before_fusion_nature と 20261102_before_fusion_forest)
+   - 舞台(#stage)の拡大縮小と開発者メニューは static/common/common.css にある。ここは見た目だけ
+   - 1920×1080 の舞台に、すべてを px で配置する。場面は #stage の data-scene(s1〜s4)で切りかえる
+   - 進み具合は、app.js が付ける data-level(0〜5)で うずの帯・風の筋の明るさ に、
+     --progress(0〜1)で 中心の光の大きさ・まわりの光・玉が回る輪の大きさ に変える
+       level 2 絵をかき始めた … 速く回る白い風の筋があらわれる
+       level 3 半分すぎ       … 金の光の帯が強くなる
+       level 4 もうすぐ       … うず全体がまぶしい
+       level 5 できた         … 玉が うずに飲みこまれて消える
+   - 段ごとの見た目は opacity や transform の静的な指定で出す(transition やアニメーションは使わない。CLAUDE.md)。
+     回転・玉の公転は飾りとして、一定の速さで動かし続ける(段で速さを変えると、位置がとぶため)
+   - たまごのテーマ(明るい空き地)と見分けがつくよう、奥まった深い森と、中央のつむじ風を主役にする
+   ================================================================== */
+
+:root {
+  --forest: #1F4D3A;      /* 森の深緑(背景) */
+  --leaf:   #6CC04A;      /* 若葉(済んだ段階・ふち) */
+  --moss:   #3F8F4A;      /* こけ */
+  --petal:  #F7A8C4;      /* 花びらの桃(差し色) */
+  --sun:    #FFE9A8;      /* 木もれ日の金(中心の光・呼びかけ・選んだ名前) */
+  --wind:   #F4FFF6;      /* 風の白 */
+  --ink:    #173A2E;      /* 文字のふち・パネルの地・カードの文字 */
+  /* 上の色から作った濃淡 */
+  --forest-deep: #0d2219;
+  --panel:  #173a2ee6;    /* 立て札などの半透明の地 */
+  --cream:  #FFF8E6;      /* カードの地 */
+  --white:  #FFFFFF;
+  --font-title: "Dela Gothic One", "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  --font-body:  "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  /* 場面転換:木もれ日の光が画面をおおうまでの時間と、晴れるまでの時間(app.js が読む) */
+  --scene-close-ms: 400;
+  --scene-open-ms: 120;
+}
+
+body {
+  background: var(--forest-deep);   /* 舞台のまわりの余白(画面の縦横比がちがうとき) */
+  font-family: var(--font-body);
+  color: var(--white);
+}
+
+/* ------------------------------------------------------------------ */
+/* 舞台:深い森の奥(背景は1枚の絵)                                      */
+/* ------------------------------------------------------------------ */
+/* 背景の絵:bg.webp(依頼者が用意した絵を 1920×1080 に整えたもの)。
+   ※ 2026年11月2日:CSS で描いた幹・こずえ・地面が張りぼてに見えたので、絵に差しかえた。
+     絵が読めないときは、下のグラデーションだけで見せる */
+.stage {
+  background:
+    url(/static/themes/fusion/bg.webp) center / cover no-repeat,
+    radial-gradient(ellipse 760px 520px at 50% 46%, #7fbf86 0%, #4f9566 30%, transparent 70%),
+    linear-gradient(180deg, #0f2e24 0%, var(--forest) 40%, #2a5e44 72%, #1a3d2e 100%);
+  overflow: hidden;
+}
+.land { position: absolute; inset: 0; pointer-events: none; }
+/* ふちを暗くする影(中央のうずと、タイトル・立て札の文字を読みやすくする) */
+.vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, #0d221966 0%, transparent 22%),
+    radial-gradient(ellipse 70% 72% at 50% 46%, transparent 45%, #0d2219aa 100%);
+}
+/* 地面に落ちる、うずの光 */
+.ground-glow {
+  position: absolute;
+  left: 760px;
+  top: 760px;
+  width: 400px;
+  height: 130px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #fffbe0cc, #ffe9a855 45%, transparent 72%);
+  opacity: 0.35;
+}
+/* ゆっくり舞い落ちる葉と花びら(飾り) */
+.drift {
+  position: absolute;
+  top: -60px;
+  width: 28px;
+  height: 16px;
+  border-radius: 0 100% 0 100%;
+  background: var(--leaf);
+  opacity: 0.85;
+  animation: drift var(--t) linear var(--d) infinite;
+}
+.drift.petal { width: 18px; height: 18px; border-radius: 50% 0 50% 50%; background: var(--petal); }
+@keyframes drift {
+  0%   { transform: translate(0, 0) rotate(0); }
+  25%  { transform: translate(60px, 300px) rotate(180deg); }
+  50%  { transform: translate(-20px, 600px) rotate(360deg); }
+  75%  { transform: translate(70px, 900px) rotate(540deg); }
+  100% { transform: translate(10px, 1200px) rotate(720deg); }
+}
+
+/* ------------------------------------------------------------------ */
+/* 上:タイトルと、段階の印                                              */
+/* ------------------------------------------------------------------ */
+.top {
+  position: absolute;
+  z-index: 4;
+  top: 28px;
+  left: 48px;
+  right: 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.signboard {
+  padding: 10px 34px 12px;
+  background: var(--panel);
+  border: 3px solid var(--leaf);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 var(--forest-deep);
+}
+.signboard h1 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 40px;
+  color: var(--white);
+  letter-spacing: 1px;
+}
+.signboard h1 small { font-size: 24px; color: var(--sun); margin-left: 8px; }
+
+.lamps {
+  display: flex;
+  gap: 26px;
+  list-style: none;
+  margin: 0;
+  padding: 10px 24px;
+  background: var(--panel);
+  border-radius: 999px;
+}
+.lamps li { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 24px; color: #8fb0a0; }
+/* 段階の印:4枚の花びら(--c が花の色) */
+.lamp {
+  --c: #4d6f60;
+  width: 24px;
+  height: 24px;
+  background:
+    radial-gradient(circle at 50% 24%, var(--c) 0 24%, transparent 26%),
+    radial-gradient(circle at 24% 50%, var(--c) 0 24%, transparent 26%),
+    radial-gradient(circle at 76% 50%, var(--c) 0 24%, transparent 26%),
+    radial-gradient(circle at 50% 76%, var(--c) 0 24%, transparent 26%),
+    radial-gradient(circle, var(--sun) 0 16%, transparent 18%);
+}
+.lamps li.done .lamp { --c: var(--leaf); }
+.lamps li.now { color: var(--white); }
+.lamps li.now .lamp { --c: var(--petal); transform: scale(1.4); }
+
+/* ------------------------------------------------------------------ */
+/* 場面の見出し                                                         */
+/* ------------------------------------------------------------------ */
+.headline {
+  position: absolute;
+  z-index: 4;
+  top: 128px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 66px;
+  line-height: 1.15;
+  color: var(--white);
+  text-shadow:
+    -3px -3px 0 var(--ink), 3px -3px 0 var(--ink), -3px 3px 0 var(--ink), 3px 3px 0 var(--ink),
+    0 7px 0 var(--ink);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 左右の玉と光の帯                                                     */
+/* ------------------------------------------------------------------ */
+.scene-art { position: absolute; inset: 0; pointer-events: none; }
+
+.streams { position: absolute; inset: 0; z-index: 1; width: 1920px; height: 1080px; }
+.stream {
+  fill: none;
+  stroke: #ffffffaa;
+  stroke-width: 10;
+  stroke-linecap: round;
+  stroke-dasharray: 2 26;
+}
+
+/* --ox / --oy:うずの中心(舞台の 960, 520)までの距離(玉の箱の左上から)。がったい中の公転で使う */
+.orb-item { position: absolute; z-index: 3; top: 330px; width: 280px; text-align: center; --oy: 190px; }
+.orb-left  { left: 220px;  --ox: 740px; }
+.orb-right { left: 1420px; --ox: -460px; }
+/* 公転の入れ物(s1・s2 では何もしない) */
+.orbit-x, .orbit-y { position: relative; }
+.orb {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #2f7d55, var(--ink));
+  border: 6px solid var(--leaf);
+  box-shadow: 0 0 0 6px var(--ink), 0 10px 24px #0d221955;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.orb-photo { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: none; }
+.orb-icon  { font-size: 132px; line-height: 1; display: none; }
+.orb-empty { font-size: 80px; opacity: 0.3; filter: grayscale(1); }
+.has-photo  .orb-photo,
+.has-animal .orb-icon { display: block; }
+.has-photo  .orb-left  .orb-empty,
+.has-animal .orb-right .orb-empty { display: none; }
+/* 玉のまわりを回る、葉のつるの輪(飾り) */
+.orb-ring {
+  position: absolute;
+  inset: -22px;
+  border-radius: 50%;
+  border: 5px dotted var(--leaf);
+  border-top-color: var(--petal);
+  animation: spin 9s linear infinite;
+}
+.orb-right .orb-ring { animation-direction: reverse; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.tag {
+  display: inline-block;
+  margin: 26px 0 0;
+  padding: 2px 22px 4px;
+  font-weight: 800;
+  font-size: 28px;
+  color: var(--white);
+  background: var(--panel);
+  border: 3px solid var(--leaf);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* つむじ風のうず(若葉・こけ・花びら・木もれ日)                         */
+/* ------------------------------------------------------------------ */
+.vortex-area { position: absolute; z-index: 2; left: 660px; top: 220px; width: 600px; height: 600px; }
+/* がったい中、進むほど うずが小さく凝縮していく(最後は 0.55 倍)。
+   --progress の値で大きさを決めるだけなので、transition やアニメーションは使わない(CLAUDE.md) */
+.condense { position: absolute; inset: 0; }
+[data-scene="s3"] .condense { transform: scale(calc(1 - var(--progress, 0) * 0.45)); }
+.vortex { position: absolute; inset: 0; }
+.vortex > * { position: absolute; }
+.vortex-halo {
+  inset: -160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffbe0aa 0%, #ffe9a855 30%, #c8f0c033 48%, transparent 68%);
+  opacity: 0.2;
+}
+/* 地:淡い白緑の光(4色の帯が目立つように、地は淡くする) */
+.vortex-disc {
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffff2 0%, #eefbe6 25%, #d3eed0 45%, #a6d6ae 60%, #5f9f70cc 70%, transparent 73%);
+  box-shadow: 0 0 60px #fffbe055;
+  -webkit-mask-image: radial-gradient(circle, #000 62%, transparent 72%);
+          mask-image: radial-gradient(circle, #000 62%, transparent 72%);
+}
+.arms {
+  inset: 0;
+  width: 600px;
+  height: 600px;
+  overflow: visible;
+  /* ふちに向かって、帯が森にとけるように */
+  -webkit-mask-image: radial-gradient(circle, #000 52%, transparent 71%);
+          mask-image: radial-gradient(circle, #000 52%, transparent 71%);
+  animation: spin 24s linear infinite;
+}
+/* ※ 回る層に drop-shadow を付けると、毎フレーム描き直しになって重い(とくに誕生のあと)。帯のふちは細い線で見分ける */
+.arms-a { opacity: 0.65; stroke: #173a2e40; stroke-width: 2; }
+.arm-leaf  { fill: var(--leaf); }
+.arm-moss  { fill: var(--moss); }
+.arm-petal { fill: var(--petal); }
+.arm-sun   { fill: #F2C14E; }   /* 木もれ日(淡い金のままだと地にとけるので、少し濃く) */
+.arms-b { fill: var(--white); opacity: 0; animation-duration: 7s; }
+.bands  { fill: var(--sun); opacity: 0.3; animation-duration: 12s;
+  -webkit-mask-image: radial-gradient(circle, #000 60%, transparent 74%);
+          mask-image: radial-gradient(circle, #000 60%, transparent 74%); }
+/* 中心の光(暖かい白金) */
+.vortex-core {
+  left: 190px;
+  top: 190px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #fffbe6 20%, #ffe9a8cc 42%, #ffe9a844 62%, transparent 72%);
+  transform: scale(0.5);
+}
+/* 画像生成の途中の絵:中心の光の上に、ぼんやり透けて見える。data-partial(何枚目か)が進むほど、はっきりする */
+.vortex-peek {
+  left: 150px;
+  top: 150px;
+  width: 300px;
+  height: 300px;
+  object-fit: cover;
+  border-radius: 50%;
+  -webkit-mask-image: radial-gradient(circle, #000 45%, transparent 70%);
+          mask-image: radial-gradient(circle, #000 45%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+[data-scene="s3"][data-partial="1"] .vortex-peek { opacity: 0.35; filter: blur(12px) saturate(0.7); }
+[data-scene="s3"][data-partial="2"] .vortex-peek { opacity: 0.55; filter: blur(6px) saturate(0.85); }
+[data-scene="s3"][data-partial="3"] .vortex-peek { opacity: 0.7;  filter: blur(2px); }
+
+.center-mark {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-size: 170px;
+  color: var(--white);
+  opacity: 0.45;
+  text-shadow: 0 6px 0 var(--ink);
+}
+.center-sub {
+  position: absolute;
+  top: 612px;
+  left: -200px;
+  right: -200px;
+  margin: 0;
+  text-align: center;
+  font-weight: 800;
+  font-size: 26px;
+  color: var(--white);
+  text-shadow: 0 2px 0 var(--ink), 0 0 8px var(--ink);
+}
+
+/* 吸いこまれる粒(effects.js が .mote を足す。外側の span を回し、中の i を中心へ動かして、らせんを描く)
+   種類:葉・花びら・光の粒・風の筋 */
+.inflow { position: absolute; z-index: 2; left: 300px; top: 300px; width: 0; height: 0; }
+.mote { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.mote i { position: absolute; left: 0; top: 0; border-radius: 50%; }
+.mote .m-leaf  { background: var(--leaf); border-radius: 0 100% 0 100%; box-shadow: inset 0 0 0 2px #ffffff55; }
+.mote .m-petal { background: var(--petal); border-radius: 50% 0 50% 50%; }
+.mote .m-light { background: #fffbe0; box-shadow: 0 0 10px 3px var(--sun); }
+.mote .m-wind  { background: #fff; box-shadow: 0 0 8px 2px var(--wind); border-radius: 999px; }
+
+/* 誕生:中心の一点の光・はじける風・衝撃波の輪(ふだんは見えない) */
+.vortex-point {
+  position: absolute;
+  z-index: 4;
+  left: 270px;
+  top: 270px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 30%, #fff2c0 50%, transparent 72%);
+  box-shadow: 0 0 40px 16px #ffffffcc, 0 0 90px 40px #ffe9a888;
+  opacity: 0;
+  pointer-events: none;
+}
+/* はじける風:大きさのちがう白い三日月を、向きをずらして重ねる(--i で大きさと向きを変える) */
+.gust {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  top: 0;
+  width: 600px;
+  height: 600px;
+  opacity: 0;
+  transform: scale(0);
+  pointer-events: none;
+}
+.blade {
+  --s: calc(180px + var(--i) * 52px);
+  position: absolute;
+  left: calc(300px - var(--s) / 2);
+  top: calc(300px - var(--s) / 2);
+  width: var(--s);
+  height: var(--s);
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 16px solid transparent;
+  border-top-color: var(--wind);
+  transform: rotate(calc(var(--i) * 135deg));
+  /* ※ 光のぼかし(drop-shadow)は付けない。大きく広げるあいだ毎フレーム描き直しになって重かった */
+}
+.blade:nth-child(even) { border-top-color: #d8f5c8; border-width: 10px; }
+.shock {
+  position: absolute;
+  z-index: 7;
+  left: 200px;
+  top: 200px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 14px solid var(--wind);
+  box-shadow: 0 0 30px 6px #fff2c0, inset 0 0 30px 6px #fff2c0;
+  opacity: 0;
+  pointer-events: none;
+}
+.shock-2 { border-width: 6px; border-color: var(--leaf); box-shadow: 0 0 20px 4px #d8f5c8; }
+
+/* effects.js の演出で使うもの */
+/* 誕生で GSAP が大きさ・透明度を変える要素は、あらかじめ別の層にしておく
+   (しないと、拡大縮小のたびにブラウザが描き直して重かった。2026年11月2日) */
+.vortex, .gust, .shock, .vortex-point, .fx-flash, .card { will-change: transform, opacity; }
+.fx-particles { position: absolute; inset: 0; pointer-events: none; }
+#fx-shards { z-index: 9; }
+/* 画面ぜんたいの閃光(誕生の瞬間だけ。暖かい白) */
+.fx-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  background: radial-gradient(circle at 50% 48%, #fff 0%, #fffbe6 40%, #e6f7d0cc 100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* がったい中の立て札(あそびかた・なまえ・進み具合)                      */
+/* ------------------------------------------------------------------ */
+.board {
+  position: absolute;
+  top: 716px;
+  width: 420px;
+  height: 158px;
+  padding: 12px 20px;
+  background: var(--panel);
+  border: 3px solid var(--leaf);
+  border-radius: 16px;
+  box-shadow: 0 6px 0 var(--forest-deep);
+  display: none;
+}
+.board-left  { left: 190px; }
+.board-right { left: 1310px; }
+.board h3 { margin: 0 0 6px; font-family: var(--font-title); font-weight: 400; font-size: 26px; color: var(--sun); }
+.tip { margin: 0; font-weight: 800; font-size: 25px; line-height: 1.45; word-break: keep-all; }
+.board-right h3 { display: inline; margin-right: 12px; }
+.name-help { display: inline; margin: 0; font-size: 20px; color: #bcd8c8; }
+.name-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.name-list li {
+  font-family: var(--font-title);
+  font-size: 21px;
+  padding: 1px 12px;
+  border-radius: 8px;
+  border: 3px solid #3f7a5a;
+}
+.name-list li.chosen { color: var(--ink); background: var(--sun); border-color: var(--white); }
+
+.status-plate {
+  position: absolute;
+  top: 834px;
+  left: 640px;
+  width: 640px;
+  height: 56px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border: 3px solid var(--leaf);
+  border-radius: 999px;
+}
+.status-steps { display: flex; gap: 22px; list-style: none; margin: 0; padding: 0; }
+.status-steps li { font-weight: 800; font-size: 22px; color: #5f8570; }
+.status-steps li.done { color: var(--leaf); }
+.status-steps li.now  { color: var(--sun); }
+
+/* ------------------------------------------------------------------ */
+/* たんじょう:モンスターのカード(クリーム色の地に、緑と桃のふちどり)      */
+/* ------------------------------------------------------------------ */
+/* ※ 2026年11月2日:絵を大きく見せるため、幅 580px → 784px にし、上の余白まで伸ばした(絵の幅は 約740px)。
+     絵は 1024×768 で作っているので、幅 1024px までは引き伸ばしにならない(大きく作り直さなくてよい) */
+.card {
+  position: absolute;
+  z-index: 6;
+  top: 118px;
+  left: 568px;
+  width: 784px;
+  padding: 14px;
+  border: 8px solid transparent;
+  background:
+    linear-gradient(165deg, var(--cream), #f0e8c8) padding-box,
+    conic-gradient(from 20deg, var(--leaf), var(--petal), var(--sun), var(--moss), var(--leaf)) border-box;
+  color: var(--ink);
+  border-radius: 22px;
+  box-shadow: 0 0 0 4px var(--ink), 0 0 60px #fff2c0, 0 0 120px #c8f0c099;
+  display: none;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  background: linear-gradient(90deg, var(--ink), var(--moss));
+  border-radius: 10px;
+}
+.card-name { font-family: var(--font-title); font-size: 38px; color: var(--white); white-space: nowrap; }
+.card-element {
+  font-weight: 800;
+  font-size: 20px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  border: 3px solid var(--white);
+  color: #fff;
+  white-space: nowrap;
+}
+.el-fire    { background: #d9472f; }
+.el-water   { background: #2f7fd0; }
+.el-thunder { background: #e0b000; color: var(--ink); border-color: var(--ink); }
+.el-rock    { background: #8a6e4b; }
+.el-sharp   { background: #7a4fc4; }
+.el-soft    { background: #e07aa8; }
+.card-art {
+  margin-top: 12px;
+  aspect-ratio: 4 / 3;
+  border: 4px solid var(--ink);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--forest-deep);
+}
+.card-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-foot { margin-top: 10px; }
+.card-recipe { margin: 0; font-size: 18px; color: var(--moss); }
+.card-desc { margin: 2px 0 0; font-weight: 800; font-size: 22px; line-height: 1.4; word-break: keep-all; }
+.card-name.pop { animation: name-pop 0.5s cubic-bezier(.2, 1.6, .4, 1); display: inline-block; }
+@keyframes name-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ------------------------------------------------------------------ */
+/* 下:操作盤(3つのボタン = 緑の円盤に花のしるし)                        */
+/* ------------------------------------------------------------------ */
+.deck {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 184px;
+  background: linear-gradient(180deg, #173a2eee, var(--forest-deep));
+  border-top: 4px solid var(--leaf);
+}
+.knob {
+  position: absolute;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.knob[data-pos="left"]   { left: 560px;  transform: translateX(-50%); }
+.knob[data-pos="center"] { left: 960px;  transform: translateX(-50%); }
+.knob[data-pos="right"]  { left: 1360px; transform: translateX(-50%); }
+.knob-face {
+  --c: var(--white);
+  position: relative;
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 34%, #8fd86c, var(--leaf) 50%, var(--moss));
+  box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--petal), 0 7px 0 9px #061510;
+  transition: transform 0.08s;
+}
+.knob-face::after {
+  /* 花のしるし(4枚の花びら) */
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56%;
+  height: 56%;
+  background:
+    radial-gradient(circle at 50% 24%, var(--c) 0 23%, transparent 25%),
+    radial-gradient(circle at 24% 50%, var(--c) 0 23%, transparent 25%),
+    radial-gradient(circle at 76% 50%, var(--c) 0 23%, transparent 25%),
+    radial-gradient(circle at 50% 76%, var(--c) 0 23%, transparent 25%),
+    radial-gradient(circle, var(--sun) 0 16%, transparent 18%);
+  transform: translate(-50%, -50%);
+}
+.knob-side .knob-face { width: 76px; height: 76px; }
+.knob-main .knob-face { width: 92px; height: 92px; }
+.knob-label {
+  margin-top: 14px;
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.2;
+  color: var(--white);
+  white-space: nowrap;
+}
+.knob-main .knob-label { font-family: var(--font-title); font-weight: 400; font-size: 28px; color: var(--sun); }
+.knob.pressed .knob-face, .knob:active .knob-face { transform: translateY(6px); }
+.knob:disabled { cursor: default; }
+.knob:disabled .knob-face { --c: #9aaba0; background: radial-gradient(circle at 40% 34%, #7c8f84, #4c5e54); }
+.knob:disabled .knob-label { color: #7f9a8a; }
+.knob.empty { visibility: hidden; }
+.knob:focus-visible .knob-face { outline: 4px dashed var(--white); outline-offset: 16px; }
+/* がったい!のボタンは、押せるときだけ光って呼びかける */
+[data-scene="s2"] .knob-main .knob-face { animation: knob-call 1.4s ease-in-out infinite; }
+@keyframes knob-call {
+  0%, 100% { box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--petal), 0 7px 0 9px #061510, 0 0 0 0 #ffe9a800; }
+  50%      { box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--sun), 0 7px 0 9px #061510, 0 0 50px 18px #ffe9a8cc; }
+}
+
+/* 短いお知らせ */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 200px;
+  transform: translateX(-50%) translateY(20px);
+  margin: 0;
+  padding: 12px 30px;
+  font-family: var(--font-title);
+  font-size: 26px;
+  color: var(--ink);
+  background: var(--sun);
+  border: 4px solid var(--ink);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 8;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ------------------------------------------------------------------ */
+/* 場面ごとの見え方                                                      */
+/* ------------------------------------------------------------------ */
+/* s2:うずが強まり、真ん中の ? が光って呼びかける */
+[data-scene="s2"] .center-mark { opacity: 1; color: var(--sun); text-shadow: 0 6px 0 var(--ink), 0 0 40px #fff2c0; }
+[data-scene="s2"] .vortex-halo { opacity: 0.4; }
+[data-scene="s2"] .arms-a { opacity: 0.75; }
+[data-scene="s2"] .arms-b { opacity: 0.25; }
+[data-scene="s2"] .bands  { opacity: 0.45; }
+[data-scene="s2"] .vortex-core { transform: scale(0.7); }
+[data-scene="s2"] .ground-glow { opacity: 0.5; }
+[data-scene="s2"] .center-sub,
+[data-scene="s3"] .center-sub,
+[data-scene="s4"] .center-sub { display: none; }
+
+/* s3:玉がうずのまわりを回りながら近づき、うずが明るくなる */
+[data-scene="s3"] .center-mark,
+[data-scene="s3"] .stream,
+[data-scene="s3"] .tag { display: none; }
+/* 「あそびかた」「なまえ」の立て札は、がったい中も出さない(.board はずっと display: none のまま) */
+[data-scene="s3"] .status-plate { display: flex; }
+/* 玉の公転:.orbit-x が横に、.orbit-y が縦に往復する。縦を周期の 1/4 ずらすと楕円になる(1周 = 往復1回 = 5秒)。
+   % は入れ物の幅・高さが基準なので、幅・高さ(= 横と縦の半径)を --progress で小さくするだけで、輪が少しずつ縮む。
+   右の玉は半周ずらして、向かい合って回る */
+[data-scene="s3"] .orbit-x {
+  position: absolute;
+  left: var(--ox);
+  top: var(--oy);
+  width: calc(440px - var(--progress, 0) * 310px);
+  height: 0;
+  animation: orbit-x 2.5s cubic-bezier(.37, 0, .63, 1) infinite alternate;
+}
+[data-scene="s3"] .orbit-y {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: calc(220px - var(--progress, 0) * 150px);
+  animation: orbit-y 2.5s cubic-bezier(.37, 0, .63, 1) -1.25s infinite alternate;
+}
+[data-scene="s3"] .orb-right .orbit-x { animation-delay: -2.5s; }
+[data-scene="s3"] .orb-right .orbit-y { animation-delay: -3.75s; }
+@keyframes orbit-x { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes orbit-y { from { transform: translateY(-100%); } to { transform: translateY(100%); } }
+/* 玉は、回る点を中心に置き、進むほど小さくする */
+[data-scene="s3"] .orb {
+  position: absolute;
+  left: -120px;
+  top: -120px;
+  margin: 0;
+  transform: scale(calc(0.62 - var(--progress, 0) * 0.3));
+  box-shadow: 0 0 0 6px var(--ink), 0 0 50px 12px #fff2c0;
+}
+[data-scene="s3"][data-level="5"] .orb-item { opacity: 0; }   /* うずに飲みこまれた */
+/* うずの明るさ(--progress で連続的に、data-level で段ごとに) */
+[data-scene="s3"] .vortex-halo { opacity: calc(0.4 + var(--progress, 0) * 0.6); }
+[data-scene="s3"] .vortex-core { transform: scale(calc(0.6 + var(--progress, 0) * 0.9)); }
+[data-scene="s3"] .ground-glow { opacity: calc(0.5 + var(--progress, 0) * 0.5); }
+[data-scene="s3"] .arms-a { opacity: 0.75; }
+[data-scene="s3"] .bands  { opacity: 0.5; }
+[data-scene="s3"][data-level="1"] .arms-b { opacity: 0.3; }
+[data-scene="s3"][data-level="2"] .arms-b { opacity: 0.5; }
+[data-scene="s3"][data-level="2"] .bands  { opacity: 0.6; }
+[data-scene="s3"][data-level="3"] .arms-a { opacity: 0.9; }
+[data-scene="s3"][data-level="3"] .arms-b { opacity: 0.7; }
+[data-scene="s3"][data-level="3"] .bands  { opacity: 0.8; }
+[data-scene="s3"][data-level="4"] .arms-a,
+[data-scene="s3"][data-level="5"] .arms-a { opacity: 1; }
+[data-scene="s3"][data-level="4"] .arms-b { opacity: 0.9; }
+[data-scene="s3"][data-level="5"] .arms-b { opacity: 1; }
+[data-scene="s3"][data-level="4"] .bands,
+[data-scene="s3"][data-level="5"] .bands  { opacity: 1; }
+[data-scene="s3"][data-level="5"] .vortex-core { transform: scale(1.7); }
+
+/* s4:たんじょう。うずは大きく薄く広がって、カードのうしろに残る
+   ※ effects.js(GSAP)が読めたときは <html> に fx が付き、そちらが動かす。下の CSS アニメーションは、読めなかったときの控え */
+[data-scene="s4"] .orb-item,
+[data-scene="s4"] .stream,
+[data-scene="s4"] .center-mark { display: none; }
+[data-scene="s4"] .vortex { transform: scale(1.35); opacity: 0.6; }
+/* 誕生のあとは、カードのうしろのうずを止めた絵にする(回し続けると重いため。カードを見ているあいだは動かなくてよい) */
+[data-scene="s4"] .arms { animation: none; }
+[data-scene="s4"] .arms-b { display: none; }
+[data-scene="s4"] .bands { opacity: 0.6; }
+[data-scene="s4"] .ground-glow { opacity: 0.8; }
+[data-scene="s4"] .card { display: block; }
+/* 誕生後は、見出しをタイトルと段階の印のあいだの高さへ上げ、その下までカードを伸ばす */
+[data-scene="s4"] .headline { top: 34px; font-size: 58px; }
+html:not(.fx) [data-scene="s4"] .gust { animation: gust-burst 1.1s ease-out both; }
+@keyframes gust-burst {
+  0%   { opacity: 1; transform: scale(0) rotate(-120deg); }
+  40%  { opacity: 1; transform: scale(1) rotate(0); }
+  100% { opacity: 0; transform: scale(2) rotate(60deg); }
+}
+html:not(.fx) [data-scene="s4"] .fx-flash { animation: flash 0.9s ease-out 0.45s both; }
+@keyframes flash { 0% { opacity: 0.9; } 100% { opacity: 0; } }
+html:not(.fx) [data-scene="s4"] .shock { animation: shock 1s ease-out 0.45s both; }
+html:not(.fx) [data-scene="s4"] .shock-2 { animation-delay: 0.57s; }
+@keyframes shock {
+  0%   { opacity: 1; transform: scale(0.1); }
+  100% { opacity: 0; transform: scale(4); }
+}
+html:not(.fx) [data-scene="s4"] .card { animation: card-born 0.8s cubic-bezier(.2, 1.4, .4, 1) 0.6s both; }
+@keyframes card-born {
+  0%   { transform: scale(0.2) rotate(-12deg); opacity: 0; filter: brightness(3); }
+  70%  { transform: scale(1.04) rotate(1deg); opacity: 1; filter: brightness(1.3); }
+  100% { transform: scale(1) rotate(0); filter: brightness(1); }
+}
+
+/* ------------------------------------------------------------------ */
+/* 場面転換:上からやわらかい木もれ日の光が差して画面が白っぽくなり、光が引くと次の場面 */
+/* ------------------------------------------------------------------ */
+/* ※ 2026年11月2日:前の「4色の円が回りながら広がる」がやかましかったので、透明度だけで見せる光に変えた。
+     光がいちばん強いとき(閉じきったとき)に、前の場面が透けないよう、地は不透明なクリーム色にする */
+.warp {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% -5%, #ffffff 0%, transparent 70%),
+    linear-gradient(180deg, #fffbe8 0%, #fff8e0 55%, #f3f6dc 100%);
+  opacity: 0;
+  will-change: opacity;
+}
+/* 斜めに差しこむ光の筋(閉じるあいだ、少し下へずれて差しこんで見える) */
+.warp::before {
+  content: "";
+  position: absolute;
+  inset: -80px 0 0;
+  /* 筋は1方向だけにし、ふちをぼかす(2方向を重ねると格子模様に見えた)。下へいくほど薄くする */
+  background: repeating-linear-gradient(100deg,
+    transparent 0, #ffe9a84d 90px, #ffe9a84d 150px, transparent 240px, transparent 380px);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 85%);
+          mask-image: linear-gradient(180deg, #000 0%, transparent 85%);
+}
+/* 閉じる:光が差して白っぽくなる / 開く:光が引いて森が見える(ページを開いたときも、ここから始まる) */
+.stage.shut .warp { animation: light-in 0.4s ease-in both; }
+.stage.shut .warp::before { animation: rays-in 0.4s ease-out both; }
+.stage:not(.shut) .warp { animation: light-out 0.5s ease-out both; }
+@keyframes light-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes light-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes rays-in   { from { transform: translateY(-40px); } to { transform: translateY(0); } }
+
+/* 動きを減らす設定のときは、回転・舞う葉・玉の公転を止め、場面転換の光も出さない */
+@media (prefers-reduced-motion: reduce) {
+  .warp, .drift { display: none; }
+  .arms, .orb-ring, .orbit-x, .orbit-y { animation: none !important; }
+}
