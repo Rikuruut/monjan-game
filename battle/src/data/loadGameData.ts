@@ -1,3 +1,4 @@
+import { assetUrl, battleMonsterUrl } from '../integration';
 import type { Monster } from '../types';
 
 interface GameConfig {
@@ -12,6 +13,13 @@ export interface GameData {
 }
 
 type Fetcher = (input: RequestInfo | URL) => Promise<Response>;
+
+export interface LoadOptions {
+  /** 生成したモンスターの ID。あればプレイヤーをサーバーから読み、CPU は見本から選ぶ */
+  photoId?: string | null;
+  /** CPU を見本から選ぶ方法(テスト用に差しかえられる) */
+  pickIndex?: (length: number) => number;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -56,11 +64,28 @@ async function fetchJson(fetcher: Fetcher, path: string): Promise<unknown> {
   return response.json();
 }
 
-export async function loadGameData(fetcher: Fetcher = fetch): Promise<GameData> {
-  const config = parseConfig(await fetchJson(fetcher, '/data/game-config.json'));
+// 見本のモンスターの JSON は `/monsters/…` のように書いてあるので、公開する場所(/battle/)を付ける。
+// JSON そのものは変えない(AGENTS.md「画像素材・JSONは変更せず」)
+function withAssetImage(monster: Monster): Monster {
+  return { ...monster, image: assetUrl(monster.image) };
+}
+
+export async function loadGameData(fetcher: Fetcher = fetch, options: LoadOptions = {}): Promise<GameData> {
+  const config = parseConfig(await fetchJson(fetcher, assetUrl('/data/game-config.json')));
   const monsters = await Promise.all(
-    config.monsters.map(async (path) => parseMonster(await fetchJson(fetcher, path))),
+    config.monsters.map(async (path) => withAssetImage(parseMonster(await fetchJson(fetcher, assetUrl(path))))),
   );
+
+  if (options.photoId) {
+    // 撮影・合体の画面で生まれたモンスター。画像はサーバーの API(/api/monster-image/…)なので、そのまま使う
+    const player = parseMonster(await fetchJson(fetcher, battleMonsterUrl(options.photoId)));
+    // 相手は見本のモンスターから毎回ランダムに選ぶ(最初に出す相手は仕様で未決定。結合のときに決めた)
+    const pickIndex = options.pickIndex ?? ((length: number) => Math.floor(Math.random() * length));
+    const cpu = monsters[pickIndex(monsters.length)];
+    if (!cpu) throw new Error('対戦に使うモンスターが見つかりません。');
+    return { player, cpu };
+  }
+
   const player = monsters.find((monster) => monster.id === config.samplePlayerMonsterId);
   const cpu = monsters.find((monster) => monster.id === config.sampleCpuMonsterId);
 

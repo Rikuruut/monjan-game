@@ -1,0 +1,13 @@
+{
+  "id": "MON-0002",
+  "name": "チョキチョキザウルス",
+  "source": {
+    "animal": "ティラノサウルス",
+    "object": "ハサミ"
+  },
+  "attribute": "無",
+  "attack": 2000,
+  "hp": 3000,
+  "description": "ハサミを持つティラノサウルス。大きなハサミで、チョキチョキと切り刻む！",
+  "image": "/monsters/monster_saurus.png"
+}

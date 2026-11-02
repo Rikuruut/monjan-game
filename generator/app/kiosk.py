@@ -77,6 +77,7 @@ def _launch(url: str, port: int) -> None:
         "--no-first-run",
         "--disable-pinch",                     # タッチ画面で、指で拡大されないようにする
         "--overscroll-history-navigation=0",   # 横にスワイプして「戻る」にならないようにする
+        "--autoplay-policy=no-user-gesture-required",  # ページを移ったあとも、ボタンを押す前から音を出せるように
     ]
     try:
         subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -87,5 +88,6 @@ def _launch(url: str, port: int) -> None:
 
 def open_kiosk_in_background(port: int) -> None:
     """サーバーの起動を止めないよう、別のスレッドでブラウザを開く。"""
-    url = f"http://localhost:{port}/"
+    # 展示はじゃんけんバトルのタイトル画面から始まる(スタートで / の撮影の画面へ進む)
+    url = f"http://localhost:{port}/battle/"
     threading.Thread(target=_launch, args=(url, port), daemon=True).start()

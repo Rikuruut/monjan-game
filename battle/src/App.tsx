@@ -15,11 +15,21 @@ import {
 } from './audio/gameBgm';
 import { loadGameData, type GameData } from './data/loadGameData';
 import { getGameOutcome, pickCpuHand, resolveRound, shuffleStars } from './game/logic';
+import {
+  assetUrl,
+  BASE_URL,
+  GENERATOR_URL,
+  navigateTo,
+  readLaunch,
+  usePadButtons,
+  type Launch,
+  type PadButton,
+} from './integration';
 import { HANDS, type Hand, type Monster, type RoundResult, type StarMap } from './types';
 
 type Screen = 'title' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
 type TutorialMode = 'intro' | 'review';
-const TITLE_LOGO_PATH = '/assets/monjan-title-logo.png';
+const TITLE_LOGO_PATH = assetUrl('/assets/monjan-title-logo.png');
 export type BattlePhase =
   | 'summon'
   | 'rarity'
@@ -72,14 +82,15 @@ const RESULT_COPY = {
   },
 } as const;
 
+// ひらがなの6つ(あつい など)は、撮影・合体の画面で生まれたモンスターの性質
 function getAttributeTheme(attribute: string): AttributeTheme {
-  if (/火|炎|fire/i.test(attribute)) return 'fire';
-  if (/水|海|氷|water|ice/i.test(attribute)) return 'water';
-  if (/草|木|花|nature|grass/i.test(attribute)) return 'nature';
-  if (/光|聖|light/i.test(attribute)) return 'light';
+  if (/火|炎|fire|あつい/i.test(attribute)) return 'fire';
+  if (/水|海|氷|water|ice|みず/i.test(attribute)) return 'water';
+  if (/草|木|花|nature|grass|やわらかい/i.test(attribute)) return 'nature';
+  if (/光|聖|light|でんき/i.test(attribute)) return 'light';
   if (/闇|影|dark/i.test(attribute)) return 'dark';
-  if (/風|空|wind/i.test(attribute)) return 'wind';
-  if (/土|岩|earth|rock/i.test(attribute)) return 'earth';
+  if (/風|空|wind|とがってる/i.test(attribute)) return 'wind';
+  if (/土|岩|earth|rock|かたい/i.test(attribute)) return 'earth';
   return 'neutral';
 }
 
@@ -307,6 +318,13 @@ function RarityNotice() {
 function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolean }) {
   const [step, setStep] = useState(0);
   const isLastStep = step === 2;
+  const next = () => { if (isLastStep) onClose(); else setStep((current) => current + 1); };
+
+  // 左「もどる」・中「つぎへ」
+  usePadButtons((button) => {
+    if (button === 'center') next();
+    else if (button === 'left' && step > 0) setStep((current) => current - 1);
+  });
 
   return (
     <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
@@ -367,7 +385,7 @@ function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolea
           <button
             className="primary-button"
             type="button"
-            onClick={() => { if (isLastStep) onClose(); else setStep((current) => current + 1); }}
+            onClick={next}
           >
             {isLastStep ? (isReview ? 'バトルにもどる' : 'バトルスタート！') : 'つぎへ'}
           </button>
@@ -782,7 +800,7 @@ function ThanksScreen({ monster, onTitle }: { monster: Monster; onTitle: () => v
   );
 }
 
-export function App() {
+export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [data, setData] = useState<GameData | null>(null);
   const [error, setError] = useState('');
   const [screen, setScreen] = useState<Screen>('title');
@@ -803,15 +821,39 @@ export function App() {
   const timersRef = useRef<Set<number>>(new Set());
   const sequenceRef = useRef(0);
   const tutorialOpen = tutorialMode !== null;
+  const autoStartedRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
-    loadGameData()
+    loadGameData(fetch, { photoId: launch.photoId })
       .then((loaded) => { if (alive) setData(loaded); })
       .catch((reason: unknown) => {
         if (alive) setError(reason instanceof Error ? reason.message : 'データを読み込めませんでした。');
       });
     return () => { alive = false; };
+  }, []);
+
+  // 撮影・合体の画面の「たたかう!」から来たときは、タイトルを飛ばしてバトル(ルール説明)から始める
+  useEffect(() => {
+    if (!data || !launch.skipTitle || autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    startGame();
+  }, [data]);
+
+  // 操作する前に始まったときは、ブラウザが音を止めていることがあるので、最初の操作で音を出せるようにする
+  // (展示のキオスクは起動の設定で最初から鳴る)
+  useEffect(() => {
+    const unlock = () => {
+      if (!soundEnabledRef.current) return;
+      void unlockGameAudio();
+      void startGameBgm();
+    };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
   }, []);
 
   useEffect(() => {
@@ -907,6 +949,16 @@ export function App() {
       playGameSound('start');
       void startGameBgm();
     }
+  };
+
+  // タイトルの「スタート!」。展示では撮影・合体の画面へ進む(バトルには「たたかう!」で戻ってくる)
+  const pressStart = () => {
+    if (!launch.toGenerator) {
+      startGame();
+      return;
+    }
+    if (soundEnabledRef.current) playGameSound('start');
+    navigateTo(GENERATOR_URL);
   };
 
   const closeTutorial = () => {
@@ -1018,6 +1070,8 @@ export function App() {
   };
 
   const returnToTitle = () => {
+    // URL の ?photo= を消す(読みこみ直したときに、前の子のモンスターでバトルが始まらないように)
+    if (window.location.search) window.history.replaceState(null, '', BASE_URL);
     clearTimers();
     setScreen('title');
     setTutorialMode(null);
@@ -1031,6 +1085,22 @@ export function App() {
     setScreen('thanks');
   };
 
+  // 会場の3つのボタン。手は左からグー・チョキ・パー(画面のボタンの並びと同じ)。
+  // ルール説明のあいだはチュートリアルが受け取る
+  const pressPad = (button: PadButton) => {
+    if (!data) return;
+    if (screen === 'title') {
+      if (button === 'center') pressStart();
+    } else if (screen === 'battle') {
+      if (!tutorialOpen) chooseHand(HANDS[['left', 'center', 'right'].indexOf(button)]);
+    } else if (screen === 'thanks') {
+      if (button === 'center') returnToTitle();
+    } else if (button === 'center') {
+      finishGame();
+    }
+  };
+  usePadButtons(pressPad);
+
   if (error) {
     return (
       <main className="screen error-screen" role="alert">
@@ -1042,7 +1112,7 @@ export function App() {
 
   let content: ReactNode;
   if (screen === 'title') {
-    content = <TitleScreen onStart={startGame} />;
+    content = <TitleScreen onStart={pressStart} />;
   } else if (screen === 'thanks') {
     content = <ThanksScreen monster={data.player} onTitle={returnToTitle} />;
   } else if (screen === 'victory') {

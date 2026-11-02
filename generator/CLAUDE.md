@@ -7,7 +7,9 @@ Claude Code が作業の前に読む指示書。仕様に迷ったらここを�
 
 - 2027年1月初旬にイオンモールで行う展示用のゲーム。子供(小学生)が選んだ**動物**と、スマホで撮った**身の回りの物**を AI で合体させてモンスターを作る
 - 今は**仕組みを確かめるプロトタイプ**。確かめること:処理時間・画質・物の判定の精度
-- 作らないもの:タイトル画面・じゃんけんバトル(友人の担当)・カードの生成と印刷。「たたかう!」「いんさつ」は「じゅんびちゅう」と出すだけ
+- タイトル画面・じゃんけんバトルは友人の担当で、このリポジトリの `../battle/` にある(つなぎ方は `../CLAUDE.md`)。
+  「たたかう!」でバトル(`/battle/?photo=…`)へ移る
+- 作らないもの:カードの生成と印刷。「いんさつ」は「じゅんびちゅう」と出すだけ
 
 ## 2. 守ること
 
@@ -29,15 +31,16 @@ Claude Code が作業の前に読む指示書。仕様に迷ったらここを�
   - GSAP 3.15.0(SplitText 含む。無料・商用可)/ tsParticles 4.5.0(MIT)/ Howler.js 2.2.4(MIT)/ フォント(SIL OFL 1.1)
   - tsParticles 4 は 3 と書き方が違う(色は `particles.paint.color`。`particles.color` だと白になる)
 - ノートPCでサーバーを `0.0.0.0` で動かし、PC とスマホのブラウザからつなぐ(同じ Wi-Fi。公共 Wi-Fi は端末同士の通信が禁止されがち)
-- `python -m app.main` で起動すると、スマホの URL をターミナルに出し、PC 用ページを Edge(なければ Chrome)のキオスクモードで開く(`app/kiosk.py`。`KIOSK_MODE=false` で開かない。終わるのは Alt + F4)
+- `python -m app.main` で起動すると、スマホの URL をターミナルに出し、バトルのタイトル(`/battle/`)を Edge(なければ Chrome)のキオスクモードで開く(`app/kiosk.py`。`KIOSK_MODE=false` で開かない。終わるのは Alt + F4)
 
 ```
-app/      main.py(ルーティング)・recognizer.py(判定)・generator.py(画像生成。別サービスに差し替えられる作り)・
+app/      main.py(ルーティング)・battle.py(バトルへの受け渡し)・recognizer.py(判定)・generator.py(画像生成。別サービスに差し替えられる作り)・
           prompts.py・validator.py・animals.py・openai_client.py・pricing.py(単価)・storage.py・ws_manager.py・kiosk.py
 static/   common/(app.js:場面の進行と開発者メニュー / sound.js:効果音 / common.css)・themes/<名前>/・
-          phone.html/js/css・vendor/・sounds/(今は仮の音。README 参照)
+          phone.html/js/css・vendor/・sounds/(今は仮の音。README 参照)・
+          battle/(../battle/ をビルドしたもの。手で書きかえない)
 tests/    pytest(API は呼ばない)
-outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・モデル・画質・時間・料金 usage)
+outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・モデル・画質・時間・料金 usage・バトルの ⚔♡ battle)
 ```
 
 ## 4. 処理の流れ
@@ -52,6 +55,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 - WebSocket は `/ws?role=pc|phone`。メッセージ:`capture_request` / `photo_received` / `phone_status` / `upload_done` /
   `progress`(`stage`:naming・drawing・names・partial・done・retake・error。drawing に `expected_seconds`(detailed では `name_choices` も)、
   names に `name_choices`(simple。絵を作っているあいだに届く)、partial に途中の絵の `image_url`・`index`・`total`、done に `image_url`)/ `name_chosen` / `revealed`(PC の誕生の演出が終わった。スマホはここで絵を見せる。PC が `POST /api/revealed` で知らせる)
+- バトル:`/battle/`(タイトル・バトル。`static/battle/`)・`/api/battle-monster/{photo_id}`(バトルが読む形のモンスター。⚔1〜3・♡3〜5 は絵ができたときに決める)
 - そのほかの API:`/api/photo/{photo_id}`・`/api/monster-image/{photo_id}`・`/api/partial-image/{photo_id}/{index}`(写真と絵と途中の絵。`uploads/`・`outputs/` は公開しない)・`/api/capture-request`・`/api/name-test`(名前だけを作る。1回0.1円以下)・`/api/themes`・`/api/qr`・`/api/info`
 - 動物は一覧(`animals.py`:ライオン・ゾウ・ウサギ・ペンギン・ネコ・鷹・ワニ・ゴリラ・サメ・ティラノサウルス)から選ぶが、
   製品版は自由入力の予定なので、**どこでも任意の文字列として動くようにする**
@@ -61,6 +65,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 ### PC(`/`。展示の大画面 1920×1080)
 - 1920×1080 の舞台を、モニターに合わせて拡大縮小(`app.js` の `fitStage`)。操作は3つのボタン = ← / Enter・Space / →。D キーか歯車で開発者メニュー(テストプレイ:見本のゴリラ × はさみで「がったい!」から誕生後まで通しで流す(がったい中 約25秒)・確認用の場面・演出・効果音のボタン(APIなし)・判定の JSON・時間・料金・名前のテスト)
 - 場面は `#stage` の `data-scene`:s1 しゃしんを とろう / s2 しゃしん × どうぶつ = ? / s3 がったい中 / s4 たんじょう(左 もう一回・中 たたかう!・右 いんさつ)
+  - バトルのタイトルの「スタート!」で s1 に来る。「たたかう!」は `/battle/?photo=<photo_id>` へ(テストプレイ・確認用は `?play=sample` で見本のモンスター)
 - **見た目はテーマで切りかえる**:`static/themes/<名前>/`(index.html・style.css・theme.json)。`/?theme=名前`、なければ `.env` の `PC_THEME`(既定 lab)。フォルダを足すだけで選べる
   - 今あるテーマ:lab(ひみつけんきゅうじょ)/ fantasy(たまご)/ cardpack / pot / gacha / summon / fusion(もりのつむじかぜ。写真と動物がうずのまわりを回りながら吸いこまれ、一点に縮んでから風がはじけて葉と花びらが舞う)。背景は1枚の絵 `static/themes/fusion/bg.webp`(依頼者が用意した絵を 1920×1080 の WebP に整えたもの)
   - テーマに用意する要素(ID)は `app.js` 先頭の「テーマとの約束」

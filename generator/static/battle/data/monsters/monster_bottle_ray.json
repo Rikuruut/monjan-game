@@ -1,0 +1,13 @@
+{
+  "id": "MON-0001",
+  "name": "ミツキング",
+  "source": {
+    "animal": "ゴリラ",
+    "object": "みつき"
+  },
+  "attribute": "土",
+  "attack": 1000,
+  "hp": 1000,
+  "description": "土の力で元気に歩くゴリラ。みつきの力で、強さを発揮する！",
+  "image": "/monsters/monster_mitsuki.png"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "MON-0003",
+  "name": "ボトルキリギリス",
+  "source": {
+    "animal": "キリギリス",
+    "object": "水筒ボトル"
+  },
+  "attribute": "水",
+  "attack": 1000,
+  "hp": 3000,
+  "description": "とうめいなボトルの体を持つキリギリス。水をまきながら大きくジャンプ！",
+  "image": "/monsters/monster_bottle_grasshopper.png"
+}

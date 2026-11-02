@@ -45,5 +45,42 @@ describe('モンスターデータ検証', () => {
       cpu: { id: 'MON-0002' },
     });
   });
-});
 
+  it('生成したモンスターの ID があれば、プレイヤーはサーバーから読み、CPU は見本から選ぶ', async () => {
+    const generated = { ...player, id: 'abc', name: 'ゴリシザー', attribute: 'とがってる', image: '/api/monster-image/abc' };
+    const byPath: Record<string, unknown> = {
+      '/data/game-config.json': {
+        samplePlayerMonsterId: 'MON-0001',
+        sampleCpuMonsterId: 'MON-0002',
+        monsters: ['/player.json', '/cpu.json'],
+      },
+      '/player.json': player,
+      '/cpu.json': cpu,
+      '/api/battle-monster/abc': generated,
+    };
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => byPath[String(input)],
+    })) as unknown as typeof fetch;
+
+    const data = await loadGameData(fetcher, { photoId: 'abc', pickIndex: () => 0 });
+    expect(data.player).toMatchObject({ id: 'abc', name: 'ゴリシザー', image: '/api/monster-image/abc' });
+    // 見本のモンスターが CPU になる(プレイヤー役だった見本も相手に選ばれる)
+    expect(data.cpu.id).toBe('MON-0001');
+  });
+
+  it('生成したモンスターを読めなければエラーにする', async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => (
+      String(input).startsWith('/api/')
+        ? { ok: false, json: async () => ({}) }
+        : {
+          ok: true,
+          json: async () => (String(input).endsWith('game-config.json')
+            ? { samplePlayerMonsterId: 'MON-0001', sampleCpuMonsterId: 'MON-0002', monsters: ['/player.json'] }
+            : player),
+        }
+    )) as unknown as typeof fetch;
+
+    await expect(loadGameData(fetcher, { photoId: 'abc' })).rejects.toThrow('読み込めませんでした');
+  });
+});

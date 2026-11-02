@@ -7,7 +7,7 @@
 //   s1 しゃしんを とろう      … 中ボタンでスマホに撮影の合図。写真が届いたら s2 へ
 //   s2 しゃしん × どうぶつ = ? … 中ボタン「がったい!」で生成を始めて s3 へ。左ボタンで撮り直し
 //   s3 がったい中            … サーバーからの progress に合わせて、進み具合を画面に渡す。結果が届いたら s4 へ
-//   s4 たんじょう            … カードを見せる。左「もう一回」/中「たたかう!」/右「いんさつ」
+//   s4 たんじょう            … カードを見せる。左「もう一回」/中「たたかう!」(じゃんけんバトル /battle/ へ)/右「いんさつ」
 // 操作は3つのボタン。キーボードの ← / Enter(Space)/ → でも押せる(USB の大きなボタンはキーとして届く)。
 // 開発者メニューは右下のボタンか D キーで開く(このファイルが画面に足す)。
 //
@@ -85,9 +85,16 @@ function buttonsFor(scene) {
   if (scene === "s3") return { left: null, center: { label: "まってね", disabled: true }, right: null };
   return {
     left: { label: "もう一回", action: restart },
-    center: { label: "たたかう!", action: () => toast("たたかう がめんは じゅんびちゅう") },
+    center: { label: "たたかう!", action: goBattle },
     right: { label: "いんさつ", action: () => toast("いんさつは じゅんびちゅう") },
   };
+}
+
+// じゃんけんバトル(友人の担当。/battle/)へ。できたモンスターは、バトルが /api/battle-monster/<photo_id> から読む。
+// テストプレイ・確認用の見本(写真の ID がない)では、バトルの見本のモンスターで戦う
+function goBattle() {
+  const id = state.photoId || "";
+  location.href = /^[0-9a-f]{32}$/.test(id) ? "/battle/?photo=" + id : "/battle/?play=sample";
 }
 
 let currentButtons = buttonsFor("s1");

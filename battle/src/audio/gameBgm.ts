@@ -1,4 +1,6 @@
-export const GAME_BGM_PATH = '/audio/adorable.mp3';
+import { assetUrl } from '../integration';
+
+export const GAME_BGM_PATH = assetUrl('/audio/adorable.mp3');
 export const GAME_BGM_VOLUME = 0.12;
 
 let gameBgm: HTMLAudioElement | null = null;

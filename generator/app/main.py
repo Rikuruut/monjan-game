@@ -31,6 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from .animals import ANIMAL_ICONS, ANIMALS, DEFAULT_ANIMAL_ICON, normalize_animal
+from .battle import make_battle_stats, to_battle_monster
 from .generator import GenerationResult, PartialCallback, get_generator
 from .kiosk import kiosk_enabled, open_kiosk_in_background
 from .net_utils import get_lan_ip
@@ -55,6 +56,7 @@ logger = logging.getLogger("monjan")
 # ディレクトリの場所
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
+BATTLE_DIR = STATIC_DIR / "battle"   # じゃんけんバトル(../battle/ を npm run build したもの)
 UPLOADS_DIR = BASE_DIR / "uploads"   # 届いた写真の一時置き場
 OUTPUTS_DIR = BASE_DIR / "outputs"   # 生成結果の保存先
 
@@ -96,7 +98,7 @@ async def no_cache_for_pages(request, call_next):
     """
     response = await call_next(request)
     path = request.url.path
-    if path in ("/", "/phone") or path.startswith("/static/"):
+    if path in ("/", "/phone") or path.startswith(("/static/", "/battle")):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -105,6 +107,13 @@ async def no_cache_for_pages(request, call_next):
 # ※ 2026年11月2日:それまでは両方を公開していて、outputs/ のフォルダ名は日時なので、
 #   同じ Wi-Fi の誰でも、子供の写真(photo.jpg)や記録のファイルを推測して開けた
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# じゃんけんバトル(友人の担当。React で作り、ビルドしたものを static/battle/ に置く)。
+# タイトル画面もここにあるので、展示は /battle/ から始まる
+if (BATTLE_DIR / "index.html").is_file():
+    app.mount("/battle", StaticFiles(directory=BATTLE_DIR, html=True), name="battle")
+else:
+    logger.warning("static/battle/ がありません。battle/ で npm.cmd run build してください")
 
 
 def phone_url() -> str:
@@ -679,6 +688,8 @@ async def _save_success(
         **report,
         "image_prompt": generation.prompt,
         "needs_retake": False,
+        # じゃんけんバトルの ⚔ と ♡(app/battle.py)
+        "battle": make_battle_stats(),
     }
     out_dir = await run_in_threadpool(
         save_result, OUTPUTS_DIR, run.photo_bytes, generation.image_bytes, result
@@ -718,6 +729,21 @@ async def api_revealed(photo_id: str = Form(...)) -> JSONResponse:
         raise HTTPException(status_code=404, detail="その写真のモンスターは見つかりませんでした")
     await ws_manager.notify_revealed(photo_id, f"/api/monster-image/{photo_id}")
     return JSONResponse({"ok": True})
+
+
+@app.get("/api/battle-monster/{photo_id}")
+async def api_battle_monster(photo_id: str) -> JSONResponse:
+    """できたモンスターを、じゃんけんバトルが読む形で返す(バトルの /battle/?photo=<photo_id> が読む)。"""
+    out_name = _photo_outputs.get(_check_photo_id(photo_id))
+    result_path = OUTPUTS_DIR / out_name / RESULT_NAME if out_name else None
+    if result_path is None or not result_path.is_file():
+        raise HTTPException(status_code=404, detail="その写真のモンスターは見つかりませんでした")
+    try:
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning("result.json を読めませんでした: %s", e)
+        raise HTTPException(status_code=500, detail="モンスターの記録を読めませんでした")
+    return JSONResponse(to_battle_monster(photo_id, result))
 
 
 # ----------------------------------------------------------------------

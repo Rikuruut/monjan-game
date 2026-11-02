@@ -26,6 +26,7 @@ import {
   setSfxVolume,
   unlockGameAudio,
 } from './audio/gameAudio';
+import { navigateTo } from './integration';
 
 vi.mock('./audio/gameBgm', () => ({
   startGameBgm: vi.fn(async () => undefined),
@@ -34,6 +35,11 @@ vi.mock('./audio/gameBgm', () => ({
   setGameBgmMuted: vi.fn(),
   setGameBgmVolume: vi.fn(),
   disposeGameBgm: vi.fn(),
+}));
+
+vi.mock('./integration', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./integration')>(),
+  navigateTo: vi.fn(),
 }));
 
 vi.mock('./audio/gameAudio', () => ({
@@ -480,5 +486,88 @@ describe('画面上のゲーム進行と演出', () => {
     expect(screen.getByLabelText('HP 4 / 4')).toBeInTheDocument();
     expect(screen.getByLabelText('HP 5 / 5')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+describe('撮影・合体の画面とのつなぎと、会場の3つのボタン', () => {
+  const generated = {
+    ...player,
+    id: 'abc',
+    name: 'ゴリシザー',
+    attribute: 'とがってる',
+    attack: 1000,
+    hp: 3000,
+    image: '/api/monster-image/abc',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const byPath: Record<string, unknown> = {
+      '/data/game-config.json': {
+        samplePlayerMonsterId: 'MON-0001',
+        sampleCpuMonsterId: 'MON-0002',
+        monsters: ['/player.json', '/cpu.json'],
+      },
+      '/player.json': player,
+      '/cpu.json': cpu,
+      '/api/battle-monster/abc': generated,
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => byPath[String(input)],
+    })));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const press = (key: string) => fireEvent.keyDown(window, { key });
+
+  it('展示ではタイトルのスタートで撮影・合体の画面へ移る', async () => {
+    render(<App launch={{ photoId: null, skipTitle: false, toGenerator: true }} />);
+    fireEvent.click(await screen.findByRole('button', { name: /スタート！/ }));
+    expect(navigateTo).toHaveBeenCalledWith('/');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('「たたかう!」から来たら、生まれたモンスターでタイトルを飛ばしてルール説明から始める', async () => {
+    render(<App launch={{ photoId: 'abc', skipTitle: true, toGenerator: true }} />);
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByAltText('ゴリシザー')).toHaveAttribute('src', '/api/monster-image/abc');
+    expect(screen.getByText('とがってるタイプ')).toBeInTheDocument();
+    expect(screen.getByLabelText('HP 3 / 3')).toBeInTheDocument();
+    expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  it('← / Enter / → だけで、スタートからじゃんけんまで遊べる', async () => {
+    render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
+    await screen.findByRole('button', { name: /スタート！/ });
+    vi.useFakeTimers();
+
+    press('Enter');
+    expect(screen.getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
+    press('Enter');
+    press('ArrowLeft');   // もどる
+    expect(screen.getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
+    press('Enter');
+    press('Enter');
+    // ルール説明のあいだは、手を選ばない
+    press('ArrowRight');
+    expect(playGameSound).not.toHaveBeenCalledWith('select');
+    press('Enter');       // バトルスタート！
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await advance(SUMMON_DISPLAY_MS);
+    await advance(RARITY_ROLL_MS);
+
+    press('ArrowRight');  // → はパー
+    expect(screen.getByRole('button', { name: /パー 星/ })).toHaveClass('hand-button--selected');
+    expect(playGameSound).toHaveBeenCalledWith('select');
+    // 演出中に押しても、二重に選ばない
+    press('ArrowLeft');
+    expect(vi.mocked(playGameSound).mock.calls.filter(([kind]) => kind === 'select')).toHaveLength(1);
   });
 });
