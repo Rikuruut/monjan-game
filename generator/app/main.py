@@ -916,12 +916,14 @@ def main() -> None:
     """`python -m app.main` で起動するための入口。"""
     import uvicorn
 
-    # PC用ページをキオスクモードで開く(.env の KIOSK_MODE=false で開かない)。
+    server = uvicorn.Server(uvicorn.Config("app.main:app", host="0.0.0.0", port=PORT, reload=False))
+
+    # PC用ページをキオスクモードで開く(.env の KIOSK_MODE=false で開かない)。ブラウザを閉じたらサーバーも止める。
     # uvicorn を直接動かしたとき(確認用の一時サーバーなど)は開かないよう、ここで行う
     if kiosk_enabled():
-        open_kiosk_in_background(PORT)
+        open_kiosk_in_background(PORT, on_close=lambda: setattr(server, "should_exit", True))
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=PORT, reload=False)
+    server.run()
 
 
 if __name__ == "__main__":

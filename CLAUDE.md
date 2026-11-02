@@ -26,7 +26,7 @@ cd battle; npm.cmd test                   # vitest
 cd battle; npm.cmd run build              # 型チェック + ../generator/static/battle/ に出力
 cd battle; npm.cmd run dev                # バトルだけを単体で開発(見本のモンスター。サーバー不要)
 ```
-- 起動すると、スマホの URL をターミナルに出し、`/battle/` を Edge(なければ Chrome)のキオスクモードで開く(`generator/app/kiosk.py`。`.env` の `KIOSK_MODE=false` で開かない。終わるのは Alt + F4)。`--autoplay-policy=no-user-gesture-required` なので、ページを移って BGM がいったん切れても、移った直後から音が出る
+- 起動すると、スマホの URL をターミナルに出し、`/battle/` を Edge(なければ Chrome)のキオスクモードで開く(`generator/app/kiosk.py`。`.env` の `KIOSK_MODE=false` で開かない。終わるのは Alt + F4 で、**ブラウザを閉じるとサーバーも止まる**。前のキオスクの窓が残っていたときは止まらない)。`--autoplay-policy=no-user-gesture-required` なので、ページを移って BGM がいったん切れても、移った直後から音が出る
 
 ## つなぎ方
 ```

@@ -2,7 +2,7 @@
 
 ページの側からはキオスクモードにできないので、サーバーを起動したときに
 ブラウザ(Edge。なければ Chrome)を `--kiosk` 付きで立ち上げる。
-キオスクモードを終わるときは Alt + F4。
+キオスクモードを終わるときは Alt + F4。ブラウザを閉じると、サーバーも止まる。
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import Callable
 
 from .env import env_flag
 
@@ -30,6 +31,10 @@ BROWSER_CANDIDATES = [
 # キオスク専用のブラウザのプロフィール。
 # ふだん使っている Edge が開いていると、--kiosk が無視されて普通の窓で開くため、別のプロフィールで起動する
 PROFILE_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "monjan-kiosk"
+
+# 立ち上げたブラウザがこれより早く終わったときは、閉じられたとはみなさない(秒)。
+# 同じプロフィールのキオスクがもう開いていると、新しいブラウザは前の窓に引き継いで、すぐに終わるため
+HANDOFF_SECONDS = 5.0
 
 
 def kiosk_enabled() -> bool:
@@ -61,7 +66,7 @@ def _wait_for_server(port: int, timeout: float = 30.0) -> bool:
     return False
 
 
-def _launch(url: str, port: int) -> None:
+def _launch(url: str, port: int, on_close: Callable[[], None] | None = None) -> None:
     browser = find_browser()
     if browser is None:
         logger.warning("キオスクモード:ブラウザ(Edge / Chrome)が見つかりませんでした。%s を手で開いてください", url)
@@ -80,14 +85,33 @@ def _launch(url: str, port: int) -> None:
         "--autoplay-policy=no-user-gesture-required",  # ページを移ったあとも、ボタンを押す前から音を出せるように
     ]
     try:
-        subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        logger.info("キオスクモードで開きました(%s)。終わるときは Alt + F4", browser.name)
+        started = time.monotonic()
+        process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        logger.info("キオスクモードで開きました(%s)。終わるときは Alt + F4(サーバーも止まります)", browser.name)
     except OSError as e:
         logger.warning("キオスクモード:ブラウザを起動できませんでした(%s)。%s を手で開いてください", e, url)
+        return
+    if on_close is not None:
+        _watch(process, started, on_close)
 
 
-def open_kiosk_in_background(port: int) -> None:
-    """サーバーの起動を止めないよう、別のスレッドでブラウザを開く。"""
+def _watch(process: subprocess.Popen, started: float, on_close: Callable[[], None]) -> None:
+    """ブラウザが閉じられるのを待って、on_close を呼ぶ(サーバーを止める)。
+
+    ※ 2026年11月2日:それまでは Alt + F4 でブラウザだけが閉じ、サーバーは裏のターミナルで動き続けていた。
+      止まっていないのに気づかず起動し直さなかったので、直したコードが読み込まれていなかった
+    """
+    process.wait()
+    if time.monotonic() - started < HANDOFF_SECONDS:
+        logger.warning("キオスクモード:前に開いたキオスクの窓が残っていたようです。"
+                       "この窓を閉じても、サーバーは止まりません(止めるときはターミナルで Ctrl + C)")
+        return
+    logger.info("キオスクのブラウザが閉じられたので、サーバーを止めます")
+    on_close()
+
+
+def open_kiosk_in_background(port: int, on_close: Callable[[], None] | None = None) -> None:
+    """サーバーの起動を止めないよう、別のスレッドでブラウザを開く。閉じられたら on_close を呼ぶ。"""
     # 展示はじゃんけんバトルのタイトル画面から始まる(スタートで / の撮影の画面へ進む)
     url = f"http://localhost:{port}/battle/"
-    threading.Thread(target=_launch, args=(url, port), daemon=True).start()
+    threading.Thread(target=_launch, args=(url, port, on_close), daemon=True).start()
