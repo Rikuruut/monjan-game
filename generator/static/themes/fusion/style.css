@@ -506,12 +506,15 @@ body {
   color: #fff;
   white-space: nowrap;
 }
-.el-fire    { background: #d9472f; }
-.el-water   { background: #2f7fd0; }
-.el-thunder { background: #e0b000; color: var(--ink); border-color: var(--ink); }
-.el-rock    { background: #8a6e4b; }
-.el-sharp   { background: #7a4fc4; }
-.el-soft    { background: #e07aa8; }
+/* タイプの色は、じゃんけんバトルの属性の濃い色(battle/src/styles.css の --element-deep)と同じ */
+.el-fire    { background: #a72d2d; }
+.el-water   { background: #176aa1; }
+.el-nature  { background: #33743e; }
+.el-light   { background: #a77c1d; }
+.el-dark    { background: #51398d; }
+.el-wind    { background: #277a69; }
+.el-earth   { background: #77502c; }
+.el-neutral { background: #536e80; }
 .card-art {
   margin-top: 12px;
   aspect-ratio: 4 / 3;

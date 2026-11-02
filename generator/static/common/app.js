@@ -319,14 +319,16 @@ async function playBirth() {
   showCard();   // テーマが呼ばなかった・失敗したときも、かならずカードは見せる
 }
 
-// 性質ごとのアイコンと色(カードの右上のバッジ)
+// タイプごとのアイコンと色(カードの右上のバッジ)。タイプと色はじゃんけんバトルの属性と同じ
 const ELEMENT_STYLES = {
-  "あつい":     { icon: "🔥", cls: "el-fire" },
-  "みず":       { icon: "💧", cls: "el-water" },
-  "でんき":     { icon: "⚡", cls: "el-thunder" },
-  "かたい":     { icon: "🪨", cls: "el-rock" },
-  "とがってる": { icon: "🗡️", cls: "el-sharp" },
-  "やわらかい": { icon: "☁️", cls: "el-soft" },
+  "火": { icon: "🔥", cls: "el-fire" },
+  "水": { icon: "💧", cls: "el-water" },
+  "草": { icon: "🌿", cls: "el-nature" },
+  "光": { icon: "✨", cls: "el-light" },
+  "闇": { icon: "🌙", cls: "el-dark" },
+  "風": { icon: "🌪️", cls: "el-wind" },
+  "土": { icon: "🪨", cls: "el-earth" },
+  "無": { icon: "⚪", cls: "el-neutral" },
 };
 
 function fillCard(data) {
@@ -334,7 +336,7 @@ function fillCard(data) {
   el("card-name").textContent = state.chosenName || m.monster_name || "???";
   const st = ELEMENT_STYLES[m.element] || { icon: "", cls: "" };
   el("card-element").className = "card-element " + st.cls;
-  el("card-element").textContent = m.element ? st.icon + " " + m.element : "";
+  el("card-element").textContent = m.element ? st.icon + " " + m.element + "タイプ" : "";
   const animal = (data.settings || {}).animal || state.animal;
   el("card-recipe").textContent = animal && m.object_name ? animal + " × " + m.object_name : "";
   el("card-desc").textContent = m.description || "";
@@ -825,7 +827,7 @@ function demoName() { return params.get("name") || "ゴリザミ"; }
 
 function demoSample() {
   return {
-    monster: { monster_name: demoName(), element: "とがってる", object_name: "はさみ",
+    monster: { monster_name: demoName(), element: "風", object_name: "はさみ",
                description: "はさみの つのを ふりかざし、なんでも きりひらく ちからもち。" },
     settings: { animal: state.animal },
     monster_url: params.get("img") || DEMO_IMG,

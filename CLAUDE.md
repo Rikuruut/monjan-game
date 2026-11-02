@@ -35,7 +35,7 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
 ```
 - サーバー(`generator/app/main.py`)が `generator/static/battle/` を `/battle/` で配る(`battle/vite.config.ts` の `base`・`build.outDir`)
 - 受け渡しは `GET /api/battle-monster/{id}`(`generator/app/battle.py`)。バトルの JSON 形式(`battle/docs/DATA_SPEC.md`)で返す
-  - `name` は子供が選んだ名前、`attribute` は性質(あつい など6つ)、`image` は `/api/monster-image/{photo_id}`
+  - `name` は子供が選んだ名前、`attribute` はタイプ(火 など8つ。バトルの属性と同じ)、`image` は `/api/monster-image/{photo_id}`
   - ⚔(attack)は 1〜3、♡(hp)は 3〜5 をランダム。絵ができたときに決めて `result.json` の `battle` に残す(カード印刷と数字をそろえるため)
   - id は photo_id のほか、`outputs/` のフォルダ名(絵は `/api/output-image/<フォルダ名>`)と `demo`(見本のゴリラ × はさみ。`?name=` で名前)も受け付ける
   - CPU は バトルの見本のモンスター(`battle/public/data/monsters/`)からランダム
@@ -44,7 +44,7 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
   - `?play=demo&name=<名前>`:見本のゴリラ × はさみで同じ(撮影側のテストプレイ・確認用の「たたかう!」)/ `?play=sample`:バトルの見本で同じ
   - `?standalone=1`:スタートで撮影の画面へ行かない。ビルドしていない開発用(`npm.cmd run dev`)とテストは、これまでどおり単体で動く
 - 操作は会場の3つのボタン(← / Enter・Space / →)。バトルでは左からグー・チョキ・パー、それ以外は中ボタンで進む。ルール説明は左で「もどる」
-- 性質6つはバトルの属性の見た目・音に対応させてある:あつい→火 / みず→水 / でんき→光 / かたい→土 / とがってる→風 / やわらかい→草
+- タイプは バトルの属性そのもの:火・水・草・光・闇・風・土・無(攻撃の色・音が変わる)。撮影側の判定が8つから選ぶ(2026年11月2日まではひらがなの性質6つで、バトルが読みかえていた。古い outputs/ の値もバトルはそのまま読める)
 
 ## 開発者メニュー
 D キーか右下の ⚙ で開く(会場の3つのボタンでは開かない)。撮影・合体(`generator/static/common/app.js`)とバトル(`battle/src/DevMenu.tsx`)で同じ見た目で、上の3つは共通。

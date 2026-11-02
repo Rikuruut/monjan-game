@@ -20,7 +20,7 @@ def good_raw(**override):
         "has_person": False,
         "retake_reason": "",
         "object_name": "はさみ",
-        "element": "とがってる",
+        "element": "風",
         "monster_name": "シザレオン",
         "name_candidates": ["シザレオン", "チョキオン", "ハサミガオン"],
         "description": "するどい たてがみで なんでも きりさく",
@@ -94,7 +94,7 @@ def test_fallback_name_that_passes_is_used():
 def test_good_raw_has_no_notes():
     monster, notes = validate_monster(good_raw(), animal="ライオン")
     assert notes == []
-    assert monster["element"] == "とがってる"
+    assert monster["element"] == "風"
     assert monster["monster_name"] in ("シザレオン", "チョキオン", "ハサミガオン")
 
 
@@ -113,9 +113,10 @@ def test_not_a_dict_gives_defaults():
     assert notes
 
 
-def test_unknown_element_becomes_katai():
-    monster, _ = validate_monster(good_raw(element="ほのお"))
-    assert monster["element"] == "かたい"
+def test_unknown_element_becomes_mu():
+    # 前の性質(あつい など)も、いまは一覧にないので「無」になる
+    monster, _ = validate_monster(good_raw(element="あつい"))
+    assert monster["element"] == "無"
 
 
 def test_empty_object_name_gets_default():

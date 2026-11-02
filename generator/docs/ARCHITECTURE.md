@@ -45,7 +45,7 @@ flowchart LR
 - サーバーは `0.0.0.0` で待ち受ける。スマホは `http://<PCのLAN内IP>:8000/phone` を開く(PC画面の開発者メニューにURLとQRコードが出る)
 - **リアルタイムの合図は WebSocket**、**写真などのデータは HTTP POST**
 - OpenAI API は2つ使う
-  - **判定**(テキスト用モデル):写真と動物から、物の名前・性質・モンスター名・説明文・絵の設計図を JSON で返してもらう
+  - **判定**(テキスト用モデル):写真と動物から、物の名前・タイプ・モンスター名・説明文・絵の設計図を JSON で返してもらう
   - **画像生成**(画像生成モデル):写真とプロンプトから、モンスターの絵を作る
 - HTTPS は使っていない(そのため、スマホのカメラは `getUserMedia` ではなく `<input type="file" capture>` で開く)
 
@@ -92,7 +92,7 @@ sequenceDiagram
         S-->>P: WS progress: partial(たまごのテーマで透かして見せる)
     and
         S->>O: 名前・説明(写真 + 物の名前)
-        O-->>S: 性質・名前の候補・説明文(JSON)
+        O-->>S: タイプ・名前の候補・説明文(JSON)
         Note over S: validator でチェック・補正
         S-->>M: WS progress: names(名前の候補)
     end
@@ -221,8 +221,8 @@ monjan-prototype/
 | 撮り直し | `ok: true`、`needs_retake: true`、`retake_reason`、`monster`、`timings`、`usage` |
 | 失敗 | `ok: false`、`step`(「判定」「画像生成」、保存などの思わぬエラーは「サーバー」)、`error`、(判定まで済んでいれば)`monster`・`usage`。どの失敗でも WebSocket で `progress: error` を送る |
 
-`monster` の主な項目:`object_name`(物の名前)・`element`(性質:あつい / みず / でんき / かたい / とがってる / やわらかい)・`monster_name`・`name_candidates`・`description`・`needs_retake`・`retake_reason`・`has_person`・`design_plan`(絵の設計図)。
-性質 `element` は絵には使っておらず、バトル用に保存しているだけです(**要確認**:バトルでの使い方)。
+`monster` の主な項目:`object_name`(物の名前)・`element`(タイプ:火 / 水 / 草 / 光 / 闇 / 風 / 土 / 無。バトルの属性と同じ)・`monster_name`・`name_candidates`・`description`・`needs_retake`・`retake_reason`・`has_person`・`design_plan`(絵の設計図)。
+タイプ `element` は絵には使っておらず、バトルの攻撃の色・音と、カードのバッジに使います。
 
 ### WebSocket(`/ws?role=pc` または `/ws?role=phone`)
 
@@ -344,7 +344,7 @@ python -m pytest
 
 | 項目 | 内容 |
 |---|---|
-| バトルとのつなぎ方 | 対戦システムがどこにあり、モンスターのデータ(名前・絵・性質)をどう渡すか |
+| バトルとのつなぎ方 | 対戦システムがどこにあり、モンスターのデータ(名前・絵・タイプ)をどう渡すか |
 | カードの印刷 | 印刷の方式・用紙・プリンター |
 | タイトル画面 | 対戦システムの側にあるのか |
 | 展示本番の設定 | 使うモデル・画質・テーマ・`ALLOW_PERSON`(人が写った写真を使うか) |

@@ -37,10 +37,11 @@ def names_of(sent):
 # 指示文
 # ----------------------------------------------------------------------
 def test_recognize_instructions_did_not_change():
-    # 部品に分ける前(2026年11月2日)の指示文と、1字も変わっていない(詳しいプロンプトの結果を変えないため)
+    # 部品に分ける前(2026年11月2日)の指示文と、タイプの節のほかは1字も変わっていない(詳しいプロンプトの結果を変えないため)。
+    # ハッシュは、同じ日に性質をタイプ(火・水 など)に変えたときの指示文
     expected = {
-        False: "87774d8466cc952ad8032a6bc3e6407ac160abd82b107967700828feae4dc7c3",
-        True: "064bb12ec63aa69a63327f97b5663725eef1e3f91c5db70b4e5efd6ab208c631",
+        False: "6dd6581658191e386a99cc2bd82927e8288e107b9dd4cac53aa009de30080048",
+        True: "ed264b30b47b0e438b1b6cac5143ff453c320c2cb790631bac42a86f87154cf7",
     }
     for allow_person, digest in expected.items():
         text = build_recognize_instructions(allow_person)

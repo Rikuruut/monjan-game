@@ -12,7 +12,7 @@ import os
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -25,6 +25,7 @@ from .prompts import (
     NAME_TEST_INSTRUCTIONS,
     QUICK_CHECK_PROMPT,
     STAGING_OPTIONS,
+    ElementName,
     background_place_candidates,
     build_describe_instructions,
     build_describe_prompt,
@@ -65,14 +66,14 @@ class DesignPlan(BaseModel):
 class MonsterInfo(BaseModel):
     """モデルに返してもらう形式(構造化出力のスキーマになる)。
 
-    element は6種類に限定するので、モデル側でも選択肢が守られやすくなる。
+    element はタイプ8種類に限定するので、モデル側でも選択肢が守られやすくなる。
     それでも念のため validator.py でもう一度チェックする。
     """
 
     needs_retake: bool
     retake_reason: str
     object_name: str
-    element: Literal["あつい", "みず", "でんき", "かたい", "とがってる", "やわらかい"]
+    element: ElementName
     monster_name: str
     name_candidates: list[str]   # 名前の候補3つ(validator がチェックし、合格したものからランダムに選ぶ)
     description: str
@@ -372,7 +373,7 @@ class QuickCheck(BaseModel):
 class MonsterDetails(BaseModel):
     """名前・説明で返してもらう形式。"""
 
-    element: Literal["あつい", "みず", "でんき", "かたい", "とがってる", "やわらかい"]
+    element: ElementName
     monster_name: str
     name_candidates: list[str]   # 名前の候補3つ(validator がチェックし、合格したものからランダムに選ぶ)
     description: str
@@ -382,7 +383,7 @@ class MonsterDetails(BaseModel):
 _DRY_CHECK = {"needs_retake": False, "retake_reason": "", "has_person": False, "object_name": "ダミーのもの",
               "object_part": "ダミーのパーツ", "object_sub_part": "ダミーのサブパーツ"}
 _DRY_DETAILS = {
-    "element": "かたい",
+    "element": "土",
     "monster_name": "ダミーモン",
     "name_candidates": ["ダミーモン", "ダミガオン", "モノドラ"],
     "description": "からうちモードの ダミーの モンスター",
@@ -403,7 +404,7 @@ def quick_check(photo_bytes: bytes) -> StepResult:
 
 
 def describe(photo_bytes: bytes, animal: str, object_name: str, plan: Plan, person: bool = False) -> StepResult:
-    """名前・説明:性質・モンスター名の候補・説明文。画像生成と同時に呼ぶ。
+    """名前・説明:タイプ・モンスター名の候補・説明文。画像生成と同時に呼ぶ。
 
     `person` は、人モードで写真の主役が人のとき(名前や説明で本人をからかわないよう伝える)。
     """

@@ -72,7 +72,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
   すぐ要る判定 `quick_check`(`needs_retake`・`retake_reason`・`has_person`・`object_name`)→ 画像生成を始める →
   同時に名前・説明 `describe`(`element`・`monster_name`・`name_candidates`(3つ)・`description`)。design_plan(detailed だけ。6項目。`recognizer.MonsterInfo`)は作らない。
   指示文は部品に分けてあり(`prompts.py`)、detailed の `RECOGNIZE_INSTRUCTIONS` は分ける前と1字も変わらない(テストで確かめている)
-- 性質 `element` は6つから1つ:あつい / みず / でんき / かたい / とがってる / やわらかい。**画像プロンプトには入れない**(バトル用に保存するだけ)
+- タイプ `element` は8つから1つ:火・水・草・光・闇・風・土・無(バトルの属性と同じ。`prompts.ElementName`)。**画像プロンプトには入れない**(バトルとカードのバッジに使うだけ)
 - 撮り直し:人が写っている・物がはっきりしない・子供にふさわしくない物。**物を持つ手や指だけなら人とみなさない**(指だけで人モードになり、人の特徴が描かれた)。
   判定の返答を読めない(モデルが断った)ときも撮り直し(不適切な写真で断られることが多いため)
 - 説明文は子供向けにひらがな中心。simple では**図鑑の一文**(絵を見ても分からない、くせ・すきなことなどの小さなお話)。
@@ -82,7 +82,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 ### チェック(`validator.py`。テストあり)
 | 項目 | ルール | 不正なとき |
 |---|---|---|
-| `element` | 6種類のどれか | かたい |
+| `element` | タイプ8種類のどれか | 無 |
 | `name_candidates` | カタカナだけ・2〜10文字・NG語なし・小さい文字が続かない・物と動物を並べただけでない | 合格したものから 50/30/20% の重みで1つを `monster_name` に |
 | `monster_name` | 候補がすべて不合格のときだけ使う。10文字以内で、候補と同じチェック | 切る。不合格・空なら「なぞのモンスター」 |
 | `description` | 40文字以内 | 40文字までの最後の区切り(空白・、・。)で切る。15文字未満になるなら文字数で切る |

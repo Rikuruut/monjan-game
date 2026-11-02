@@ -27,7 +27,7 @@ def test_battle_stats_are_in_range():
 def test_to_battle_monster_has_the_battle_format():
     result = {
         "animal": "ゴリラ",
-        "monster": {"monster_name": "ゴリシザー", "object_name": "はさみ", "element": "とがってる",
+        "monster": {"monster_name": "ゴリシザー", "object_name": "はさみ", "element": "風",
                     "description": "はさみの うでで なんでも きっちゃう"},
         "battle": {"attack": 2000, "hp": 4000},
     }
@@ -36,7 +36,7 @@ def test_to_battle_monster_has_the_battle_format():
         "id": "a" * 32,
         "name": "ゴリシザー",
         "source": {"animal": "ゴリラ", "object": "はさみ"},
-        "attribute": "とがってる",
+        "attribute": "風",
         "attack": 2000,
         "hp": 4000,
         "description": "はさみの うでで なんでも きっちゃう",
@@ -92,7 +92,7 @@ def make_output(name, *, retake=False, image=True, monster_name="ゴリシザー
     d.mkdir(parents=True)
     result = {
         "created_at": "2026-11-02T10:00:00", "animal": "ゴリラ", "needs_retake": retake,
-        "monster": {"monster_name": monster_name, "object_name": "はさみ", "element": "とがってる"},
+        "monster": {"monster_name": monster_name, "object_name": "はさみ", "element": "風"},
         "battle": {"attack": 3000, "hp": 5000},
     }
     (d / "result.json").write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")

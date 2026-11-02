@@ -11,6 +11,8 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from .prompts import DEFAULT_ELEMENT
+
 # ⚔ の数(1000 = 1個)。バトルの仕様どおり 1〜3 個
 ATTACK_CHOICES = (1000, 2000, 3000)
 # ♡ の数(1000 = 1個)。バトルの仕様は 1〜5 個だが、1〜2 個だと1回負けただけで終わってしまうので 3〜5 個にする
@@ -28,7 +30,7 @@ def to_battle_monster(photo_id: str, result: dict[str, Any], image: str | None =
     """result.json の中身を、バトルが読む形にする。
 
     名前は子供がスマホで選んだもの(選んだときに result.json の monster_name が書きかわる)。
-    性質(あつい など)は attribute にそのまま入れる(バトルでは勝ち負けに使わず、見た目だけに使う)。
+    タイプ(火 など。バトルの属性と同じ)は attribute にそのまま入れる(勝ち負けには使わず、攻撃の色と音だけに使う)。
     image は絵の URL。なければ、いま作った絵(/api/monster-image/<photo_id>)。
     """
     monster = result.get("monster") or {}
@@ -40,7 +42,7 @@ def to_battle_monster(photo_id: str, result: dict[str, Any], image: str | None =
             "animal": result.get("animal") or "",
             "object": monster.get("object_name") or "",
         },
-        "attribute": monster.get("element") or "かたい",
+        "attribute": monster.get("element") or DEFAULT_ELEMENT,
         "attack": stats.get("attack") if stats.get("attack") in ATTACK_CHOICES else ATTACK_CHOICES[0],
         "hp": stats.get("hp") if stats.get("hp") in HP_CHOICES else HP_CHOICES[0],
         "description": monster.get("description") or "",
@@ -63,7 +65,7 @@ def recent_monster_entry(out_name: str, result: dict[str, Any]) -> dict[str, Any
 
 
 # 撮影・合体の画面のテストプレイ・確認用の見本(ゴリラ × はさみ)。
-# 名前・性質・説明・絵は static/common/app.js の demoSample と同じにしている
+# 名前・タイプ・説明・絵は static/common/app.js の demoSample と同じにしている
 DEMO_ID = "demo"
 DEMO_NAME = "ゴリザミ"
 DEMO_NAME_MAX = 20   # URL から来る名前なので、長すぎるものは切る
@@ -75,7 +77,7 @@ def demo_battle_monster(name: str | None = None) -> dict[str, Any]:
         "id": DEMO_ID,
         "name": (name or "").strip()[:DEMO_NAME_MAX] or DEMO_NAME,
         "source": {"animal": "ゴリラ", "object": "はさみ"},
-        "attribute": "とがってる",
+        "attribute": "風",
         "attack": ATTACK_CHOICES[1],
         "hp": HP_CHOICES[1],
         "description": "はさみの つのを ふりかざし、なんでも きりひらく ちからもち。",
