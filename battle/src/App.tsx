@@ -13,7 +13,9 @@ import {
   setGameBgmVolume,
   startGameBgm,
 } from './audio/gameBgm';
+import { AttackProjectile, Drift, ImpactBurst, type AttributeTheme } from './BattleEffects';
 import { loadGameData, type GameData } from './data/loadGameData';
+import { Deck } from './Deck';
 import { DevMenu, type DevJump } from './DevMenu';
 import { readAutoplay, writeAutoplay, type Autoplay } from './devTools';
 import {
@@ -35,6 +37,7 @@ import {
   type Launch,
   type PadButton,
 } from './integration';
+import { Stage } from './stage';
 import { HANDS, type Hand, type Monster, type RoundResult, type StarMap } from './types';
 
 type Screen = 'title' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
@@ -56,28 +59,32 @@ export type BattlePhase =
   | 'next-round';
 
 export const SUMMON_DISPLAY_MS = 1200;
-export const RESULT_DISPLAY_MS = 2300;
+// 最後の一撃のときは、この間に 倒れたカードが沈む演出を見せる
+export const RESULT_DISPLAY_MS = 2000;
 export const NEXT_ROUND_DISPLAY_MS = 700;
 export const RARITY_ROLL_MS = 650;
 export const SELECTED_DISPLAY_MS = 400;
 export const JANKEN_BEAT_MS = 700;
 export const REVEAL_DISPLAY_MS = 1000;
 export const STAR_SHOWDOWN_MS = 1200;
-export const ATTACK_DISPLAY_MS = 480;
-export const IMPACT_DISPLAY_MS = 420;
+// 攻撃:ためる → 飛ぶ → 当たる を見せる(2026年11月2日 480 → 700ms)
+export const ATTACK_DISPLAY_MS = 700;
+// 命中:一瞬止まって(ヒットストップ)から ゆれる(2026年11月2日 420 → 600ms)
+export const IMPACT_DISPLAY_MS = 600;
 // 通しの自動プレイ(開発者メニュー)で、ボタンを押すまでに待つ時間
 export const AUTOPLAY_TITLE_MS = 2000;
 export const AUTOPLAY_RULES_MS = 800;
 export const AUTOPLAY_HAND_MS = 1000;
 export const AUTOPLAY_WAIT_MS = 3000;
 
-type AttributeTheme = 'fire' | 'water' | 'nature' | 'light' | 'dark' | 'wind' | 'earth' | 'neutral';
-
 const HAND_META: Record<Hand, { emoji: string; label: string }> = {
   rock: { emoji: '✊', label: 'グー' },
   scissors: { emoji: '✌️', label: 'チョキ' },
   paper: { emoji: '✋', label: 'パー' },
 };
+
+// 手のカードの下に出す、会場のボタンの案内(左からグー・チョキ・パー)
+const HAND_KEYS: Record<Hand, string> = { rock: '◀', scissors: '●', paper: '▶' };
 
 const RESULT_COPY = {
   victory: {
@@ -97,6 +104,13 @@ const RESULT_COPY = {
   },
 } as const;
 
+// 最後の一撃のあと、結果の画面へ移るまでに大きく出す ひとこと
+const FINAL_BLOW_COPY = {
+  victory: 'やったー！',
+  defeat: 'まけちゃった…',
+  draw: 'あいうち！',
+} as const;
+
 // ひらがなの6つ(あつい など)は、撮影・合体の画面で生まれたモンスターの性質
 function getAttributeTheme(attribute: string): AttributeTheme {
   if (/火|炎|fire|あつい/i.test(attribute)) return 'fire';
@@ -107,14 +121,6 @@ function getAttributeTheme(attribute: string): AttributeTheme {
   if (/風|空|wind|とがってる/i.test(attribute)) return 'wind';
   if (/土|岩|earth|rock|かたい/i.test(attribute)) return 'earth';
   return 'neutral';
-}
-
-function FantasyAtmosphere({ variant }: { variant: 'title' | 'battle' | 'thanks' }) {
-  return (
-    <div className={`fantasy-atmosphere fantasy-atmosphere--${variant}`} aria-hidden="true">
-      {Array.from({ length: 9 }, (_, index) => <i key={index} />)}
-    </div>
-  );
 }
 
 function statCount(value: number): number {
@@ -151,7 +157,6 @@ function SoundControls({
   enabled,
   bgmVolume,
   sfxVolume,
-  compact = false,
   onToggle,
   onBgmVolumeChange,
   onSfxVolumeChange,
@@ -159,13 +164,12 @@ function SoundControls({
   enabled: boolean;
   bgmVolume: number;
   sfxVolume: number;
-  compact?: boolean;
   onToggle: () => void;
   onBgmVolumeChange: (value: number) => void;
   onSfxVolumeChange: (value: number) => void;
 }) {
   return (
-    <div className={`sound-controls ${compact ? 'sound-controls--compact' : ''}`} aria-label="サウンド設定">
+    <div className="sound-controls" aria-label="サウンド設定">
       <button
         className="sound-toggle"
         type="button"
@@ -174,7 +178,6 @@ function SoundControls({
         onClick={onToggle}
       >
         <span aria-hidden="true">{enabled && (bgmVolume > 0 || sfxVolume > 0) ? '🔊' : '🔇'}</span>
-        <span className="sound-toggle__label">サウンド {enabled ? 'ON' : 'OFF'}</span>
       </button>
       <div className="sound-mixer">
         <label className="volume-control">
@@ -224,10 +227,18 @@ function MonsterImage({ monster }: { monster: Monster }) {
   );
 }
 
-function AttributeEffect({ theme }: { theme: AttributeTheme }) {
+/** 撮影・合体の画面の誕生カード(fusion の .card)と同じ作りのカード:名前とタイプの帯・絵 */
+function MonsterCard({ monster, className = '', imageClassName = '' }: { monster: Monster; className?: string; imageClassName?: string }) {
+  const theme = getAttributeTheme(monster.attribute);
   return (
-    <div className={`attribute-effect attribute-effect--${theme}`} aria-hidden="true">
-      {Array.from({ length: 7 }, (_, index) => <i key={index} />)}
+    <div className={`monster-card ${className}`.trim()}>
+      <header className="monster-card__head">
+        <h2>{monster.name}</h2>
+        <span className={`attribute-badge el-${theme}`}>{monster.attribute}タイプ</span>
+      </header>
+      <div className={`monster-frame monster-image-container ${imageClassName}`.trim()}>
+        <MonsterImage monster={monster} />
+      </div>
     </div>
   );
 }
@@ -249,9 +260,14 @@ function MonsterPanel({
 }) {
   const theme = getAttributeTheme(monster.attribute);
   const damage = side === 'player' ? result?.playerDamage ?? 0 : result?.cpuDamage ?? 0;
-  const isAttacking = phase === 'attack' && result?.winner === side;
+  const isAttacking = phase === 'attack' && (result?.winner === side || result?.winner === 'none');
   const isSummoning = phase === 'summon';
   const showDamage = phase === 'impact' && damage > 0;
+  // そのラウンドで勝った側は金に光り、負けた側は少し暗くなる
+  const roundDecided = result && result.winner !== 'none' && ['attack', 'impact', 'result'].includes(phase);
+  const isRoundWinner = Boolean(roundDecided && result?.winner === side);
+  const isRoundLoser = Boolean(roundDecided && result?.winner !== side && phase === 'result');
+  const isDefeated = hp === 0 && (phase === 'impact' || phase === 'result');
 
   return (
     <article
@@ -263,58 +279,39 @@ function MonsterPanel({
         isHit ? 'monster-panel--hit' : '',
         isAttacking ? 'monster-panel--attacking' : '',
         isSummoning ? 'monster-panel--summoning' : '',
+        isRoundWinner ? 'monster-panel--round-winner' : '',
+        isRoundLoser ? 'monster-panel--round-loser' : '',
+        isDefeated ? 'monster-panel--defeated' : '',
       ].filter(Boolean).join(' ')}
     >
-      <div className="monster-status">
-        <div className="monster-heading">
-          <div>
-            <span className="side-label">{side === 'player' ? 'あなた' : 'CPU'}</span>
-            <h2>{monster.name}</h2>
-          </div>
-          <span className="attribute-badge">{monster.attribute}タイプ</span>
-        </div>
-        <div className="stats-row">
-          <div className="attack-row">
-            <span>ATK</span>
-            <Swords count={statCount(monster.attack)} />
-          </div>
-          <div className="hp-row">
-            <span>HP</span>
-            <Hearts
-              current={hp}
-              max={statCount(monster.hp)}
-              damage={phase === 'impact' ? damage : 0}
-            />
-          </div>
-        </div>
+      <div className="monster-tag">
+        <span className="side-label">{side === 'player' ? 'あなた' : 'CPU'}</span>
+        <Swords count={statCount(monster.attack)} />
       </div>
-      <div className="monster-stage">
+      <div className="monster-card-motion">
         {isSummoning && (
           <div className="summon-fx" aria-hidden="true">
-            <i /><i /><b>✦</b><span>✧</span>
+            <i /><i /><b>✦</b>
           </div>
         )}
-        <div className="monster-card-motion">
-          <div className="monster-frame monster-image-container monster-image-container--battle">
-            <MonsterImage monster={monster} />
-          </div>
-          {isAttacking && <AttributeEffect theme={theme} />}
-        </div>
-        <div className="monster-shadow" aria-hidden="true" />
-        <div className="foreground-grass" aria-hidden="true">♧ ♧ ♧</div>
-        {showDamage && <span className="damage-burst" aria-label={`${damage}ダメージ`}>−{damage}♥</span>}
+        <MonsterCard monster={monster} imageClassName="monster-image-container--battle" />
       </div>
+      <div className="monster-hp">
+        <span className="monster-hp__label">HP</span>
+        <Hearts current={hp} max={statCount(monster.hp)} damage={phase === 'impact' ? damage : 0} />
+      </div>
+      {showDamage && <span className="damage-burst" aria-label={`${damage}ダメージ`}>−{damage}</span>}
     </article>
   );
 }
 
-function NextRoundNotice() {
+function NextRoundNotice({ round }: { round: number }) {
   return (
-    <div className="next-round-layer" role="status" aria-live="assertive">
-      <div className="next-round-notice">
-        <span aria-hidden="true">★</span>
+    <div className="banner-layer" role="status" aria-live="assertive">
+      <div className="banner next-round-notice">
+        <small>ラウンド {round}</small>
         <strong>次のラウンド！</strong>
-        <small>あたらしい★になったよ</small>
+        <span>あたらしい★になったよ</span>
       </div>
     </div>
   );
@@ -322,10 +319,10 @@ function NextRoundNotice() {
 
 function RarityNotice() {
   return (
-    <div className="rarity-notice" role="status" aria-live="polite">
-      <span aria-hidden="true">✦</span>
-      <strong>★ レア度抽選！</strong>
-      <span aria-hidden="true">✦</span>
+    <div className="banner-layer banner-layer--low" role="status" aria-live="polite">
+      <div className="banner banner--small rarity-notice">
+        <strong>★ レア度抽選！</strong>
+      </div>
     </div>
   );
 }
@@ -334,16 +331,17 @@ function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolea
   const [step, setStep] = useState(0);
   const isLastStep = step === 2;
   const next = () => { if (isLastStep) onClose(); else setStep((current) => current + 1); };
+  const back = () => setStep((current) => Math.max(0, current - 1));
 
   // 左「もどる」・中「つぎへ」
   usePadButtons((button) => {
     if (button === 'center') next();
-    else if (button === 'left' && step > 0) setStep((current) => current - 1);
+    else if (button === 'left' && step > 0) back();
   });
 
   return (
     <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
-      <section className="tutorial-card tutorial-card--steps">
+      <section className="tutorial-card">
         <div className="tutorial-progress" aria-label={`ルール ${step + 1} / 3`}>
           {[0, 1, 2].map((index) => (
             <span key={index} className={index === step ? 'is-current' : index < step ? 'is-done' : ''}>
@@ -354,7 +352,6 @@ function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolea
 
         {step === 0 && (
           <div className="tutorial-page">
-            <span className="tutorial-page__number">①</span>
             <h2 id="tutorial-title">じゃんけんで 勝負！</h2>
             <p>グー・チョキ・パーから<br /><strong>1つ えらぼう！</strong></p>
             <div className="tutorial-example tutorial-rps" aria-label="じゃんけんの勝ち方">
@@ -367,7 +364,6 @@ function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolea
 
         {step === 1 && (
           <div className="tutorial-page">
-            <span className="tutorial-page__number">②</span>
             <h2 id="tutorial-title">同じ手なら 星で勝負！</h2>
             <p>同じ手が出たら、<br /><strong>★が多い方の かち！</strong></p>
             <div className="tutorial-example tutorial-stars" aria-label="星の強さは3、2、1の順">
@@ -379,7 +375,6 @@ function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolea
 
         {step === 2 && (
           <div className="tutorial-page">
-            <span className="tutorial-page__number">③</span>
             <h2 id="tutorial-title">相手の ハートをへらそう！</h2>
             <p>じゃんけんに勝つと、<br /><strong>⚔の数だけ 相手の♡がへるよ！</strong></p>
             <div className="tutorial-example tutorial-damage" aria-label="剣2つならハート2つのダメージ">
@@ -390,22 +385,18 @@ function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolea
             <p className="tutorial-note"><strong>相手の♡を ぜんぶなくしたら かち！</strong></p>
           </div>
         )}
-
-        <div className="tutorial-actions">
-          {step > 0 && (
-            <button className="tutorial-back" type="button" onClick={() => setStep((current) => current - 1)}>
-              もどる
-            </button>
-          )}
-          <button
-            className="primary-button"
-            type="button"
-            onClick={next}
-          >
-            {isLastStep ? (isReview ? 'バトルにもどる' : 'バトルスタート！') : 'つぎへ'}
-          </button>
-        </div>
       </section>
+
+      <Deck
+        knobs={{
+          left: step > 0 ? { label: 'もどる', onClick: back } : undefined,
+          center: {
+            label: isLastStep ? (isReview ? 'バトルにもどる' : 'バトルスタート！') : 'つぎへ',
+            onClick: next,
+            call: true,
+          },
+        }}
+      />
     </div>
   );
 }
@@ -424,7 +415,7 @@ function ChoiceButtons({
   onSelect: (hand: Hand) => void;
 }) {
   return (
-    <div className="choice-area">
+    <div className={`choice-area ${disabled ? 'choice-area--locked' : ''}`.trim()}>
       <p className="choice-prompt">{disabled ? 'しょうぶの けっかは…' : 'どの手にする？'}</p>
       <div className="choice-buttons">
         {HANDS.map((hand) => (
@@ -442,7 +433,8 @@ function ChoiceButtons({
           >
             <span className="star-badge" aria-hidden="true">{'★'.repeat(stars[hand])}</span>
             <span className="hand-emoji" aria-hidden="true">{HAND_META[hand].emoji}</span>
-            <span>{HAND_META[hand].label}</span>
+            <span className="hand-label">{HAND_META[hand].label}</span>
+            <span className="hand-key" aria-hidden="true">{HAND_KEYS[hand]}</span>
           </button>
         ))}
       </div>
@@ -468,6 +460,8 @@ function RoundFeedback({
   const cpuVisible = ['reveal', 'star-showdown', 'attack', 'impact', 'result'].includes(phase);
   const sameHand = result.reason === 'star' || result.reason === 'perfect-tie';
   const starShowdown = phase === 'star-showdown';
+  // 手のぶつかりで、勝った手を大きく、負けた手を灰色にする(ぽん!のあと、手を見せてから)
+  const decided = cpuVisible && (phase !== 'reveal' || !sameHand);
   const message =
     result.winner === 'player'
       ? 'あなたの かち！'
@@ -508,21 +502,20 @@ function RoundFeedback({
     phaseSub = result.winner === 'none' ? 'おたがいに 1ダメージ！' : 'こうげきが めいちゅう！';
   }
 
-  const playerHandClass = [
+  const handClass = (side: 'player' | 'cpu') => [
     'revealed-hand',
-    'revealed-hand--player',
+    `revealed-hand--${side}`,
     sameHand ? 'revealed-hand--same-hand' : '',
-    starShowdown && result.winner === 'player' ? 'revealed-hand--winner' : '',
+    starShowdown && result.winner === side ? 'revealed-hand--winner' : '',
     starShowdown && result.winner === 'none' ? 'revealed-hand--perfect-tie' : '',
+    decided && result.winner === side ? 'revealed-hand--won' : '',
+    decided && result.winner !== side && result.winner !== 'none' ? 'revealed-hand--lost' : '',
+    side === 'cpu' && !cpuVisible ? 'revealed-hand--concealed' : '',
   ].filter(Boolean).join(' ');
-  const cpuHandClass = [
-    'revealed-hand',
-    'revealed-hand--cpu',
-    sameHand ? 'revealed-hand--same-hand' : '',
-    starShowdown && result.winner === 'cpu' ? 'revealed-hand--winner' : '',
-    starShowdown && result.winner === 'none' ? 'revealed-hand--perfect-tie' : '',
-    !cpuVisible ? 'revealed-hand--concealed' : '',
-  ].filter(Boolean).join(' ');
+  // 同じ手のときは、2つの手のあいだに ★ の くらべ(> < =)を出す
+  const starCompare = sameHand && ['star-showdown', 'attack', 'impact', 'result'].includes(phase)
+    ? (result.winner === 'player' ? '＞' : result.winner === 'cpu' ? '＜' : '＝')
+    : null;
 
   return (
     <div
@@ -535,28 +528,32 @@ function RoundFeedback({
       role="status"
       aria-live="assertive"
     >
-      <div className={playerHandClass}>
-        <span>あなた</span>
-        <b>{HAND_META[playerHand].emoji}</b>
-        <em className="star-strength">{'★'.repeat(playerStar)}</em>
+      <div className="clash">
+        <div className={handClass('player')}>
+          <span>あなた</span>
+          <b>{HAND_META[playerHand].emoji}</b>
+          <em className="star-strength">{'★'.repeat(playerStar)}</em>
+        </div>
+        {starCompare && <span className="star-compare" aria-hidden="true">{starCompare}</span>}
+        <div className={handClass('cpu')}>
+          <span>CPU</span>
+          {cpuVisible ? (
+            <>
+              <b>{HAND_META[cpuHand].emoji}</b>
+              <em className="star-strength">{'★'.repeat(cpuStar)}</em>
+            </>
+          ) : (
+            <>
+              <b aria-label="CPUの手はまだひみつ">？</b>
+              <em className="star-strength" aria-hidden="true">？？？</em>
+            </>
+          )}
+        </div>
+        {phase === 'reveal' && <span className="clash-spark" aria-hidden="true" />}
       </div>
-      <div className="feedback-copy">
+      <div className="feedback-copy" key={phase}>
         <strong>{phaseMessage}</strong>
         <span>{phaseSub}</span>
-      </div>
-      <div className={cpuHandClass}>
-        <span>CPU</span>
-        {cpuVisible ? (
-          <>
-            <b>{HAND_META[cpuHand].emoji}</b>
-            <em className="star-strength">{'★'.repeat(cpuStar)}</em>
-          </>
-        ) : (
-          <>
-            <b aria-label="CPUの手はまだひみつ">？</b>
-            <em className="star-strength" aria-hidden="true">？？？</em>
-          </>
-        )}
       </div>
     </div>
   );
@@ -568,6 +565,7 @@ function BattleScreen({
   cpuHp,
   playerStars,
   cpuStars,
+  round,
   tutorialMode,
   phase,
   playerHand,
@@ -582,6 +580,7 @@ function BattleScreen({
   cpuHp: number;
   playerStars: StarMap;
   cpuStars: StarMap;
+  round: number;
   tutorialMode: TutorialMode | null;
   phase: BattlePhase;
   playerHand: Hand | null;
@@ -592,17 +591,18 @@ function BattleScreen({
   onSelect: (hand: Hand) => void;
 }) {
   const tutorialOpen = tutorialMode !== null;
+  const playerTheme = getAttributeTheme(data.player.attribute);
+  const cpuTheme = getAttributeTheme(data.cpu.attribute);
   const attackerTheme =
-    result?.winner === 'player'
-      ? getAttributeTheme(data.player.attribute)
-      : result?.winner === 'cpu'
-        ? getAttributeTheme(data.cpu.attribute)
-        : 'neutral';
+    result?.winner === 'player' ? playerTheme : result?.winner === 'cpu' ? cpuTheme : 'neutral';
   const isFinalBlow = Boolean(
     result
     && (result.playerHp === 0 || result.cpuHp === 0)
     && ['attack', 'impact', 'result'].includes(phase),
   );
+  const outcome = result ? getGameOutcome(result.playerHp, result.cpuHp) : 'ongoing';
+  // 画面のゆれは、大きいほうのダメージで強くする(1〜3)
+  const shake = result ? Math.min(3, Math.max(result.playerDamage, result.cpuDamage)) : 0;
   const screenClass = [
     'screen',
     'battle-screen',
@@ -614,33 +614,32 @@ function BattleScreen({
 
   return (
     <main className={screenClass}>
-      <FantasyAtmosphere variant="battle" />
-      <div className="battle-ground-glow" aria-hidden="true" />
+      <div className="scene-vignette" aria-hidden="true" />
+      <Drift />
       <div className="battle-topbar">
-        <img
-          className="battle-logo"
-          src={TITLE_LOGO_PATH}
-          alt="モンじゃん！"
-          width={1774}
-          height={887}
-          draggable={false}
-        />
-        <div className="battle-topbar__actions">
-          <button
-            className="rule-button"
-            type="button"
-            onClick={onOpenRules}
-            disabled={phase !== 'choosing' || tutorialOpen}
-            aria-label="ルールをもう一度見る"
-          >
-            <span aria-hidden="true">📖</span> ルール
-          </button>
-          <span className="round-chip"><span aria-hidden="true">🍃</span> じゃんけん バトル</span>
+        <div className="signboard">
+          <img
+            className="battle-logo"
+            src={TITLE_LOGO_PATH}
+            alt="モンじゃん！"
+            width={1774}
+            height={887}
+            draggable={false}
+          />
+          <span className="signboard__title">じゃんけん バトル</span>
         </div>
+        <span className="round-chip">ラウンド <b>{round}</b></span>
+        <button
+          className="rule-button"
+          type="button"
+          onClick={onOpenRules}
+          disabled={phase !== 'choosing' || tutorialOpen}
+          aria-label="ルールをもう一度見る"
+        >
+          <span aria-hidden="true">📖</span> ルール
+        </button>
       </div>
-      <div className={`battlefield battlefield--${phase}`}>
-        <div className="field-leaves field-leaves--left" aria-hidden="true" />
-        <div className="field-leaves field-leaves--right" aria-hidden="true" />
+      <div className={`battlefield battlefield--${phase} ${phase === 'impact' ? `battlefield--shake-${shake}` : ''}`.trim()}>
         <MonsterPanel
           monster={data.player}
           hp={playerHp}
@@ -660,10 +659,26 @@ function BattleScreen({
           result={result}
           isHit={phase === 'impact' && Boolean(result?.cpuDamage)}
         />
-        {phase === 'impact' && (
-          <div className="impact-effect" aria-hidden="true">
-            <i /><i /><i /><b>✦</b>
-          </div>
+        {phase === 'attack' && result && (
+          result.winner === 'none' ? (
+            <>
+              <AttackProjectile from="player" theme={playerTheme} meet />
+              <AttackProjectile from="cpu" theme={cpuTheme} meet />
+            </>
+          ) : (
+            <AttackProjectile from={result.winner} theme={attackerTheme} />
+          )
+        )}
+        {phase === 'impact' && result && (
+          result.winner === 'none' ? (
+            <>
+              <ImpactBurst at="center" theme="neutral" />
+              <ImpactBurst at="player" theme={cpuTheme} />
+              <ImpactBurst at="cpu" theme={playerTheme} />
+            </>
+          ) : (
+            <ImpactBurst at={result.winner === 'player' ? 'cpu' : 'player'} theme={attackerTheme} />
+          )
         )}
       </div>
       {(phase === 'rarity' || phase === 'choosing' || phase === 'selected') ? (
@@ -690,16 +705,22 @@ function BattleScreen({
           </p>
         </div>
       )}
-      {tutorialOpen && <Tutorial onClose={onCloseTutorial} isReview={tutorialMode === 'review'} />}
       {phase === 'summon' && !tutorialOpen && (
-        <div className="summon-announcement" role="status" aria-live="assertive">
-          <span aria-hidden="true">✦</span>
-          <strong>モンスター召喚！</strong>
-          <span aria-hidden="true">✦</span>
+        <div className="banner-layer" role="status" aria-live="assertive">
+          <div className="banner summon-announcement">
+            <strong>モンスター召喚！</strong>
+          </div>
         </div>
       )}
       {phase === 'rarity' && <RarityNotice />}
-      {phase === 'next-round' && <NextRoundNotice />}
+      {phase === 'next-round' && <NextRoundNotice round={round} />}
+      {phase === 'result' && isFinalBlow && outcome !== 'ongoing' && (
+        <div className={`final-banner final-banner--${outcome}`} aria-hidden="true">
+          <strong>{FINAL_BLOW_COPY[outcome]}</strong>
+        </div>
+      )}
+      {phase === 'impact' && <div className="hit-flash" aria-hidden="true" />}
+      {tutorialOpen && <Tutorial onClose={onCloseTutorial} isReview={tutorialMode === 'review'} />}
     </main>
   );
 }
@@ -707,9 +728,8 @@ function BattleScreen({
 function TitleScreen({ onStart }: { onStart: () => void }) {
   return (
     <main className="screen title-screen">
-      <FantasyAtmosphere variant="title" />
-      <div className="title-cloud title-cloud--one" />
-      <div className="title-cloud title-cloud--two" />
+      <div className="scene-vignette" aria-hidden="true" />
+      <Drift />
       <section className="title-copy">
         <img
           className="title-logo"
@@ -719,10 +739,9 @@ function TitleScreen({ onStart }: { onStart: () => void }) {
           height={887}
           draggable={false}
         />
-        <button className="primary-button start-button" onClick={onStart}>
-          <span aria-hidden="true">▶</span> スタート！
-        </button>
+        <p className="title-hint">まんなかの ボタンを おしてね</p>
       </section>
+      <Deck knobs={{ center: { label: 'スタート！', onClick: onStart, call: true } }} />
     </main>
   );
 }
@@ -739,18 +758,21 @@ function ResultScreen({
   const copy = RESULT_COPY[kind];
   return (
     <main className={`screen result-screen result-screen--${kind}`}>
-      <FantasyAtmosphere variant="thanks" />
-      <div className="confetti" aria-hidden="true">✦　●　★　✦　●　★</div>
+      <div className="scene-vignette" aria-hidden="true" />
+      <div className="result-rays" aria-hidden="true" />
+      <Drift />
+      <div className="signboard result-signboard">
+        <img
+          className="result-brand"
+          src={TITLE_LOGO_PATH}
+          alt="モンじゃん！"
+          width={1774}
+          height={887}
+          draggable={false}
+        />
+      </div>
       <section className="result-card">
         <div className="result-card__header">
-          <img
-            className="result-brand"
-            src={TITLE_LOGO_PATH}
-            alt="モンじゃん！"
-            width={1774}
-            height={887}
-            draggable={false}
-          />
           <p className="result-eyebrow">{copy.eyebrow}</p>
           <h1>{copy.title}</h1>
           <p className="result-message">{copy.message}</p>
@@ -758,21 +780,17 @@ function ResultScreen({
         <div className="result-card__visual">
           {kind === 'draw' ? (
             <div className="real-janken">
-              <span aria-hidden="true">✊</span><span aria-hidden="true">✌️</span><span aria-hidden="true">✋</span>
+              <div className="real-janken__hands">
+                <span aria-hidden="true">✊</span><span aria-hidden="true">✌️</span><span aria-hidden="true">✋</span>
+              </div>
               <p>かいじょうの おとなと<br />じゃんけんしてね！</p>
             </div>
           ) : (
-            <div className={`result-monster result-monster--${kind} monster-image-container`}>
-              <MonsterImage monster={monster} />
-            </div>
+            <MonsterCard monster={monster} className={`result-monster result-monster--${kind}`} />
           )}
         </div>
-        <div className="result-card__actions">
-          <button className="primary-button" onClick={onContinue}>
-            {kind === 'draw' ? 'じゃんけんしたよ！' : 'つぎへ'}
-          </button>
-        </div>
       </section>
+      <Deck knobs={{ center: { label: kind === 'draw' ? 'じゃんけんしたよ！' : 'つぎへ', onClick: onContinue, call: true } }} />
     </main>
   );
 }
@@ -781,36 +799,26 @@ function ThanksScreen({ monster, onTitle }: { monster: Monster; onTitle: () => v
   const theme = getAttributeTheme(monster.attribute);
   return (
     <main className="screen thanks-screen">
-      <FantasyAtmosphere variant="thanks" />
+      <div className="scene-vignette" aria-hidden="true" />
+      <div className="result-rays" aria-hidden="true" />
+      <Drift />
       <section className="thanks-card">
-        <div className="thanks-card__header">
-          <p className="acquisition-kicker">✦ SPECIAL MONSTER CARD ✦</p>
-          <h1>きみだけのモンスターを<br /><span>ゲット！</span></h1>
-        </div>
         <div className="thanks-card__visual">
           <div className={`acquired-card acquired-card--${theme}`}>
-            <div className="card-get-burst" aria-hidden="true">✦　★　✦　★　✦</div>
-            <div className="acquired-card__art monster-image-container">
-              <MonsterImage monster={monster} />
-            </div>
-            <div className="acquired-card__meta">
-              <div>
-                <small>YOUR MONSTER</small>
-                <h2>{monster.name}</h2>
-              </div>
-              <span>{monster.attribute}タイプ</span>
-            </div>
+            <MonsterCard monster={monster} className="acquired-card__card" />
             <div className="acquired-card__stats">
-              <span>ATK <Swords count={statCount(monster.attack)} /></span>
-              <span>HP <Hearts current={statCount(monster.hp)} max={statCount(monster.hp)} /></span>
+              <span><small>こうげき</small><Swords count={statCount(monster.attack)} /></span>
+              <span><small>HP</small><Hearts current={statCount(monster.hp)} max={statCount(monster.hp)} /></span>
             </div>
           </div>
         </div>
-        <div className="thanks-card__footer">
+        <div className="thanks-card__side">
+          <p className="acquisition-kicker">✦ SPECIAL MONSTER CARD ✦</p>
+          <h1>きみだけのモンスターを<br /><span>ゲット！</span></h1>
           <p className="thanks-message">あそんでくれて ありがとう！<br />スタッフから カードを うけとってね！</p>
-          <button className="primary-button" onClick={onTitle}>タイトルへ もどる</button>
         </div>
       </section>
+      <Deck knobs={{ center: { label: 'タイトルへ もどる', onClick: onTitle, call: true } }} />
     </main>
   );
 }
@@ -824,6 +832,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [cpuHp, setCpuHp] = useState(0);
   const [playerStars, setPlayerStars] = useState<StarMap>(() => shuffleStars());
   const [cpuStars, setCpuStars] = useState<StarMap>(() => shuffleStars());
+  const [round, setRound] = useState(1);
   const [playerHand, setPlayerHand] = useState<Hand | null>(null);
   const [cpuHand, setCpuHand] = useState<Hand | null>(null);
   const [result, setResult] = useState<RoundResult | null>(null);
@@ -913,9 +922,11 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     timersRef.current.clear();
   };
 
+  // HP を満タンにして、ラウンドを 1 から数えなおす(バトルの始まり)
   const fillHp = (loaded: GameData) => {
     setPlayerHp(statCount(loaded.player.hp));
     setCpuHp(statCount(loaded.cpu.hp));
+    setRound(1);
   };
 
   const resetRound = () => {
@@ -941,6 +952,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   };
 
   const prepareNextRound = () => {
+    setRound((current) => current + 1);
     setPhase('next-round');
     schedule(startRarityRoll, NEXT_ROUND_DISPLAY_MS);
   };
@@ -1193,12 +1205,20 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
   if (error) {
     return (
-      <main className="screen error-screen" role="alert">
-        <div><span aria-hidden="true">⚠️</span><h1>よみこめませんでした</h1><p>{error}</p><p>スタッフに しらせてね。</p></div>
-      </main>
+      <Stage>
+        <main className="screen error-screen" role="alert">
+          <div><span aria-hidden="true">⚠️</span><h1>よみこめませんでした</h1><p>{error}</p><p>スタッフに しらせてね。</p></div>
+        </main>
+      </Stage>
     );
   }
-  if (!data) return <main className="screen loading-screen"><div className="loader" /><p>モンスターを よんでいるよ…</p></main>;
+  if (!data) {
+    return (
+      <Stage>
+        <main className="screen loading-screen"><div className="loader" /><p>モンスターを よんでいるよ…</p></main>
+      </Stage>
+    );
+  }
 
   let content: ReactNode;
   if (screen === 'title') {
@@ -1215,6 +1235,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         cpuHp={cpuHp}
         playerStars={playerStars}
         cpuStars={cpuStars}
+        round={round}
         tutorialMode={tutorialMode}
         phase={phase}
         playerHand={playerHand}
@@ -1229,16 +1250,18 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
   return (
     <>
-      <SoundControls
-        enabled={soundEnabled}
-        bgmVolume={bgmVolume}
-        sfxVolume={sfxVolume}
-        compact={screen !== 'title' && screen !== 'battle'}
-        onToggle={toggleSound}
-        onBgmVolumeChange={changeBgmVolume}
-        onSfxVolumeChange={changeSfxVolume}
-      />
-      {content}
+      {/* 開発者メニューは舞台の外(窓の右はしに出す) */}
+      <Stage>
+        {content}
+        <SoundControls
+          enabled={soundEnabled}
+          bgmVolume={bgmVolume}
+          sfxVolume={sfxVolume}
+          onToggle={toggleSound}
+          onBgmVolumeChange={changeBgmVolume}
+          onSfxVolumeChange={changeSfxVolume}
+        />
+      </Stage>
       <DevMenu
         open={devOpen}
         data={data}

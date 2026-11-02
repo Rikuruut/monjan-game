@@ -1,0 +1,404 @@
+/* ==================================================================
+   じゃんけんバトルの土台(2026年11月2日に書き直した。元は generator/archive/20261102_before_battle_restyle/styles.css)
+   ------------------------------------------------------------------
+   - 撮影・合体の画面(generator/static/themes/fusion「たんじょうのもり」)と同じ色・字体・部品にそろえる
+   - 1920×1080 の舞台(.stage)を、窓に合わせて拡大縮小する(--scale は src/stage.tsx が付ける)。中はすべて px で配置する
+   - 背景は友人の草原の絵のまま。その上に、深緑の立て札・クリーム地のカード・緑の丸ボタンを置く
+   - ファイル:base(ここ)/ title / battle(配置・ルール説明)/ effects(戦闘の演出)/ result(結果・ありがとう)/ devmenu
+   ================================================================== */
+
+:root {
+  --scale: 1;
+  /* 色は fusion の style.css と同じ */
+  --forest: #1F4D3A;      /* 森の深緑 */
+  --leaf:   #6CC04A;      /* 若葉(自分の側・ふち) */
+  --moss:   #3F8F4A;      /* こけ */
+  --petal:  #F7A8C4;      /* 花びらの桃(相手の側・差し色) */
+  --sun:    #FFE9A8;      /* 木もれ日の金(呼びかけ・勝ち) */
+  --wind:   #F4FFF6;      /* 風の白 */
+  --ink:    #173A2E;      /* 文字のふち・パネルの地・カードの文字 */
+  --forest-deep: #0d2219;
+  --panel:  #173a2ee6;    /* 立て札などの半透明の地 */
+  --cream:  #FFF8E6;      /* カードの地 */
+  --white:  #FFFFFF;
+  --heart:  #ff4d6d;      /* ♥ */
+  --gold:   #F2C14E;      /* ★・⚔ */
+  --font-title: "Dela Gothic One", "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  --font-body:  "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  /* 見出しの文字のふち(fusion の .headline と同じ) */
+  --ink-outline:
+    -3px -3px 0 var(--ink), 3px -3px 0 var(--ink), -3px 3px 0 var(--ink), 3px 3px 0 var(--ink),
+    0 7px 0 var(--ink);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { width: 100%; height: 100%; margin: 0; }
+body {
+  overflow: hidden;
+  background: var(--forest-deep);   /* 舞台のまわりの余白(画面の縦横比がちがうとき) */
+  color: var(--white);
+  font-family: var(--font-body);
+  font-synthesis: none;
+}
+button { font: inherit; }
+
+.stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--scale));
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* 画面:草原の背景(ゆっくり寄ったり引いたりする)と、ふちの影               */
+/* ------------------------------------------------------------------ */
+.screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+  background: #8cc8a0;
+}
+.screen::before {
+  position: absolute;
+  z-index: -2;
+  inset: -3%;
+  background: url('/backgrounds/fantasy-meadow-battle.png') center / cover no-repeat;
+  content: '';
+  animation: sceneDrift 24s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes sceneDrift {
+  from { transform: scale(1.02) translateX(-8px); }
+  to   { transform: scale(1.05) translateX(8px); }
+}
+/* ふちを少し暗くして、立て札とカードを読みやすくする(背景の絵の明るさは変えない) */
+.scene-vignette {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, #0d221955 0%, transparent 16%),
+    radial-gradient(ellipse 80% 78% at 50% 44%, transparent 58%, #0d221988 100%);
+}
+
+/* 舞い落ちる葉と花びら(fusion の .drift と同じ) */
+.drift-layer { position: absolute; z-index: 0; inset: 0; pointer-events: none; }
+.drift {
+  position: absolute;
+  top: -60px;
+  width: 28px;
+  height: 16px;
+  border-radius: 0 100% 0 100%;
+  background: var(--leaf);
+  opacity: 0.85;
+  animation: drift var(--t) linear var(--d) infinite;
+}
+.drift.petal { width: 18px; height: 18px; border-radius: 50% 0 50% 50%; background: var(--petal); }
+@keyframes drift {
+  0%   { transform: translate(0, 0) rotate(0); }
+  25%  { transform: translate(60px, 300px) rotate(180deg); }
+  50%  { transform: translate(-20px, 600px) rotate(360deg); }
+  75%  { transform: translate(70px, 900px) rotate(540deg); }
+  100% { transform: translate(10px, 1200px) rotate(720deg); }
+}
+
+/* ------------------------------------------------------------------ */
+/* 立て札(深緑の地に若葉のふち)                                         */
+/* ------------------------------------------------------------------ */
+.signboard {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 30px 8px 16px;
+  background: var(--panel);
+  border: 3px solid var(--leaf);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 var(--forest-deep);
+}
+.signboard img { display: block; width: auto; height: 76px; }
+.signboard__title {
+  font-family: var(--font-title);
+  font-size: 36px;
+  color: var(--white);
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* タイプの色(fusion の .el-* と同じ。バッジの地)                        */
+/* ------------------------------------------------------------------ */
+.el-fire    { background: #a72d2d; }
+.el-water   { background: #176aa1; }
+.el-nature  { background: #33743e; }
+.el-light   { background: #a77c1d; }
+.el-dark    { background: #51398d; }
+.el-wind    { background: #277a69; }
+.el-earth   { background: #77502c; }
+.el-neutral { background: #536e80; }
+
+/* ------------------------------------------------------------------ */
+/* モンスターのカード(fusion の誕生カードと同じ:クリーム地に 若葉・花びら・金のふち) */
+/* ------------------------------------------------------------------ */
+.monster-card {
+  position: relative;
+  padding: 12px;
+  border: 8px solid transparent;
+  border-radius: 22px;
+  background:
+    linear-gradient(165deg, var(--cream), #f0e8c8) padding-box,
+    conic-gradient(from 20deg, var(--leaf), var(--petal), var(--sun), var(--moss), var(--leaf)) border-box;
+  color: var(--ink);
+  box-shadow: 0 0 0 4px var(--ink), 0 14px 30px #0d221966;
+}
+.monster-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  background: linear-gradient(90deg, var(--ink), var(--moss));
+  border-radius: 10px;
+}
+.monster-card__head h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--white);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attribute-badge {
+  flex: none;
+  padding: 3px 14px;
+  border: 3px solid var(--white);
+  border-radius: 999px;
+  color: var(--white);
+  font-size: 22px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.monster-frame {
+  position: relative;
+  margin-top: 10px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 4px solid var(--ink);
+  border-radius: 10px;
+  background: var(--forest-deep);
+}
+.monster-image { display: block; width: 100%; height: 100%; object-fit: cover; user-select: none; }
+.monster-image--fallback {
+  display: grid;
+  place-items: center;
+  color: var(--sun);
+  font-family: var(--font-title);
+  font-size: 160px;
+}
+
+/* ♥ と ⚔ */
+.hearts, .swords { display: inline-flex; align-items: center; gap: 4px; line-height: 1; }
+.heart { position: relative; display: inline-block; }
+.heart--full { color: var(--heart); text-shadow: -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff, 0 4px 0 var(--ink); }
+.heart--empty { color: #ffffff40; text-shadow: -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink); }
+.swords { color: var(--gold); text-shadow: -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink), 0 4px 0 var(--ink); }
+
+/* ------------------------------------------------------------------ */
+/* 下の操作盤(fusion の .deck / .knob と同じ:緑の円盤に花のしるし)        */
+/* ------------------------------------------------------------------ */
+.deck {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 184px;
+  background: linear-gradient(180deg, #173a2eee, var(--forest-deep));
+  border-top: 4px solid var(--leaf);
+}
+.knob {
+  position: absolute;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+.knob[data-pos="left"]   { left: 560px; }
+.knob[data-pos="center"] { left: 960px; }
+.knob[data-pos="right"]  { left: 1360px; }
+.knob-face {
+  --c: var(--white);
+  position: relative;
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 34%, #8fd86c, var(--leaf) 50%, var(--moss));
+  box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--petal), 0 7px 0 9px #061510;
+  transition: transform 0.08s;
+}
+.knob-face::after {
+  /* 花のしるし(4枚の花びら) */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56%;
+  height: 56%;
+  background:
+    radial-gradient(circle at 50% 24%, var(--c) 0 23%, transparent 25%),
+    radial-gradient(circle at 24% 50%, var(--c) 0 23%, transparent 25%),
+    radial-gradient(circle at 76% 50%, var(--c) 0 23%, transparent 25%),
+    radial-gradient(circle at 50% 76%, var(--c) 0 23%, transparent 25%),
+    radial-gradient(circle, var(--sun) 0 16%, transparent 18%);
+  content: '';
+  transform: translate(-50%, -50%);
+}
+.knob-side .knob-face { width: 76px; height: 76px; }
+.knob-main .knob-face { width: 92px; height: 92px; }
+.knob-label {
+  margin-top: 14px;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--white);
+  white-space: nowrap;
+}
+.knob-main .knob-label { font-family: var(--font-title); font-size: 30px; color: var(--sun); }
+.knob:active .knob-face { transform: translateY(6px); }
+.knob:disabled { cursor: default; }
+.knob:disabled .knob-face { --c: #9aaba0; background: radial-gradient(circle at 40% 34%, #7c8f84, #4c5e54); }
+.knob:disabled .knob-label { color: #7f9a8a; }
+.knob:focus-visible .knob-face { outline: 4px dashed var(--white); outline-offset: 16px; }
+/* 押してほしいボタンは光って呼びかける */
+.knob--call .knob-face { animation: knobCall 1.4s ease-in-out infinite; }
+@keyframes knobCall {
+  0%, 100% { box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--petal), 0 7px 0 9px #061510, 0 0 0 0 #ffe9a800; }
+  50%      { box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--sun), 0 7px 0 9px #061510, 0 0 50px 18px #ffe9a8cc; }
+}
+
+/* ------------------------------------------------------------------ */
+/* 画面の真ん中に大きく出す お知らせの帯(召喚・レア度抽選・次のラウンド)      */
+/* ------------------------------------------------------------------ */
+.banner-layer {
+  position: absolute;
+  z-index: 25;
+  inset: 0 0 184px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.banner-layer--low { align-items: end; padding-bottom: 40px; }
+.banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 18px 0 22px;
+  background: linear-gradient(90deg, transparent, var(--panel) 18%, var(--panel) 82%, transparent);
+  border-block: 4px solid transparent;
+  border-image: linear-gradient(90deg, transparent, var(--leaf) 20%, var(--sun) 50%, var(--leaf) 80%, transparent) 1;
+  text-align: center;
+  animation: bannerIn 0.45s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.banner strong {
+  font-family: var(--font-title);
+  font-size: 96px;
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--sun);
+  text-shadow: var(--ink-outline);
+}
+.banner small { font-family: var(--font-title); font-size: 34px; color: var(--leaf); }
+.banner span { font-size: 32px; font-weight: 800; color: var(--white); }
+.banner--small { width: auto; padding: 8px 80px 10px; }
+.banner--small strong { font-size: 56px; }
+@keyframes bannerIn {
+  from { opacity: 0; transform: scaleY(0.2); }
+  to   { opacity: 1; transform: scaleY(1); }
+}
+
+/* ------------------------------------------------------------------ */
+/* サウンド設定(左下。会場のボタンでは触らない)                           */
+/* ------------------------------------------------------------------ */
+.sound-controls {
+  position: absolute;
+  z-index: 40;
+  left: 20px;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 6px;
+  background: var(--panel);
+  border: 2px solid var(--moss);
+  border-radius: 999px;
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+.sound-controls:hover, .sound-controls:focus-within { opacity: 1; }
+.sound-toggle {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--forest-deep);
+  font-size: 24px;
+  cursor: pointer;
+}
+.sound-mixer { display: grid; gap: 2px; }
+.volume-control { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: #bcd8c8; }
+.volume-control span { width: 34px; }
+.volume-control input { width: 120px; accent-color: var(--leaf); }
+
+/* ------------------------------------------------------------------ */
+/* 読みこみ中・読めなかったとき                                          */
+/* ------------------------------------------------------------------ */
+.loading-screen, .error-screen {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 24px;
+  text-align: center;
+}
+.loading-screen p, .error-screen > div {
+  padding: 20px 50px;
+  background: var(--panel);
+  border: 3px solid var(--leaf);
+  border-radius: 20px;
+  font-size: 36px;
+  font-weight: 800;
+}
+.error-screen h1 { margin: 0; font-family: var(--font-title); font-weight: 400; color: var(--sun); }
+.error-screen span { font-size: 80px; }
+.loader {
+  width: 120px;
+  height: 120px;
+  border: 14px solid #ffffff55;
+  border-top-color: var(--leaf);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 動きを減らす設定のときは、大きな動きを止める */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  .drift { display: none; }
+}

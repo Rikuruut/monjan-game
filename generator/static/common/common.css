@@ -132,7 +132,7 @@ body { overflow: hidden; }
 .dev th, .dev td { border: 1px solid #d8d3c6; padding: 3px 6px; text-align: left; vertical-align: top; }
 .dev th { background: #ebe6d9; }
 
-/* 作ったモンスターで戦う(バトルの開発者メニュー battle/src/styles.css と同じ見た目) */
+/* 作ったモンスターで戦う(バトルの開発者メニュー battle/src/styles/devmenu.css と同じ見た目) */
 .dev-monsters { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .dev-monsters button {
   display: flex;

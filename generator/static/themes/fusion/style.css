@@ -506,7 +506,7 @@ body {
   color: #fff;
   white-space: nowrap;
 }
-/* タイプの色は、じゃんけんバトルの属性の濃い色(battle/src/styles.css の --element-deep)と同じ */
+/* タイプの色は、じゃんけんバトルの属性の濃い色(battle/src/styles/base.css の .el-*)と同じ */
 .el-fire    { background: #a72d2d; }
 .el-water   { background: #176aa1; }
 .el-nature  { background: #33743e; }
