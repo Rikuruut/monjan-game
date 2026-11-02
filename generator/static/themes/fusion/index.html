@@ -180,14 +180,14 @@
   <div class="warp" aria-hidden="true"></div>
 </div>
 
+<!-- 効果音と BGM(Howler.js。static/vendor/ に置いてある)。BGM が早く鳴りはじめるよう、演出のライブラリより先に読む -->
+<script src="/static/vendor/howler/howler.core.min.js"></script>
+<script src="/static/common/sound.js"></script>
 <!-- 演出のライブラリ(ネットにつながっていなくても動くように、static/vendor/ に置いてある) -->
 <script src="/static/vendor/gsap/gsap.min.js"></script>
 <script src="/static/vendor/gsap/SplitText.min.js"></script>
 <script src="/static/vendor/tsparticles/tsparticles.bundle.min.js"></script>
 <script src="/static/themes/fusion/effects.js"></script>
-<!-- 効果音(Howler.js。static/vendor/ に置いてある) -->
-<script src="/static/vendor/howler/howler.core.min.js"></script>
-<script src="/static/common/sound.js"></script>
 <script src="/static/common/app.js"></script>
 </body>
 </html>
