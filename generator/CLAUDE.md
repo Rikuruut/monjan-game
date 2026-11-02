@@ -1,37 +1,25 @@
 # モンじゃん! プロトタイプ 開発指示書
 
-Claude Code が作業の前に読む指示書。仕様に迷ったらここを優先する。
+撮影 → 合体 → 誕生の部分の指示書。仕様に迷ったらここを優先する。全体のこと(守ること・起動・バトルとのつなぎ方・開発者メニューの共通部分)は `../CLAUDE.md`。
 経緯をくわしく残した以前の版は `archive/20261101_before_claude_md_trim/CLAUDE.md`。
 
 ## 1. 概要
-
-- 2027年1月初旬にイオンモールで行う展示用のゲーム。子供(小学生)が選んだ**動物**と、スマホで撮った**身の回りの物**を AI で合体させてモンスターを作る
 - 今は**仕組みを確かめるプロトタイプ**。確かめること:処理時間・画質・物の判定の精度
-- タイトル画面・じゃんけんバトルは友人の担当で、このリポジトリの `../battle/` にある(つなぎ方は `../CLAUDE.md`)。
-  「たたかう!」でバトル(`/battle/?photo=…`)へ移る
 - 作らないもの:カードの生成と印刷。「いんさつ」は「じゅんびちゅう」と出すだけ
 
-## 2. 守ること
-
-- **API には実費がかかる**。画像生成を伴うテストの前に、必ず依頼者に確認する(何回・いくらかを先に伝える)。同じ確認で何度も呼ばない
-- API を使わずに済む確認は、からうちモード(`.env` の `DRY_RUN=true`。料金0円)か pytest(`python -m pytest`)で行う
+## 2. 守ること(`../CLAUDE.md` の「守ること」に加えて)
+- API は同じ確認で何度も呼ばない。API を使わずに済む確認は、からうちモード(`.env` の `DRY_RUN=true`。料金0円)か pytest で行う
   - ※ `app/main.py` は `load_dotenv(override=True)` なので、**起動前に環境変数で `DRY_RUN=true` にしても `.env` の値に戻る**。
     `uvicorn` の一時サーバーはからうちにならない(`?demo=1` の画面は API を呼ばないので、それだけに使う)
   - `tests/conftest.py` は、からうちにしたうえで API を呼ぼうとしたら失敗させる
-- API キーはコードに書かず `.env` から読む。`.env`・`outputs/`・`uploads/` は Git に入れない
 - OpenAI API の書き方・モデル名は、推測せず公式ドキュメントで確認する
-- 仕様にない大きな変更は、作業の前に確認する。作り直すときは元のファイルを `archive/<日付>_before_<内容>/` に控える
-- コードのコメントは日本語
 
 ## 3. 技術と構成
-
 - Python 3.11+ / FastAPI + Uvicorn / WebSocket / Pillow / `openai` / python-dotenv / pytest
 - 画面は HTML + CSS + 素の JavaScript(フレームワークなし)
 - ライブラリとフォントは**ネットから読まず `static/vendor/` に置く**(会場の Wi-Fi 対策。ネットを止めて全ページの字体が出ることを確認済み)
-  - GSAP 3.15.0(SplitText 含む。無料・商用可)/ tsParticles 4.5.0(MIT)/ Howler.js 2.2.4(MIT)/ フォント(SIL OFL 1.1)
-  - tsParticles 4 は 3 と書き方が違う(色は `particles.paint.color`。`particles.color` だと白になる)
+  - GSAP 3.15.0(SplitText 含む。無料・商用可)/ tsParticles 4.5.0(MIT。3 と書き方が違い、色は `particles.paint.color`)/ Howler.js 2.2.4(MIT)/ フォント(SIL OFL 1.1)
 - ノートPCでサーバーを `0.0.0.0` で動かし、PC とスマホのブラウザからつなぐ(同じ Wi-Fi。公共 Wi-Fi は端末同士の通信が禁止されがち)
-- `python -m app.main` で起動すると、スマホの URL をターミナルに出し、バトルのタイトル(`/battle/`)を Edge(なければ Chrome)のキオスクモードで開く(`app/kiosk.py`。`KIOSK_MODE=false` で開かない。終わるのは Alt + F4)
 
 ```
 app/      main.py(ルーティング)・battle.py(バトルへの受け渡し)・recognizer.py(判定)・generator.py(画像生成。別サービスに差し替えられる作り)・
@@ -44,30 +32,27 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 ```
 
 ## 4. 処理の流れ
-
 1. PC の「スマホでとる」→ WebSocket でスマホに合図 → スマホに動物のプルダウン(10種類)と「とる!」
 2. スマホで撮影(`<input type="file" accept="image/*" capture="environment">`。`getUserMedia` は HTTPS が要るので使わない。カメラはスマホでのタップが必要)
 3. スマホが canvas で**長辺1024pxの JPEG** にして、動物と一緒に `POST /api/upload`(HEIC 対策)。サーバーは Pillow で開けるか確かめ、動物を `photo_id` に紐づける
-4. PC の「がったい!」→ `POST /api/generate`:判定 → チェック → (撮り直しなら理由を出して終了)→ 画像生成 → 保存。
-   `simple` では判定を2つに分け、すぐ要る判定(物の名前・撮り直し)のあと、画像生成と名前・説明を**同時に**行う(6. 参照)
+4. PC の「がったい!」→ `POST /api/generate`:判定 → チェック → (撮り直しなら理由を出して終了)→ 画像生成 → 保存(simple は 6. のとおり分けて同時に)
 5. 画像を作っているあいだ、スマホで子供が名前を選ぶ(`POST /api/choose-name`)
 
 - WebSocket は `/ws?role=pc|phone`。メッセージ:`capture_request` / `photo_received` / `phone_status` / `upload_done` /
   `progress`(`stage`:naming・drawing・names・partial・done・retake・error。drawing に `expected_seconds`(detailed では `name_choices` も)、
   names に `name_choices`(simple。絵を作っているあいだに届く)、partial に途中の絵の `image_url`・`index`・`total`、done に `image_url`)/ `name_chosen` / `revealed`(PC の誕生の演出が終わった。スマホはここで絵を見せる。PC が `POST /api/revealed` で知らせる)
-- バトル:`/battle/`(タイトル・バトル。`static/battle/`)・`/api/battle-monster/{photo_id}`(バトルが読む形のモンスター。⚔1〜3・♡3〜5 は絵ができたときに決める)
+- バトルとの受け渡し(`/api/battle-monster/{id}`・`/api/recent-monsters`・`/api/output-image/{フォルダ名}`)は `../CLAUDE.md`
 - そのほかの API:`/api/photo/{photo_id}`・`/api/monster-image/{photo_id}`・`/api/partial-image/{photo_id}/{index}`(写真と絵と途中の絵。`uploads/`・`outputs/` は公開しない)・`/api/capture-request`・`/api/name-test`(名前だけを作る。1回0.1円以下)・`/api/themes`・`/api/qr`・`/api/info`
 - 動物は一覧(`animals.py`:ライオン・ゾウ・ウサギ・ペンギン・ネコ・鷹・ワニ・ゴリラ・サメ・ティラノサウルス)から選ぶが、
   製品版は自由入力の予定なので、**どこでも任意の文字列として動くようにする**
 
 ## 5. 画面
-
 ### PC(`/`。展示の大画面 1920×1080)
-- 1920×1080 の舞台を、モニターに合わせて拡大縮小(`app.js` の `fitStage`)。操作は3つのボタン = ← / Enter・Space / →。D キーか歯車で開発者メニュー(上にバトルと共通の ページ・通しの自動プレイ・作ったモンスターで戦う(`../CLAUDE.md`)。テストプレイ:見本のゴリラ × はさみで「がったい!」から誕生後まで通しで流す(がったい中 約25秒)・確認用の場面・演出・効果音のボタン(APIなし)・判定の JSON・時間・料金・名前のテスト)
-- 場面は `#stage` の `data-scene`:s1 しゃしんを とろう / s2 しゃしん × どうぶつ = ? / s3 がったい中 / s4 たんじょう(左 もう一回・中 たたかう!・右 いんさつ)
-  - バトルのタイトルの「スタート!」で s1 に来る。「たたかう!」は `/battle/?photo=<photo_id>` へ(テストプレイ・確認用は `?play=demo&name=<名前>` で、見本のゴリラ × はさみのまま戦う)
+- 1920×1080 の舞台を、モニターに合わせて拡大縮小(`app.js` の `fitStage`)。操作は3つのボタン = ← / Enter・Space / →。開発者メニュー(共通の項目は `../CLAUDE.md`)の撮影側だけの項目:テーマ・テストプレイ(見本のゴリラ × はさみで「がったい!」から誕生後まで通しで流す。がったい中 約25秒)・確認用の場面・演出・効果音のボタン(APIなし)・判定の JSON・時間・料金・名前のテスト
+- 場面は `#stage` の `data-scene`:s1 しゃしんを とろう / s2 しゃしん × どうぶつ = ? / s3 がったい中 / s4 たんじょう(左 もう一回・中 たたかう!・右 いんさつ)。バトルの「スタート!」で s1 に来る
 - **見た目はテーマで切りかえる**:`static/themes/<名前>/`(index.html・style.css・theme.json)。`/?theme=名前`、なければ `.env` の `PC_THEME`(既定 fusion。`.env` が知らない名前のときも fusion)。フォルダを足すだけで選べる
-  - 今あるテーマは fusion だけ(もりのつむじかぜ。2026年11月2日に依頼者がこれに決めた。lab・fantasy・cardpack・pot・gacha・summon と元の背景 bg.png は `archive/20261102_before_fusion_only/` に控えてある。写真と動物がうずのまわりを回りながら吸いこまれ、一点に縮んでから風がはじけて葉と花びらが舞う)。背景は1枚の絵 `static/themes/fusion/bg.webp`(依頼者が用意した絵を 1920×1080 の WebP に整えたもの)
+  - 今あるテーマは fusion(もりのつむじかぜ)だけ(2026年11月2日に依頼者が決めた。ほかのテーマと元の背景 bg.png は `archive/20261102_before_fusion_only/`)。
+    写真と動物がうずのまわりを回りながら吸いこまれ、一点に縮んでから風がはじけて葉と花びらが舞う。背景は `static/themes/fusion/bg.webp`(依頼者の絵を 1920×1080 の WebP に)
   - テーマに用意する要素(ID)は `app.js` 先頭の「テーマとの約束」
   - 進み具合は `#stage` の `--progress`(0〜1)と `data-level`(0〜5)を CSS で見せる。**段ごとの見た目は静的な指定で出し、transition やアニメーションを使わない**(回る・ゆれる要素の中で途中のまま止まって見えた)
   - 場面転換は `#stage.shut` を CSS で見せる。時間は `--scene-close-ms` / `--scene-open-ms`
@@ -82,13 +67,11 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 - 見た目は `phone.css` に分けてある(大画面の変更の影響を受けないように)
 
 ## 6. 判定(テキスト用モデル)
-
 - `TEXT_MODEL=gpt-6-luna`(画像入力・構造化出力に対応を確認済み)。`client.responses.parse(text_format=...)` で JSON を受け取る。実測 約8〜16秒(simple・1回で全部作っていたころは 14〜31秒)
 - **simple では2つに分ける**(2026年11月2日。待ち時間を短くするため):
   すぐ要る判定 `quick_check`(`needs_retake`・`retake_reason`・`has_person`・`object_name`)→ 画像生成を始める →
-  同時に名前・説明 `describe`(`element`・`monster_name`・`name_candidates`・`description`)。design_plan は作らない。
+  同時に名前・説明 `describe`(`element`・`monster_name`・`name_candidates`(3つ)・`description`)。design_plan(detailed だけ。6項目。`recognizer.MonsterInfo`)は作らない。
   指示文は部品に分けてあり(`prompts.py`)、detailed の `RECOGNIZE_INSTRUCTIONS` は分ける前と1字も変わらない(テストで確かめている)
-- 返す内容:`needs_retake`・`retake_reason`・`has_person`・`object_name`・`element`・`monster_name`・`name_candidates`(3つ)・`description`・`design_plan`(6項目。詳しくは `recognizer.MonsterInfo`)
 - 性質 `element` は6つから1つ:あつい / みず / でんき / かたい / とがってる / やわらかい。**画像プロンプトには入れない**(バトル用に保存するだけ)
 - 撮り直し:人が写っている・物がはっきりしない・子供にふさわしくない物。**物を持つ手や指だけなら人とみなさない**(指だけで人モードになり、人の特徴が描かれた)。
   判定の返答を読めない(モデルが断った)ときも撮り直し(不適切な写真で断られることが多いため)
@@ -117,12 +100,11 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 - 調整は PC の開発者メニュー「名前のテスト」で(写真・画像生成なし。結果は `outputs/name_tests.jsonl`)
 
 ## 7. 画像生成
-
 - `IMAGE_MODEL=gpt-image-2.5-sunburst`(依頼者の指定。編集の正確さがいちばん高い)。速さが問題なら `gpt-image-2.5-flare`、元に戻すなら `gpt-image-2`。`chatgpt-image-latest` は非推奨なので使わない
 - `client.images.edit(model, image=("photo.jpg", bytes, "image/jpeg"), prompt, size, output_format, n=1)` で写真を渡す。戻りは `data[0].b64_json`
 - `IMAGE_QUALITY=medium` で動く。画質が原因で断られたときだけ、画質を外して1回やり直す(公式ドキュメントの記述が食い違っているため)
 - `IMAGE_SIZE=1024x768`(4:3。幅・高さは16の倍数、縦横比 1:3〜3:1)/ PNG。実測 約25〜40秒(sunburst・medium は 18〜21秒)
-- 途中の絵:`IMAGE_PARTIAL_IMAGES`(既定 2。0 で使わない)が1以上なら `stream=True`・`partial_images` で受け取り、たまごのテーマで殻の内側に透かして見せる(スマホには出さない)。
+- 途中の絵:`IMAGE_PARTIAL_IMAGES`(既定 2。0 で使わない)が1以上なら `stream=True`・`partial_images` で受け取り、がったい中のうずの中心に透かして見せる(スマホには出さない)。
   断られたら途中の絵なしで1回やり直す。途中の絵の追加料金は公式に書かれていないので `usage` で確かめる
 - コンテンツフィルターで止められたら、同じ入力でリトライしない
 
@@ -153,13 +135,11 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 - どの設定で作ったかは `result.json` の `settings` と `monster.design_plan`(`fusion_type`・`fusion_part`・`staging`)に残る
 
 ## 8. エラーと料金
-
 - タイムアウト:判定 60秒(`API_TIMEOUT_SECONDS`)/ 画像生成 120秒(`IMAGE_TIMEOUT_SECONDS`)
 - 失敗はエラーの内容をそのまま PC 画面に出す(本番では用意した画像に差しかえる予定)。サーバーは止めない
 - 料金(`app/pricing.py`。使う前に公式の単価を確認し直す):**今の設定で1回 約4円(3.8〜4.1円)**(2026年11月2日の実測から試算。1ドル150円)。
   内訳:判定(物の名前・撮り直し)約0.03円 + 名前・説明 約0.1円 + 画像 約2.8〜3.1円(sunburst / medium / 1024×768。出力 371〜441 トークン)+ 途中の絵2枚 約0.9円。
   sunburst は gpt-image-2 と単価が同じで、1枚の出力トークンが少ない(gpt-image-2 / medium は 1204 トークンで 約7円)。high は 約7円、xhigh は 約11円。
-  途中の絵は1枚 100 画像出力トークン(公式)。API の使用量に入っていないので、`generator._add_partial_image_cost` が試算に足す。
+  途中の絵は1枚 100 画像出力トークン(公式)。API の使用量に入っていないので、`generator._add_partial_image_cost` が試算に足す
+- 生成のたびに使用量と料金の試算を PC 画面と `result.json` の `usage` に出し(撮り直しなら判定の分だけ)、累計を `outputs/api_usage_log.jsonl` に足す(からうちは足さない)。
   本当の請求額は OpenAI の管理画面の Usage で確かめる
-  sunburst の実際の料金は `result.json` の `usage` で見る。撮り直しなら判定の分だけ
-- 生成のたびに使用量と料金の試算を PC 画面と `result.json` に出し、累計を `outputs/api_usage_log.jsonl` に足す(からうちは足さない)
