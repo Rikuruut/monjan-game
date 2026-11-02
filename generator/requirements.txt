@@ -1,0 +1,10 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.9
+Pillow>=10.0.0
+# client.responses.parse(text_format=...) を使う。1.50 にはない。動作を確かめた版を下限にしている
+openai>=3.40.0
+# 判定の返答の形(recognizer.py の BaseModel・model_dump)。fastapi と一緒に入るが、直接使うので書いておく
+pydantic>=2.0
+qrcode[pil]>=7.4.2

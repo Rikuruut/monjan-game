@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん!</title>
+  <!-- フォント(SIL Open Font License)。ネットにつながらないときは、ふつうのフォントで表示される -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="phone">
+  <!-- 待機中 -->
+  <div id="view-wait" class="view">
+    <p class="phone-logo">モンじゃん!</p>
+    <p class="big-text">PCの ボタンを<br>まってね</p>
+  </div>
+
+  <!-- 撮影待ち:動物をえらんで撮影する -->
+  <div id="view-ready" class="view hidden">
+    <p class="phone-logo">モンじゃん!</p>
+    <p class="label-text">すきな どうぶつを えらんで</p>
+    <select id="animal" class="animal-select"></select>
+
+    <label for="camera" class="shoot-button">とる!</label>
+    <!-- カメラの起動。getUserMedia()は使わない(HTTPSが必要になるため) -->
+    <input type="file" id="camera" accept="image/*" capture="environment" hidden>
+  </div>
+
+  <!-- 送信中 -->
+  <div id="view-sending" class="view hidden">
+    <p class="big-text">おくっているよ…</p>
+  </div>
+
+  <!-- 送信完了 -->
+  <div id="view-done" class="view hidden">
+    <p class="big-text">おくったよ!</p>
+  </div>
+
+  <!-- 生成中(ローディングと、名前えらび) -->
+  <div id="view-progress" class="view hidden">
+    <p class="phone-logo">モンじゃん!</p>
+    <p id="ph-stage" class="big-text ph-stage">なまえを<br>かんがえているよ</p>
+    <div class="loading-bar ph-bar"><div id="ph-bar-fill" class="ph-bar-fill"></div></div>
+
+    <!-- 名前えらび(判定が終わったら出す) -->
+    <div id="name-chooser" class="name-chooser hidden">
+      <p class="name-lead">きみの モンスターの なまえは…</p>
+      <p id="ph-name" class="ph-name">???</p>
+      <p class="name-lead">だ!</p>
+      <button id="btn-name-ok" class="name-btn name-btn-ok">この なまえに する!</button>
+      <button id="btn-name-next" class="name-btn name-btn-next">ほかに さがす</button>
+      <p id="ph-name-count" class="name-count"></p>
+    </div>
+    <p id="ph-name-decided" class="name-decided hidden"></p>
+  </div>
+
+  <!-- エラー -->
+  <div id="view-error" class="view hidden">
+    <p class="big-text">しっぱいしたよ</p>
+    <p id="phone-error" class="small-text"></p>
+    <button id="btn-retry" class="shoot-button small">もういちど</button>
+  </div>
+
+  <script src="/static/phone.js"></script>
+</body>
+</html>

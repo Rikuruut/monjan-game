@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="summon">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん! しょうかんの まほうじん</title>
+  <!-- フォント(どちらも SIL Open Font License。イベントでの利用も可)。ネットにつながらないときは丸ゴシックで表示される -->
+  <!-- フォントは手元に置いてある(ネットが切れても字体が変わらないように) -->
+  <link rel="stylesheet" href="/static/vendor/fonts/summon.css">
+  <link rel="stylesheet" href="/static/common/common.css">
+  <link rel="stylesheet" href="/static/themes/summon/style.css">
+</head>
+<body>
+
+<!--
+  テーマ:summon「しょうかんの まほうじん」
+  写真と動物を左右の祭壇にささげ、まんなかの魔法陣でモンスターを召喚する。
+  外の輪 → ルーン文字の輪 → 内側の星 の順に光り、魔法陣が回って光の柱が立ち、カードが現れる。
+  怖くならないよう、明るめの紫と金にし、ドクロや悪魔のモチーフは使わない。
+  動き(撮影・生成・場面の進行・開発者メニュー)は /static/common/app.js が共通で受け持つ。
+  app.js が使う要素(ID)は、app.js の先頭の「テーマとの約束」を参照。
+  進み具合は #stage の data-level(0〜5)で 魔法陣の光る輪 に、--progress(0〜1)で 光の線の明るさ に変える(style.css)。
+-->
+<div id="stage" class="stage" data-scene="s1" data-level="0">
+
+  <!-- 上:看板と、いまの段階(小さなろうそく) -->
+  <header class="top">
+    <div class="signboard">
+      <h1>モンじゃん! <small>しょうかんの まほうじん</small></h1>
+    </div>
+    <ol class="lamps" aria-label="いまの だんかい">
+      <li data-step="s1"><span class="lamp"></span>とる</li>
+      <li data-step="s2"><span class="lamp"></span>あわせる</li>
+      <li data-step="s3"><span class="lamp"></span>がったい</li>
+      <li data-step="s4"><span class="lamp"></span>たんじょう</li>
+    </ol>
+  </header>
+
+  <!-- 場面ごとの大きな見出し -->
+  <h2 id="headline" class="headline">スマホで しゃしんを とってね</h2>
+
+  <section class="scene-art" aria-label="しょうかんの まほうじん">
+
+    <!-- 祭壇から魔法陣への光の線(--progress で明るくなる) -->
+    <span class="beam beam-l"></span>
+    <span class="beam beam-r"></span>
+
+    <!-- 左の祭壇:しゃしん -->
+    <div class="altar altar-left">
+      <div class="orb">
+        <img id="photo" class="orb-photo" alt="">
+        <span class="orb-empty">📷</span>
+      </div>
+      <div class="mini-circle"></div>
+      <p class="tag">しゃしん</p>
+    </div>
+
+    <!-- 右の祭壇:どうぶつ -->
+    <div class="altar altar-right">
+      <div class="orb">
+        <span id="animal-icon" class="orb-icon"></span>
+        <span class="orb-empty">🐾</span>
+      </div>
+      <div class="mini-circle"></div>
+      <p id="animal-name" class="tag">どうぶつ</p>
+    </div>
+
+    <!-- 中央:しょうかんの まほうじん -->
+    <div class="circle-area">
+      <!-- 光の柱(level 4 から立つ) -->
+      <span class="pillar"></span>
+      <div class="circle">
+        <svg class="circle-svg" viewBox="0 0 540 540" aria-hidden="true">
+          <!-- 外の輪(level 1 から光る) -->
+          <g class="g-outer">
+            <circle cx="270" cy="270" r="262" stroke-width="6"/>
+            <circle cx="270" cy="270" r="246" stroke-width="2"/>
+          </g>
+          <!-- ルーン文字の輪(level 2 から光る。点線の模様を文字に見立てる) -->
+          <g class="g-runes">
+            <circle cx="270" cy="270" r="226" stroke-width="18" stroke-dasharray="4 9 14 9 2 9 8 9"/>
+            <circle cx="270" cy="270" r="206" stroke-width="2"/>
+          </g>
+          <!-- 内側の星(level 3 から光る) -->
+          <g class="g-star">
+            <polygon points="270,74 440,368 100,368" stroke-width="5"/>
+            <polygon points="270,466 100,172 440,172" stroke-width="5"/>
+            <circle cx="270" cy="270" r="112" stroke-width="4"/>
+            <circle cx="270" cy="270" r="62" stroke-width="3"/>
+          </g>
+        </svg>
+        <!-- 中心の宝石 -->
+        <div class="gem"><span class="gem-mark">?</span></div>
+      </div>
+      <!-- たんじょうで広がる光 -->
+      <span class="flash"></span>
+      <p class="circle-sub">スマホで どうぶつを えらんで「とる!」を おしてね</p>
+    </div>
+
+    <!-- がったい中:左は「あそびかた」、右は「なまえ」(羊皮紙)、中央の下は進み具合 -->
+    <aside class="board board-left">
+      <h3>あそびかた</h3>
+      <p id="tip" class="tip"></p>
+    </aside>
+    <aside class="board board-right">
+      <h3>なまえ</h3>
+      <p id="name-help" class="name-help">スマホで えらんでね</p>
+      <ul id="name-list" class="name-list"></ul>
+    </aside>
+    <div class="status-plate">
+      <ol class="status-steps">
+        <li id="st-naming">なまえを かんがえているよ</li>
+        <li id="st-drawing">え を かいているよ</li>
+        <li id="st-soon">もうすぐ!</li>
+      </ol>
+    </div>
+
+    <!-- たんじょう:モンスターのカード -->
+    <article id="card" class="card">
+      <header class="card-head">
+        <span id="card-name" class="card-name">???</span>
+        <span id="card-element" class="card-element"></span>
+      </header>
+      <div class="card-art"><img id="card-img" alt=""></div>
+      <footer class="card-foot">
+        <p id="card-recipe" class="card-recipe"></p>
+        <p id="card-desc" class="card-desc"></p>
+      </footer>
+    </article>
+  </section>
+
+  <!-- 下:石の操作盤(3つのボタン = 丸い宝石。キーボードの ← / Enter / → でも押せる) -->
+  <footer class="deck">
+    <button id="btn-left" class="knob knob-side" data-pos="left"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-center" class="knob knob-main" data-pos="center"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-right" class="knob knob-side" data-pos="right"><span class="knob-face"></span><span class="knob-label"></span></button>
+  </footer>
+
+  <!-- 短いお知らせ -->
+  <p id="toast" class="toast" role="status" aria-live="polite"></p>
+
+  <!-- 場面転換:魔法陣が広がって画面をおおう(#stage に class="shut" が付いているあいだ) -->
+  <div class="portal" aria-hidden="true">
+    <span class="portal-disc"></span>
+    <span class="portal-ring r1"></span>
+    <span class="portal-ring r2"></span>
+    <span class="portal-star">✦</span>
+  </div>
+</div>
+
+<!-- 効果音(Howler.js。static/vendor/ に置いてある) -->
+<script src="/static/vendor/howler/howler.core.min.js"></script>
+<script src="/static/common/sound.js"></script>
+<script src="/static/common/app.js"></script>
+</body>
+</html>

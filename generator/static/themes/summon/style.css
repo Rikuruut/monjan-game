@@ -1,0 +1,561 @@
+/* ==================================================================
+   テーマ:summon「しょうかんの まほうじん」(2026年11月1日)
+   ------------------------------------------------------------------
+   - 舞台(#stage)の拡大縮小と開発者メニューは static/common/common.css にある。ここは見た目だけ
+   - 1920×1080 の舞台に、すべてを px で配置する。場面は #stage の data-scene(s1〜s4)で切りかえる
+   - 進み具合は、app.js が付ける data-level(0〜5)で 魔法陣の光る輪 に、
+     --progress(0〜1)で 祭壇からの光の線の明るさ に変える
+       level 1 なまえを考えている … 外の輪が光る
+       level 2 絵をかき始めた   … ルーン文字の輪も光る
+       level 3 半分すぎ         … 内側の星も光る
+       level 4 もうすぐ         … 魔法陣が回り、光の柱が立つ
+   - 段階ごとの表示は stroke や opacity などの静的な指定で必ず見えるようにし、回転は飾りとして別に付ける
+     (fantasy で、線を伸ばすアニメーションが途中で止まって見えたため)
+   - 怖くならないよう、明るめの紫と金にする。ドクロや悪魔のモチーフは使わない
+   ================================================================== */
+
+:root {
+  --night:     #2A1B4A;   /* 夜の紫(背景) */
+  --mana:      #6FF3FF;   /* 魔力の水色 */
+  --gold:      #F2C14E;   /* 金 */
+  --stone:     #5B5870;   /* 石の灰 */
+  --crystal:   #B488FF;   /* 水晶の紫 */
+  --parchment: #F3E9D2;   /* 羊皮紙 */
+  /* 上の6色から作った濃淡 */
+  --night-deep: #1a1030;
+  --night-lite: #3d2a66;
+  --ink:        #3b2a1a;  /* 羊皮紙の上の文字 */
+  --dim:        #6d6488;  /* 光っていない線 */
+  --font-title: "Yusei Magic", "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  --font-body:  "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  /* 場面転換:魔法陣が広がって画面をおおうまでの時間と、晴れるまでの時間(app.js が読む) */
+  --scene-close-ms: 520;
+  --scene-open-ms: 140;
+}
+
+body {
+  background: var(--night-deep);   /* 舞台のまわりの余白(画面の縦横比がちがうとき) */
+  font-family: var(--font-body);
+  color: var(--parchment);
+}
+
+/* ------------------------------------------------------------------ */
+/* 舞台:夜の石の広間(床の魔法陣のまわりがほんのり明るい)                */
+/* ------------------------------------------------------------------ */
+.stage {
+  background:
+    radial-gradient(ellipse at 50% 52%, #6a4fb066 0%, transparent 45%),
+    radial-gradient(circle at 12% 18%, #ffffff 0 1.5px, transparent 2.5px) 0 0 / 210px 170px,
+    radial-gradient(circle at 70% 60%, #ffffffaa 0 1px, transparent 2px) 0 0 / 150px 130px,
+    linear-gradient(180deg, var(--night-deep), var(--night) 45%, var(--night-lite));
+}
+
+/* ------------------------------------------------------------------ */
+/* 上:看板と、段階の印(小さなろうそく)                                 */
+/* ------------------------------------------------------------------ */
+.top {
+  position: absolute;
+  top: 28px;
+  left: 48px;
+  right: 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.signboard {
+  padding: 10px 32px 14px;
+  background: linear-gradient(180deg, var(--night-lite), var(--night));
+  border: 4px solid var(--gold);
+  border-radius: 16px;
+  box-shadow: 0 0 24px #b488ff55;
+}
+.signboard h1 { margin: 0; font-family: var(--font-title); font-weight: 400; font-size: 40px; color: var(--parchment); }
+.signboard h1 small { font-size: 24px; color: var(--gold); margin-left: 8px; }
+
+.lamps { display: flex; gap: 34px; list-style: none; margin: 0; padding: 0; }
+.lamps li { display: flex; align-items: flex-end; gap: 10px; font-weight: 900; font-size: 24px; color: #8d84a8; }
+.lamp {
+  position: relative;
+  width: 14px;
+  height: 26px;
+  margin-top: 16px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #d9cfb8, var(--parchment), #d9cfb8);
+}
+/* ろうそくの火 */
+.lamp::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -18px;
+  width: 12px;
+  height: 16px;
+  margin-left: -6px;
+  border-radius: 50% 50% 50% 50% / 64% 64% 36% 36%;
+  background: radial-gradient(ellipse at 50% 70%, #fff6c9 0 30%, var(--gold) 60%, #f08a24);
+  opacity: 0;
+}
+.lamps li.done .lamp::before { opacity: 0.6; }
+.lamps li.now { color: var(--parchment); }
+.lamps li.now .lamp::before { opacity: 1; box-shadow: 0 0 14px 4px #f2c14eaa; }
+
+/* ------------------------------------------------------------------ */
+/* 場面の見出し                                                         */
+/* ------------------------------------------------------------------ */
+.headline {
+  position: absolute;
+  top: 124px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 68px;
+  line-height: 1.2;
+  color: var(--gold);
+  -webkit-text-stroke: 1.5px var(--gold);
+  text-shadow: 0 5px 0 var(--night-deep), 0 0 30px #f2c14e88;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 左右の祭壇(しゃしん・どうぶつ)                                       */
+/* ------------------------------------------------------------------ */
+.scene-art { position: absolute; inset: 0; pointer-events: none; }
+
+.altar { position: absolute; top: 290px; width: 300px; text-align: center; }
+.altar-left  { left: 230px; }
+.altar-right { left: 1390px; }
+.orb {
+  position: relative;
+  z-index: 2;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 40% 35%, #5a3f94, var(--night));
+  border: 6px solid var(--gold);
+  box-shadow: 0 0 30px #b488ff88;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.6s cubic-bezier(.3, 1.4, .5, 1), box-shadow 0.4s;
+}
+.orb-photo { width: 100%; height: 100%; object-fit: cover; display: none; }
+.orb-icon  { font-size: 130px; line-height: 1; display: none; }
+.orb-empty { font-size: 80px; opacity: 0.3; filter: grayscale(1); }
+.has-photo  .orb-photo,
+.has-animal .orb-icon { display: block; }
+.has-photo  .altar-left  .orb-empty,
+.has-animal .altar-right .orb-empty { display: none; }
+/* 祭壇の下の小さな魔法陣 */
+.mini-circle {
+  position: relative;
+  z-index: 1;
+  width: 300px;
+  height: 74px;
+  margin-top: -30px;
+  border-radius: 50%;
+  border: 4px solid var(--crystal);
+  box-shadow: 0 0 0 10px #b488ff22, inset 0 0 0 10px #b488ff22, 0 0 24px #b488ff66;
+  background: radial-gradient(ellipse, #b488ff44, transparent 70%);
+}
+.tag {
+  display: inline-block;
+  margin: 16px 0 0;
+  padding: 2px 22px 6px;
+  font-family: var(--font-title);
+  font-size: 28px;
+  color: var(--ink);
+  background: var(--parchment);
+  border: 3px solid var(--gold);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* 祭壇から魔法陣への光の線(--progress で明るくなる) */
+.beam {
+  position: absolute;
+  z-index: 0;
+  top: 400px;
+  width: 250px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--crystal), var(--mana));
+  box-shadow: 0 0 16px var(--mana);
+  transform-origin: 0 50%;
+  opacity: 0.15;
+}
+.beam-l { left: 490px; transform: rotate(31deg); }
+.beam-r { left: 1430px; transform: rotate(149deg); }
+[data-scene="s2"] .beam { opacity: 0.45; }
+[data-scene="s3"] .beam { opacity: calc(0.3 + var(--progress, 0) * 0.7); }
+
+/* ------------------------------------------------------------------ */
+/* 中央:しょうかんの まほうじん                                         */
+/* ------------------------------------------------------------------ */
+.circle-area { position: absolute; left: 580px; top: 240px; width: 760px; height: 600px; }
+.circle { position: absolute; z-index: 2; left: 110px; top: 20px; width: 540px; height: 540px; }
+.circle::before {
+  /* 魔法陣の床のほのかな光 */
+  content: "";
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #b488ff33 0%, #b488ff11 60%, transparent 72%);
+}
+.circle-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* 光る・光らないの切りかえに transition は付けない(回っている要素の中で、途中の色のまま止まったため) */
+.circle-svg g { fill: none; stroke: var(--dim); }
+/* ルーン文字の輪は、いつもゆっくり回る(飾り) */
+.g-runes { transform-origin: 270px 270px; animation: spin 60s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 光った輪 */
+[data-scene="s3"]:is([data-level="1"], [data-level="2"], [data-level="3"], [data-level="4"], [data-level="5"]) .g-outer,
+[data-scene="s3"]:is([data-level="2"], [data-level="3"], [data-level="4"], [data-level="5"]) .g-runes,
+[data-scene="s3"]:is([data-level="3"], [data-level="4"], [data-level="5"]) .g-star,
+[data-scene="s4"] .circle-svg g {
+  stroke: var(--mana);
+  filter: drop-shadow(0 0 6px var(--mana)) drop-shadow(0 0 14px #6ff3ff88);
+}
+/* s2:外の輪が金に光って、呼びかける */
+[data-scene="s2"] .g-outer { stroke: var(--gold); filter: drop-shadow(0 0 8px var(--gold)); }
+
+/* 中心の宝石 */
+.gem {
+  position: absolute;
+  left: 222px;
+  top: 222px;
+  width: 96px;
+  height: 96px;
+  transform: rotate(45deg);
+  border-radius: 14px;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0 8%, #e2d0ff 22%, var(--crystal) 50%, #5b2fa8);
+  border: 5px solid var(--gold);
+  box-shadow: 0 0 30px #b488ffaa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gem-mark { transform: rotate(-45deg); font-family: var(--font-title); font-size: 60px; line-height: 1; color: var(--parchment); text-shadow: 0 3px 0 #5b2fa8; }
+[data-scene="s2"] .gem { animation: gem-pulse 1.2s ease-in-out infinite; }
+@keyframes gem-pulse { 50% { box-shadow: 0 0 60px 16px #f2c14ecc; } }
+[data-scene="s3"] .gem-mark { display: none; }
+[data-scene="s3"] .gem { box-shadow: 0 0 calc(20px + var(--progress, 0) * 60px) calc(var(--progress, 0) * 20px) #6ff3ffcc; }
+
+/* 光の柱(level 4 から) */
+.pillar {
+  position: absolute;
+  z-index: 3;
+  left: 300px;
+  top: -40px;
+  width: 160px;
+  height: 350px;
+  border-radius: 80px 80px 40px 40px;
+  background: linear-gradient(0deg, #ffffffee, #6ff3ffaa 40%, #b488ff33 85%, transparent);
+  filter: blur(6px);
+  opacity: 0;
+}
+[data-scene="s3"]:is([data-level="4"], [data-level="5"]) .pillar { opacity: 1; animation: pillar-flicker 0.6s ease-in-out infinite alternate; }
+@keyframes pillar-flicker { to { filter: blur(10px) brightness(1.3); } }
+[data-scene="s3"]:is([data-level="4"], [data-level="5"]) .circle-svg { animation: spin 8s linear infinite; }
+
+/* たんじょうの光 */
+.flash {
+  position: absolute;
+  z-index: 6;
+  left: 380px;
+  top: 290px;
+  width: 900px;
+  height: 900px;
+  margin: -450px 0 0 -450px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0 20%, #6ff3ffaa 40%, #b488ff44 60%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.circle-sub {
+  position: absolute;
+  top: 572px;
+  left: -100px;
+  right: -100px;
+  margin: 0;
+  text-align: center;
+  font-weight: 900;
+  font-size: 26px;
+  color: var(--parchment);
+  text-shadow: 0 2px 0 var(--night-deep);
+}
+
+/* ------------------------------------------------------------------ */
+/* がったい中の板(羊皮紙:あそびかた・なまえ)と進み具合                  */
+/* ------------------------------------------------------------------ */
+.board {
+  position: absolute;
+  top: 716px;
+  width: 420px;
+  height: 158px;
+  padding: 12px 20px;
+  background: radial-gradient(ellipse at 50% 50%, var(--parchment) 60%, #e3d2ac);
+  color: var(--ink);
+  border: 4px solid var(--gold);
+  border-radius: 10px;
+  box-shadow: 0 0 24px #b488ff55;
+  display: none;
+}
+.board-left  { left: 190px; }
+.board-right { left: 1310px; }
+.board h3 { margin: 0 0 6px; font-family: var(--font-title); font-weight: 400; font-size: 26px; color: #6b3fb8; }
+.tip { margin: 0; font-weight: 900; font-size: 24px; line-height: 1.45; word-break: keep-all; }
+.board-right h3 { display: inline; margin-right: 12px; }
+.name-help { display: inline; margin: 0; font-weight: 700; font-size: 20px; color: #7a6a52; }
+.name-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.name-list li { font-family: var(--font-title); font-size: 21px; padding: 1px 12px; border-radius: 8px; border: 2px solid #c9b48a; background: #fffaf0; }
+.name-list li.chosen { color: var(--parchment); background: #6b3fb8; border-color: var(--gold); }
+
+.status-plate {
+  position: absolute;
+  top: 822px;
+  left: 640px;
+  width: 640px;
+  height: 62px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--night-deep);
+  border: 3px solid var(--gold);
+  border-radius: 12px;
+}
+.status-steps { display: flex; gap: 22px; list-style: none; margin: 0; padding: 0; }
+.status-steps li { font-weight: 900; font-size: 22px; color: #6d6488; }
+.status-steps li.done { color: var(--crystal); }
+.status-steps li.now  { color: var(--mana); }
+
+/* ------------------------------------------------------------------ */
+/* たんじょう:モンスターのカード                                         */
+/* ------------------------------------------------------------------ */
+.card {
+  position: absolute;
+  z-index: 7;
+  top: 226px;
+  left: 670px;
+  width: 580px;
+  padding: 14px;
+  background: var(--parchment);
+  color: var(--ink);
+  border: 10px solid var(--gold);
+  border-radius: 18px;
+  box-shadow: 0 0 0 3px var(--night-deep), 0 0 90px #6ff3ff99;
+  display: none;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  background: linear-gradient(90deg, var(--night), var(--night-lite));
+  border-radius: 10px;
+}
+.card-name { font-family: var(--font-title); font-size: 38px; color: var(--parchment); white-space: nowrap; }
+.card-element {
+  font-weight: 900;
+  font-size: 20px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  border: 3px solid var(--parchment);
+  color: #fff;
+  white-space: nowrap;
+}
+.el-fire    { background: #d9472f; }
+.el-water   { background: #2f7fd0; }
+.el-thunder { background: #e0b000; color: var(--ink); border-color: var(--ink); }
+.el-rock    { background: #8a6e4b; }
+.el-sharp   { background: #7a4fc4; }
+.el-soft    { background: #e07aa8; }
+.card-art {
+  margin-top: 12px;
+  aspect-ratio: 4 / 3;
+  border: 4px solid var(--night);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--night);
+}
+.card-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-foot { margin-top: 10px; }
+.card-recipe { margin: 0; font-weight: 700; font-size: 18px; color: #6b3fb8; }
+.card-desc { margin: 2px 0 0; font-weight: 900; font-size: 22px; line-height: 1.4; word-break: keep-all; }
+.card-name.pop { animation: name-pop 0.5s cubic-bezier(.2, 1.6, .4, 1); display: inline-block; }
+@keyframes name-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ------------------------------------------------------------------ */
+/* 下:石の操作盤(3つのボタン = 丸い宝石)                                */
+/* ------------------------------------------------------------------ */
+.deck {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 184px;
+  background:
+    linear-gradient(90deg, #ffffff08 0 2px, transparent 2px) 0 0 / 160px 92px,
+    linear-gradient(180deg, #ffffff08 0 2px, transparent 2px) 0 0 / 160px 92px,
+    linear-gradient(180deg, #4a4560, #2f2b44);
+  border-top: 5px solid var(--gold);
+}
+.knob {
+  position: absolute;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.knob[data-pos="left"]   { left: 560px;  transform: translateX(-50%); }
+.knob[data-pos="center"] { left: 960px;  transform: translateX(-50%); }
+.knob[data-pos="right"]  { left: 1360px; transform: translateX(-50%); }
+.knob-face {
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0 8%, #e2d0ff 20%, var(--crystal) 50%, #5b2fa8);
+  border: 5px solid var(--gold);
+  box-shadow: 0 7px 0 #00000088, 0 0 18px #b488ff88;
+  transition: transform 0.08s;
+}
+.knob-main .knob-face { background: radial-gradient(circle at 35% 30%, #ffffff 0 8%, #d4fbff 20%, var(--mana) 50%, #2a8fa8); box-shadow: 0 7px 0 #00000088, 0 0 22px #6ff3ffaa; }
+.knob-side .knob-face { width: 80px; height: 80px; }
+.knob-main .knob-face { width: 96px; height: 96px; }
+.knob-label { margin-top: 12px; font-weight: 900; font-size: 26px; line-height: 1.2; color: var(--parchment); white-space: nowrap; text-shadow: 0 2px 0 #00000088; }
+.knob-main .knob-label { font-size: 30px; color: var(--gold); }
+.knob.pressed .knob-face, .knob:active .knob-face { transform: translateY(6px); }
+.knob:disabled { cursor: default; }
+.knob:disabled .knob-face { background: radial-gradient(circle at 40% 35%, #8d88a0, #55506a); box-shadow: 0 7px 0 #00000088; border-color: #8d84a8; }
+.knob:disabled .knob-label { color: #8d84a8; }
+.knob.empty { visibility: hidden; }
+.knob:focus-visible .knob-face { outline: 4px dashed var(--parchment); outline-offset: 14px; }
+[data-scene="s2"] .knob-main .knob-face { animation: knob-call 1.4s ease-in-out infinite; }
+@keyframes knob-call {
+  0%, 100% { box-shadow: 0 7px 0 #00000088, 0 0 0 0 #6ff3ff00; }
+  50%      { box-shadow: 0 7px 0 #00000088, 0 0 46px 16px #6ff3ffaa; }
+}
+
+/* 短いお知らせ */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 200px;
+  transform: translateX(-50%) translateY(20px);
+  margin: 0;
+  padding: 12px 30px;
+  font-family: var(--font-title);
+  font-size: 26px;
+  color: var(--ink);
+  background: var(--parchment);
+  border: 3px solid var(--gold);
+  border-radius: 12px;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 8;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ------------------------------------------------------------------ */
+/* 場面ごとの見え方                                                      */
+/* ------------------------------------------------------------------ */
+[data-scene="s2"] .circle-sub,
+[data-scene="s3"] .circle-sub,
+[data-scene="s4"] .circle-sub { display: none; }
+
+/* s3:祭壇の玉が魔法陣のほうへ寄って光る */
+[data-scene="s3"] .altar-left  .orb { transform: translateX(30px); box-shadow: 0 0 50px #6ff3ffaa; }
+[data-scene="s3"] .altar-right .orb { transform: translateX(-30px); box-shadow: 0 0 50px #6ff3ffaa; }
+[data-scene="s3"] .board { display: block; }
+[data-scene="s3"] .status-plate { display: flex; }
+
+/* s4:たんじょう(まぶしく光り、魔法陣が消えて、中心からカードが召喚される) */
+[data-scene="s4"] .flash { animation: flash 1.2s ease-out forwards; }
+@keyframes flash {
+  0%   { opacity: 0; transform: scale(0.2); }
+  30%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+[data-scene="s4"] .pillar { animation: pillar-burst 1s ease-out forwards; }
+@keyframes pillar-burst {
+  0%   { opacity: 1; transform: scaleX(1); }
+  40%  { opacity: 1; transform: scaleX(2.2); }
+  100% { opacity: 0; transform: scaleX(0.2); }
+}
+[data-scene="s4"] .circle { animation: circle-out 0.8s ease-in 0.3s forwards; }
+@keyframes circle-out { to { opacity: 0; transform: scale(1.3) rotate(60deg); } }
+[data-scene="s4"] .beam { opacity: 0; transition: opacity 0.4s; }
+[data-scene="s4"] .card { display: block; animation: card-summon 1s cubic-bezier(.2, 1.2, .4, 1) 0.5s both; }
+@keyframes card-summon {
+  0%   { transform: translateY(160px) scale(0.3); opacity: 0; filter: brightness(3); }
+  60%  { transform: translateY(-14px) scale(1.03); opacity: 1; filter: brightness(1.4); }
+  100% { transform: translateY(0) scale(1); filter: brightness(1); }
+}
+
+/* ------------------------------------------------------------------ */
+/* 場面転換:魔法陣が広がって画面をおおう                                 */
+/* ------------------------------------------------------------------ */
+.portal { position: absolute; inset: 0; z-index: 10; pointer-events: none; overflow: hidden; }
+.portal-disc {
+  position: absolute;
+  left: -240px;
+  top: -660px;
+  width: 2400px;
+  height: 2400px;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle, transparent 0 116px, #6ff3ff88 116px 120px),
+    radial-gradient(circle, var(--night-lite) 0%, var(--night) 40%, var(--night-deep) 70%);
+  transform: scale(0);
+  opacity: 0;
+}
+.portal-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  border: 6px solid var(--gold);
+  box-shadow: 0 0 30px var(--gold), inset 0 0 30px var(--gold);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.r1 { width: 520px;  height: 520px;  margin: -260px 0 0 -260px; }
+.r2 { width: 860px;  height: 860px;  margin: -430px 0 0 -430px; border-style: dashed; border-color: var(--mana); box-shadow: 0 0 30px var(--mana); }
+.portal-star {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 220px;
+  line-height: 1;
+  color: var(--gold);
+  text-shadow: 0 0 40px var(--gold);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+/* 閉じる:中心から広がっておおう / 開く:さらに広がって消える(ページを開いたときも、ここから始まる) */
+.stage.shut .portal-disc { animation: portal-in 0.42s cubic-bezier(.3, .7, .4, 1) both; }
+.stage:not(.shut) .portal-disc { animation: portal-out 0.45s ease-in both; }
+@keyframes portal-in  { from { transform: scale(0) rotate(-90deg); opacity: 1; } to { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes portal-out { from { transform: scale(1); opacity: 1; } to { transform: scale(1.2); opacity: 0; } }
+.stage.shut :is(.portal-ring, .portal-star) { opacity: 1; transition-delay: 0.25s; }
+
+/* 動きを減らす設定のときは、魔法陣を広げない */
+@media (prefers-reduced-motion: reduce) {
+  .portal { display: none; }
+  .g-runes { animation: none; }
+}

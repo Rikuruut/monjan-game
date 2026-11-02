@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="lab">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん! がったいマシン</title>
+  <!-- フォント(どちらも SIL Open Font License。イベントでの利用も可)。ネットにつながらないときは丸ゴシックで表示される -->
+  <!-- フォントは手元に置いてある(ネットが切れても字体が変わらないように) -->
+  <link rel="stylesheet" href="/static/vendor/fonts/lab.css">
+  <link rel="stylesheet" href="/static/common/common.css">
+  <link rel="stylesheet" href="/static/themes/lab/style.css">
+</head>
+<body>
+
+<!--
+  テーマ:lab「ひみつけんきゅうじょの がったいマシン」
+  動き(撮影・生成・場面の進行・開発者メニュー)は /static/common/app.js が共通で受け持つ。
+  app.js が使う要素(ID)は、app.js の先頭の「テーマとの約束」を参照。
+  大画面(展示のモニター)用のページ。
+  1920×1080 の「舞台」を作り、モニターの大きさに合わせて全体を拡大・縮小する(app.js の fitStage)。
+  場面は4つ:s1 しゃしんを とろう / s2 しゃしん × どうぶつ = ? / s3 がったい中 / s4 たんじょう
+  場面は #stage の data-scene で切りかえ、見た目は style.css で場面ごとに変える。
+  確認用に ?demo=1&scene=s2 のように付けると、APIを使わずに見本のデータでその場面を表示できる。
+-->
+<div id="stage" class="stage" data-scene="s1">
+
+  <!-- 上:マシンの名前プレートと、いまの段階のランプ -->
+  <header class="plate-bar">
+    <div class="nameplate">
+      <span class="rivet"></span><span class="rivet"></span>
+      <h1>モンじゃん! <small>がったいマシン</small></h1>
+      <span class="rivet"></span><span class="rivet"></span>
+    </div>
+    <ol class="lamps" aria-label="いまの だんかい">
+      <li data-step="s1"><span class="lamp"></span>とる</li>
+      <li data-step="s2"><span class="lamp"></span>あわせる</li>
+      <li data-step="s3"><span class="lamp"></span>がったい</li>
+      <li data-step="s4"><span class="lamp"></span>たんじょう</li>
+    </ol>
+  </header>
+
+  <!-- 場面ごとの大きな見出し -->
+  <h2 id="headline" class="headline">スマホで しゃしんを とってね</h2>
+
+  <!-- がったいマシン(看板) -->
+  <section class="machine" aria-label="がったいマシン">
+
+    <!-- 左のカプセル:しゃしん -->
+    <div class="capsule capsule-side capsule-left">
+      <div class="cap cap-top"></div>
+      <div class="glass">
+        <img id="photo" class="capsule-photo" alt="">
+        <span class="capsule-empty">📷</span>
+      </div>
+      <div class="cap cap-bottom"></div>
+      <p class="capsule-label">しゃしん</p>
+    </div>
+
+    <!-- 左右のパイプ(がったい中は、光の粒が中央へ流れる) -->
+    <div class="pipe pipe-left"><span class="flow"></span><span class="flow"></span><span class="flow"></span></div>
+    <div class="pipe pipe-right"><span class="flow"></span><span class="flow"></span><span class="flow"></span></div>
+
+    <!-- 中央の大カプセル:ここでモンスターが生まれる -->
+    <div class="capsule capsule-center">
+      <div class="cap cap-top"><span class="meter"><span id="meter-needle" class="needle"></span></span></div>
+      <div class="glass">
+        <div id="liquid" class="liquid"><span class="bubble"></span><span class="bubble"></span><span class="bubble"></span></div>
+        <div class="swirl"></div>
+        <p id="center-mark" class="center-mark">?</p>
+        <p id="center-sub" class="center-sub">スマホで どうぶつを えらんで<br>「とる!」を おしてね</p>
+        <!-- 誕生でとびちる ガラスのかけら -->
+        <span class="shard"></span><span class="shard"></span><span class="shard"></span><span class="shard"></span>
+        <span class="shard"></span><span class="shard"></span><span class="shard"></span><span class="shard"></span>
+      </div>
+      <div class="cap cap-bottom"></div>
+    </div>
+
+    <!-- 右のカプセル:どうぶつ -->
+    <div class="capsule capsule-side capsule-right">
+      <div class="cap cap-top"></div>
+      <div class="glass">
+        <span id="animal-icon" class="capsule-icon"></span>
+        <span class="capsule-empty">🐾</span>
+      </div>
+      <div class="cap cap-bottom"></div>
+      <p id="animal-name" class="capsule-label">どうぶつ</p>
+    </div>
+
+    <!-- がったい中:左は「あそびかた」、右は「なまえ」、中央の下は進み具合 -->
+    <aside class="board board-left">
+      <h3>あそびかた</h3>
+      <p id="tip" class="tip"></p>
+    </aside>
+    <aside class="board board-right">
+      <h3>なまえ</h3>
+      <p id="name-help" class="name-help">スマホで えらんでね</p>
+      <ul id="name-list" class="name-list"></ul>
+    </aside>
+    <div class="status-plate">
+      <ol class="status-steps">
+        <li id="st-naming">なまえを かんがえているよ</li>
+        <li id="st-drawing">え を かいているよ</li>
+        <li id="st-soon">もうすぐ!</li>
+      </ol>
+    </div>
+
+    <!-- たんじょう:モンスターのカード -->
+    <article id="card" class="card">
+      <header class="card-head">
+        <span id="card-name" class="card-name">???</span>
+        <span id="card-element" class="card-element"></span>
+      </header>
+      <div class="card-art"><img id="card-img" alt=""></div>
+      <footer class="card-foot">
+        <p id="card-recipe" class="card-recipe"></p>
+        <p id="card-desc" class="card-desc"></p>
+      </footer>
+    </article>
+  </section>
+
+  <!-- 下:操作盤(3つのボタン。キーボードの ← / Enter / → でも押せる) -->
+  <footer class="deck">
+    <button id="btn-left" class="knob knob-side" data-pos="left"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-center" class="knob knob-main" data-pos="center"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-right" class="knob knob-side" data-pos="right"><span class="knob-face"></span><span class="knob-label"></span></button>
+  </footer>
+
+  <!-- 短いお知らせ(じゅんびちゅう・まちがい など) -->
+  <p id="toast" class="toast" role="status" aria-live="polite"></p>
+
+  <!-- 場面転換の鉄のシャッター -->
+  <div class="shutter shutter-top"></div>
+  <div class="shutter shutter-bottom"></div>
+
+</div>
+
+
+<!-- 効果音(Howler.js。static/vendor/ に置いてある) -->
+<script src="/static/vendor/howler/howler.core.min.js"></script>
+<script src="/static/common/sound.js"></script>
+<script src="/static/common/app.js"></script>
+</body>
+</html>

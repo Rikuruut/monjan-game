@@ -1,0 +1,143 @@
+/* ==================================================================
+   モンじゃん! 大画面の共通スタイル(どのテーマでも使う)
+   ------------------------------------------------------------------
+   - 1920×1080 の「舞台」(#stage)を、モニターの大きさに合わせて拡大・縮小する(--scale は app.js が付ける)
+   - 開発者メニュー(app.js が画面に足す)
+   - 見た目(色・フォント・部品・場面ごとの動き)は static/themes/<テーマ名>/style.css に書く
+   ================================================================== */
+
+:root { --scale: 1; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { margin: 0; height: 100%; }
+body { overflow: hidden; }
+
+.stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--scale));
+  overflow: hidden;
+}
+
+/* 動きを減らす設定のときは、大きな動きを止める(テーマの動きにも効く) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+/* ------------------------------------------------------------------ */
+/* 生まれたモンスターの絵(.card-art)の上を、光沢の帯がときどき流れる     */
+/* どのテーマにも付く。テーマ側で止めるときは [data-scene="s4"] .card-art::after { content: none; } */
+/* ------------------------------------------------------------------ */
+.card-art { position: relative; }
+[data-scene="s4"] .card-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 太い帯1本と、後ろを追いかける細い線1本 */
+  background: linear-gradient(115deg,
+    transparent 45%, #ffffff80 48.5%, #ffffffd9 50%, #ffffff80 51.5%, transparent 55%,
+    transparent 56.5%, #ffffff8c 57.3%, transparent 58.1%);
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  mix-blend-mode: screen;
+  /* カードが出そろってから(どのテーマも 1.8 秒以内)流し始める。3.6 秒ごとに1回 */
+  animation: gloss-sweep 3.6s ease-in-out 1.8s infinite;
+}
+/* 0〜40%:左から右へ流れる / 40〜100%:お休み */
+@keyframes gloss-sweep {
+  0%        { background-position: 100% 0; }
+  40%, 100% { background-position: 0% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-scene="s4"] .card-art::after { display: none; }
+}
+
+/* ------------------------------------------------------------------ */
+/* 開発者メニュー(小さな歯車から引き出す)                               */
+/* ------------------------------------------------------------------ */
+.dev-toggle {
+  position: fixed;
+  right: 14px;
+  bottom: 12px;
+  z-index: 40;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--steel-soft);
+  background: none;
+  border: 2px solid #3f5a85;
+  border-radius: 50%;
+  opacity: 0.45;
+  cursor: pointer;
+}
+.dev-toggle:hover, .dev-toggle:focus-visible { opacity: 1; }
+
+.dev {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  width: min(520px, 92vw);
+  overflow-y: auto;
+  padding: 0 18px 24px;
+  background: var(--paper);
+  color: var(--navy);
+  font-size: 14px;
+  box-shadow: -8px 0 24px #00000066;
+}
+.dev-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  background: var(--paper);
+  border-bottom: 2px solid #d8d3c6;
+  font-size: 16px;
+}
+.dev-close { font-size: 22px; background: none; border: none; cursor: pointer; color: var(--navy); }
+.dev h4 { margin: 16px 0 6px; font-size: 14px; color: var(--steel); }
+.dev ul { margin: 0; padding-left: 20px; }
+.dev pre {
+  max-height: 300px;
+  overflow: auto;
+  padding: 10px;
+  font-size: 12px;
+  background: #ebe6d9;
+  border-radius: 6px;
+}
+.dev-muted { color: #6b7a93; }
+.dev-error { color: #c0392b; font-weight: 700; white-space: pre-wrap; }
+.dev img { border: 2px solid var(--navy); border-radius: 6px; background: #fff; }
+.status { font-weight: 700; padding: 1px 10px; border-radius: 999px; border: 2px solid currentColor; }
+.status-on  { color: #1f7a2e; background: #d6f5d6; }
+.status-off { color: #6b7a93; background: #e9e6df; }
+.nt-form { display: flex; flex-wrap: wrap; gap: 6px; }
+.nt-form input, .nt-form select, .nt-form button { font-family: var(--font-body); font-size: 14px; padding: 4px 8px; }
+.nt-form input[type="number"] { width: 4em; }
+.dev-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dev-row button { font-family: var(--font-body); font-size: 13px; padding: 3px 8px; cursor: pointer; }
+.dev-row input[type="range"] { flex: 1; min-width: 140px; }
+.dev table { border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+.dev th, .dev td { border: 1px solid #d8d3c6; padding: 3px 6px; text-align: left; vertical-align: top; }
+.dev th { background: #ebe6d9; }
+
+/* 開発者メニューは、どのテーマでも同じ見た目にする */
+.dev, .dev-toggle {
+  --paper: #F7F4EE;
+  --navy: #1F2F4F;
+  --steel: #3F6E9E;
+  --steel-soft: #8fb1d6;
+  --font-body: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  font-family: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+}

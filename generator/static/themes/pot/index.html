@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="pot">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん! まほうの おなべ</title>
+  <!-- フォント(どちらも SIL Open Font License。イベントでの利用も可)。ネットにつながらないときは丸ゴシックで表示される -->
+  <!-- フォントは手元に置いてある(ネットが切れても字体が変わらないように) -->
+  <link rel="stylesheet" href="/static/vendor/fonts/pot.css">
+  <link rel="stylesheet" href="/static/common/common.css">
+  <link rel="stylesheet" href="/static/themes/pot/style.css">
+</head>
+<body>
+
+<!--
+  テーマ:pot「まほうの おなべ」
+  写真と動物を材料にして、魔法の鍋でモンスターを「料理」する。
+  泡が増え、湯気が立ち、ふたがカタカタ鳴って、最後にふたが「ポン!」と飛んで生まれる。
+  動き(撮影・生成・場面の進行・開発者メニュー)は /static/common/app.js が共通で受け持つ。
+  app.js が使う要素(ID)は、app.js の先頭の「テーマとの約束」を参照。
+  進み具合は #stage の data-level(0〜5)で、泡・湯気・ふたのゆれに変える(style.css)。
+-->
+<div id="stage" class="stage" data-scene="s1" data-level="0">
+
+  <!-- 上:台所の看板と、いまの段階(小さなお皿) -->
+  <header class="top">
+    <div class="signboard">
+      <h1>モンじゃん! <small>まほうの おなべ</small></h1>
+    </div>
+    <ol class="lamps" aria-label="いまの だんかい">
+      <li data-step="s1"><span class="lamp"></span>とる</li>
+      <li data-step="s2"><span class="lamp"></span>あわせる</li>
+      <li data-step="s3"><span class="lamp"></span>がったい</li>
+      <li data-step="s4"><span class="lamp"></span>たんじょう</li>
+    </ol>
+  </header>
+
+  <!-- 場面ごとの大きな見出し -->
+  <h2 id="headline" class="headline">スマホで しゃしんを とってね</h2>
+
+  <section class="scene-art" aria-label="まほうの おなべ">
+
+    <!-- 左のお皿:しゃしん(材料) -->
+    <div class="dish dish-left">
+      <div class="food">
+        <img id="photo" class="food-photo" alt="">
+        <span class="food-empty">📷</span>
+      </div>
+      <div class="plate"></div>
+      <p class="tag">しゃしん</p>
+    </div>
+
+    <!-- 右のお皿:どうぶつ(材料) -->
+    <div class="dish dish-right">
+      <div class="food">
+        <span id="animal-icon" class="food-icon"></span>
+        <span class="food-empty">🐾</span>
+      </div>
+      <div class="plate"></div>
+      <p id="animal-name" class="tag">どうぶつ</p>
+    </div>
+
+    <!-- 中央:まほうの おなべ -->
+    <div class="pot-area">
+      <!-- 湯気(level 3 から立つ) -->
+      <span class="wisp w1"></span><span class="wisp w2"></span><span class="wisp w3"></span>
+      <!-- ふた -->
+      <div class="lid"><span class="lid-knob"></span></div>
+      <!-- ふたのすき間からあふれる泡(level 1 から増える) -->
+      <span class="bub b1"></span><span class="bub b2"></span><span class="bub b3"></span>
+      <span class="bub b4"></span><span class="bub b5"></span><span class="bub b6"></span>
+      <!-- 鍋 -->
+      <div class="pot">
+        <span class="handle handle-l"></span><span class="handle handle-r"></span>
+        <div class="pot-rim"></div>
+        <div class="pot-body"><p class="pot-mark">?</p></div>
+      </div>
+      <!-- かまどの火(--progress で強くなる) -->
+      <div class="stove">
+        <span class="flame f1"></span><span class="flame f2"></span><span class="flame f3"></span>
+      </div>
+      <!-- たんじょうで広がる湯気 -->
+      <span class="burst u1"></span><span class="burst u2"></span><span class="burst u3"></span><span class="burst u4"></span>
+      <p class="pot-sub">スマホで どうぶつを えらんで「とる!」を おしてね</p>
+    </div>
+
+    <!-- がったい中:左は「あそびかた」、右は「なまえ」(レシピカード)、中央の下は進み具合 -->
+    <aside class="board board-left">
+      <h3>あそびかた</h3>
+      <p id="tip" class="tip"></p>
+    </aside>
+    <aside class="board board-right">
+      <h3>なまえ</h3>
+      <p id="name-help" class="name-help">スマホで えらんでね</p>
+      <ul id="name-list" class="name-list"></ul>
+    </aside>
+    <div class="status-plate">
+      <ol class="status-steps">
+        <li id="st-naming">なまえを かんがえているよ</li>
+        <li id="st-drawing">え を かいているよ</li>
+        <li id="st-soon">もうすぐ!</li>
+      </ol>
+    </div>
+
+    <!-- たんじょう:モンスターのカード -->
+    <article id="card" class="card">
+      <header class="card-head">
+        <span id="card-name" class="card-name">???</span>
+        <span id="card-element" class="card-element"></span>
+      </header>
+      <div class="card-art"><img id="card-img" alt=""></div>
+      <footer class="card-foot">
+        <p id="card-recipe" class="card-recipe"></p>
+        <p id="card-desc" class="card-desc"></p>
+      </footer>
+    </article>
+  </section>
+
+  <!-- 下:木のまな板の操作盤(3つのボタン = 丸いなべしき。キーボードの ← / Enter / → でも押せる) -->
+  <footer class="deck">
+    <button id="btn-left" class="knob knob-side" data-pos="left"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-center" class="knob knob-main" data-pos="center"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-right" class="knob knob-side" data-pos="right"><span class="knob-face"></span><span class="knob-label"></span></button>
+  </footer>
+
+  <!-- 短いお知らせ -->
+  <p id="toast" class="toast" role="status" aria-live="polite"></p>
+
+  <!-- 場面転換:湯気がもくもく画面をおおう(#stage に class="shut" が付いているあいだ) -->
+  <div class="steam" aria-hidden="true">
+    <span class="puff" style="left:-81px;top:-148px;--s:1.3;--d:0.176s"></span>
+    <span class="puff" style="left:167px;top:-177px;--s:1.15;--d:0.158s"></span>
+    <span class="puff" style="left:391px;top:-174px;--s:1.0;--d:0.108s"></span>
+    <span class="puff" style="left:680px;top:-149px;--s:1.15;--d:0.091s"></span>
+    <span class="puff" style="left:953px;top:-149px;--s:1.0;--d:0.097s"></span>
+    <span class="puff" style="left:1192px;top:-145px;--s:1.0;--d:0.132s"></span>
+    <span class="puff" style="left:1449px;top:-160px;--s:1.0;--d:0.139s"></span>
+    <span class="puff" style="left:1739px;top:-124px;--s:1.0;--d:0.169s"></span>
+    <span class="puff" style="left:-160px;top:86px;--s:1.0;--d:0.164s"></span>
+    <span class="puff" style="left:121px;top:81px;--s:1.15;--d:0.114s"></span>
+    <span class="puff" style="left:385px;top:129px;--s:1.3;--d:0.094s"></span>
+    <span class="puff" style="left:643px;top:85px;--s:1.15;--d:0.054s"></span>
+    <span class="puff" style="left:926px;top:113px;--s:1.0;--d:0.073s"></span>
+    <span class="puff" style="left:1173px;top:68px;--s:1.15;--d:0.084s"></span>
+    <span class="puff" style="left:1477px;top:135px;--s:1.0;--d:0.123s"></span>
+    <span class="puff" style="left:1703px;top:68px;--s:1.15;--d:0.146s"></span>
+    <span class="puff" style="left:-121px;top:361px;--s:1.3;--d:0.114s"></span>
+    <span class="puff" style="left:161px;top:360px;--s:1.3;--d:0.08s"></span>
+    <span class="puff" style="left:392px;top:302px;--s:1.3;--d:0.056s"></span>
+    <span class="puff" style="left:671px;top:302px;--s:1.3;--d:0.039s"></span>
+    <span class="puff" style="left:926px;top:348px;--s:1.3;--d:0.04s"></span>
+    <span class="puff" style="left:1197px;top:305px;--s:1.3;--d:0.05s"></span>
+    <span class="puff" style="left:1425px;top:315px;--s:1.0;--d:0.103s"></span>
+    <span class="puff" style="left:1719px;top:344px;--s:1.3;--d:0.116s"></span>
+    <span class="puff" style="left:-93px;top:572px;--s:1.15;--d:0.138s"></span>
+    <span class="puff" style="left:147px;top:577px;--s:1.0;--d:0.118s"></span>
+    <span class="puff" style="left:371px;top:566px;--s:1.15;--d:0.09s"></span>
+    <span class="puff" style="left:666px;top:558px;--s:1.15;--d:0.053s"></span>
+    <span class="puff" style="left:949px;top:551px;--s:1.15;--d:0.066s"></span>
+    <span class="puff" style="left:1179px;top:562px;--s:1.0;--d:0.094s"></span>
+    <span class="puff" style="left:1439px;top:601px;--s:1.0;--d:0.127s"></span>
+    <span class="puff" style="left:1670px;top:616px;--s:1.3;--d:0.163s"></span>
+    <span class="puff" style="left:-156px;top:810px;--s:1.3;--d:0.183s"></span>
+    <span class="puff" style="left:132px;top:838px;--s:1.3;--d:0.148s"></span>
+    <span class="puff" style="left:367px;top:784px;--s:1.15;--d:0.115s"></span>
+    <span class="puff" style="left:646px;top:796px;--s:1.3;--d:0.092s"></span>
+    <span class="puff" style="left:896px;top:860px;--s:1.15;--d:0.078s"></span>
+    <span class="puff" style="left:1195px;top:827px;--s:1.0;--d:0.107s"></span>
+    <span class="puff" style="left:1453px;top:817px;--s:1.0;--d:0.149s"></span>
+    <span class="puff" style="left:1739px;top:801px;--s:1.3;--d:0.179s"></span>
+  </div>
+</div>
+
+<!-- 効果音(Howler.js。static/vendor/ に置いてある) -->
+<script src="/static/vendor/howler/howler.core.min.js"></script>
+<script src="/static/common/sound.js"></script>
+<script src="/static/common/app.js"></script>
+</body>
+</html>

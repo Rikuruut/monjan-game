@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="cardpack">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モンじゃん! カードパック かいふう</title>
+  <!-- フォント(どちらも SIL Open Font License。イベントでの利用も可)。ネットにつながらないときは丸ゴシックで表示される -->
+  <!-- フォントは手元に置いてある(ネットが切れても字体が変わらないように) -->
+  <link rel="stylesheet" href="/static/vendor/fonts/cardpack.css">
+  <link rel="stylesheet" href="/static/common/common.css">
+  <link rel="stylesheet" href="/static/themes/cardpack/style.css">
+</head>
+<body>
+
+<!--
+  テーマ:cardpack「カードパック かいふう」
+  写真と動物の2枚のカードが、真ん中のパックに入る。パックのふちが段階ごとに光り、
+  最後に上の切り口が破れて、ホロのきらめきが流れるカードがせり上がる。
+  動き(撮影・生成・場面の進行・開発者メニュー)は /static/common/app.js が共通で受け持つ。
+  app.js が使う要素(ID)は、app.js の先頭の「テーマとの約束」を参照。
+  進み具合は #stage の data-level(0〜5)で、パックのふちが光る辺の数に変える(style.css)。
+  ※ パックの光り方に「レア度」の意味は持たせない(全員同じ演出。子供どうしで当たり外れを比べないように)。
+-->
+<div id="stage" class="stage" data-scene="s1" data-level="0">
+
+  <!-- 上:お店の看板と、いまの段階(小さなカード) -->
+  <header class="top">
+    <div class="signboard">
+      <h1>モンじゃん! <small>カードパック かいふう</small></h1>
+    </div>
+    <ol class="lamps" aria-label="いまの だんかい">
+      <li data-step="s1"><span class="lamp"></span>とる</li>
+      <li data-step="s2"><span class="lamp"></span>あわせる</li>
+      <li data-step="s3"><span class="lamp"></span>がったい</li>
+      <li data-step="s4"><span class="lamp"></span>たんじょう</li>
+    </ol>
+  </header>
+
+  <!-- 場面ごとの大きな見出し -->
+  <h2 id="headline" class="headline">スマホで しゃしんを とってね</h2>
+
+  <section class="scene-art" aria-label="カードパック">
+
+    <!-- 左のカード:しゃしん -->
+    <div class="mini-card mini-left">
+      <div class="mini-window">
+        <img id="photo" class="mini-photo" alt="">
+        <span class="mini-empty">📷</span>
+      </div>
+      <p class="mini-label">しゃしん</p>
+    </div>
+
+    <!-- 右のカード:どうぶつ -->
+    <div class="mini-card mini-right">
+      <div class="mini-window">
+        <span id="animal-icon" class="mini-icon"></span>
+        <span class="mini-empty">🐾</span>
+      </div>
+      <p id="animal-name" class="mini-label">どうぶつ</p>
+    </div>
+
+    <!-- 中央:カードパック -->
+    <div class="pack-area">
+      <div class="pack-glow"></div>
+      <div class="pack">
+        <div class="pack-tear"></div>
+        <div class="pack-body">
+          <div class="pack-holo"></div>
+          <div class="pack-emblem">
+            <p class="pack-mark">?</p>
+          </div>
+          <p class="pack-title">モンじゃん! パック</p>
+        </div>
+        <!-- ふちの光(data-level にあわせて1辺ずつ光る) -->
+        <span class="edge e1"></span><span class="edge e2"></span><span class="edge e3"></span><span class="edge e4"></span>
+      </div>
+      <p class="pack-sub">スマホで どうぶつを えらんで「とる!」を おしてね</p>
+    </div>
+
+    <!-- がったい中:左は「あそびかた」、右は「なまえ」、中央の下は進み具合 -->
+    <aside class="board board-left">
+      <h3>あそびかた</h3>
+      <p id="tip" class="tip"></p>
+    </aside>
+    <aside class="board board-right">
+      <h3>なまえ</h3>
+      <p id="name-help" class="name-help">スマホで えらんでね</p>
+      <ul id="name-list" class="name-list"></ul>
+    </aside>
+    <div class="status-plate">
+      <ol class="status-steps">
+        <li id="st-naming">なまえを かんがえているよ</li>
+        <li id="st-drawing">え を かいているよ</li>
+        <li id="st-soon">もうすぐ!</li>
+      </ol>
+    </div>
+
+    <!-- たんじょう:モンスターのカード(ホロのきらめき) -->
+    <article id="card" class="card">
+      <header class="card-head">
+        <span id="card-name" class="card-name">???</span>
+        <span id="card-element" class="card-element"></span>
+      </header>
+      <div class="card-art"><img id="card-img" alt=""><span class="holo-sweep"></span></div>
+      <footer class="card-foot">
+        <p id="card-recipe" class="card-recipe"></p>
+        <p id="card-desc" class="card-desc"></p>
+      </footer>
+    </article>
+  </section>
+
+  <!-- 下:操作盤(3つのボタン = カードの形。キーボードの ← / Enter / → でも押せる) -->
+  <footer class="deck">
+    <button id="btn-left" class="knob knob-side" data-pos="left"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-center" class="knob knob-main" data-pos="center"><span class="knob-face"></span><span class="knob-label"></span></button>
+    <button id="btn-right" class="knob knob-side" data-pos="right"><span class="knob-face"></span><span class="knob-label"></span></button>
+  </footer>
+
+  <!-- 短いお知らせ -->
+  <p id="toast" class="toast" role="status" aria-live="polite"></p>
+
+  <!-- 場面転換:カードの束が扇形に広がって画面をおおう(#stage に class="shut" が付いているあいだ) -->
+  <div class="fan" aria-hidden="true">
+    <span class="fan-card" style="left:-72px;top:-95px;--r:24deg;--d:0.018s"></span>
+    <span class="fan-card" style="left:179px;top:-113px;--r:-11deg;--d:0.037s"></span>
+    <span class="fan-card" style="left:382px;top:-120px;--r:-12deg;--d:0.064s"></span>
+    <span class="fan-card" style="left:594px;top:-141px;--r:-24deg;--d:0.112s"></span>
+    <span class="fan-card" style="left:856px;top:-106px;--r:-30deg;--d:0.144s"></span>
+    <span class="fan-card" style="left:1050px;top:-122px;--r:-15deg;--d:0.175s"></span>
+    <span class="fan-card" style="left:1303px;top:-117px;--r:-27deg;--d:0.182s"></span>
+    <span class="fan-card" style="left:1487px;top:-94px;--r:-5deg;--d:0.234s"></span>
+    <span class="fan-card" style="left:1749px;top:-121px;--r:6deg;--d:0.258s"></span>
+    <span class="fan-card" style="left:-47px;top:152px;--r:31deg;--d:0.009s"></span>
+    <span class="fan-card" style="left:143px;top:171px;--r:-35deg;--d:0.056s"></span>
+    <span class="fan-card" style="left:379px;top:181px;--r:0deg;--d:0.076s"></span>
+    <span class="fan-card" style="left:610px;top:199px;--r:-25deg;--d:0.118s"></span>
+    <span class="fan-card" style="left:820px;top:188px;--r:-6deg;--d:0.141s"></span>
+    <span class="fan-card" style="left:1026px;top:144px;--r:-22deg;--d:0.166s"></span>
+    <span class="fan-card" style="left:1304px;top:158px;--r:14deg;--d:0.183s"></span>
+    <span class="fan-card" style="left:1476px;top:194px;--r:-35deg;--d:0.219s"></span>
+    <span class="fan-card" style="left:1759px;top:198px;--r:-29deg;--d:0.259s"></span>
+    <span class="fan-card" style="left:-55px;top:455px;--r:18deg;--d:0.003s"></span>
+    <span class="fan-card" style="left:165px;top:442px;--r:-1deg;--d:0.043s"></span>
+    <span class="fan-card" style="left:369px;top:451px;--r:-34deg;--d:0.099s"></span>
+    <span class="fan-card" style="left:623px;top:489px;--r:-20deg;--d:0.095s"></span>
+    <span class="fan-card" style="left:845px;top:436px;--r:-34deg;--d:0.122s"></span>
+    <span class="fan-card" style="left:1076px;top:461px;--r:-13deg;--d:0.177s"></span>
+    <span class="fan-card" style="left:1262px;top:458px;--r:30deg;--d:0.188s"></span>
+    <span class="fan-card" style="left:1521px;top:479px;--r:-19deg;--d:0.227s"></span>
+    <span class="fan-card" style="left:1724px;top:437px;--r:15deg;--d:0.257s"></span>
+    <span class="fan-card" style="left:-87px;top:720px;--r:-1deg;--d:0.035s"></span>
+    <span class="fan-card" style="left:176px;top:757px;--r:3deg;--d:0.07s"></span>
+    <span class="fan-card" style="left:351px;top:733px;--r:-12deg;--d:0.076s"></span>
+    <span class="fan-card" style="left:629px;top:758px;--r:-23deg;--d:0.092s"></span>
+    <span class="fan-card" style="left:809px;top:733px;--r:21deg;--d:0.13s"></span>
+    <span class="fan-card" style="left:1074px;top:759px;--r:7deg;--d:0.183s"></span>
+    <span class="fan-card" style="left:1274px;top:724px;--r:-26deg;--d:0.184s"></span>
+    <span class="fan-card" style="left:1512px;top:760px;--r:-4deg;--d:0.211s"></span>
+    <span class="fan-card" style="left:1723px;top:743px;--r:23deg;--d:0.245s"></span>
+  </div>
+</div>
+
+<!-- 効果音(Howler.js。static/vendor/ に置いてある) -->
+<script src="/static/vendor/howler/howler.core.min.js"></script>
+<script src="/static/common/sound.js"></script>
+<script src="/static/common/app.js"></script>
+</body>
+</html>

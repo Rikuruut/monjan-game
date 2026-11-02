@@ -1,0 +1,626 @@
+/* ==================================================================
+   テーマ:gacha「ガチャガチャ」(2026年11月1日)
+   ------------------------------------------------------------------
+   - 舞台(#stage)の拡大縮小と開発者メニューは static/common/common.css にある。ここは見た目だけ
+   - 1920×1080 の舞台に、すべてを px で配置する。場面は #stage の data-scene(s1〜s4)で切りかえる
+   - 進み具合は、app.js が付ける data-level(0〜5)で ハンドルの角度・中のカプセル・機械のゆれ に、
+     --progress(0〜1)で 目盛りのメーター に変える
+       level 1 なまえを考えている … ハンドルが1段回る
+       level 2 絵をかき始めた   … 2段目。中のカプセルがかき回される
+       level 3 半分すぎ         … 3段目。ドームが光りはじめる
+       level 4 もうすぐ         … 4段目。機械がガタガタゆれて、まぶしく光る
+   - 段階ごとの表示は transform や box-shadow などの静的な指定で必ず見えるようにし、動きは飾りとして別に付ける
+     (fantasy で、線を伸ばすアニメーションが途中で止まって見えたため)
+   - 当たり外れ・レア度の意味は持たせない(だれでも同じ演出)
+   ================================================================== */
+
+:root {
+  --red:   #E8353B;      /* 機械の赤 */
+  --cream: #FFE9A8;      /* 背景のクリーム黄 */
+  --dome:  #CFF3FF;      /* 透明ドームの水色 */
+  --cap-b: #3B82F6;      /* カプセルの青 */
+  --cap-g: #22C55E;      /* カプセルの緑 */
+  --cap-p: #F472B6;      /* カプセルの桃 */
+  --ink:   #1E2A4A;      /* 縁取りの紺(文字も) */
+  /* 上の色から作った濃淡 */
+  --cap-y:    #FACC15;
+  --red-dark: #b5232a;
+  --white:    #FFFDF7;
+  --font-title: "Dela Gothic One", "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  --font-body:  "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+  /* 場面転換:カプセルが降り積もるまでの時間と、落ちていくまでの時間(app.js が読む) */
+  --scene-close-ms: 560;
+  --scene-open-ms: 140;
+}
+
+body {
+  background: #f3d98a;   /* 舞台のまわりの余白(画面の縦横比がちがうとき) */
+  font-family: var(--font-body);
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ */
+/* 舞台:クリーム色に水玉                                               */
+/* ------------------------------------------------------------------ */
+.stage {
+  background:
+    radial-gradient(ellipse at 50% 45%, #ffffff88 0%, transparent 55%),
+    radial-gradient(circle, #f9c74f55 0 12px, transparent 13px) 0 0 / 80px 80px,
+    radial-gradient(circle, #f9c74f55 0 12px, transparent 13px) 40px 40px / 80px 80px,
+    var(--cream);
+}
+
+/* ------------------------------------------------------------------ */
+/* 上:看板と、段階の印(小さなカプセル)                                 */
+/* ------------------------------------------------------------------ */
+.top {
+  position: absolute;
+  top: 28px;
+  left: 48px;
+  right: 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.signboard {
+  padding: 10px 32px 14px;
+  background: var(--red);
+  border: 5px solid var(--ink);
+  border-radius: 18px;
+  box-shadow: 0 8px 0 var(--ink);
+}
+.signboard h1 { margin: 0; font-family: var(--font-title); font-weight: 400; font-size: 40px; color: var(--white); }
+.signboard h1 small { font-size: 24px; color: var(--cream); margin-left: 8px; }
+
+.lamps { display: flex; gap: 30px; list-style: none; margin: 0; padding: 0; }
+.lamps li { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 24px; color: #a08a55; }
+.lamp {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #d9cfb4 0 50%, var(--white) 50%);
+  border: 3px solid #a08a55;
+}
+.lamps li.done .lamp { background: linear-gradient(180deg, var(--cap-b) 0 50%, var(--white) 50%); border-color: var(--ink); }
+.lamps li.now { color: var(--ink); }
+.lamps li.now .lamp { background: linear-gradient(180deg, var(--cap-p) 0 50%, var(--white) 50%); border-color: var(--ink); box-shadow: 0 0 14px var(--cap-p); }
+
+/* ------------------------------------------------------------------ */
+/* 場面の見出し                                                         */
+/* ------------------------------------------------------------------ */
+.headline {
+  position: absolute;
+  top: 124px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 66px;
+  line-height: 1.2;
+  color: var(--ink);
+  text-shadow: 4px 4px 0 var(--white), -4px 4px 0 var(--white), 4px -4px 0 var(--white), -4px -4px 0 var(--white), 0 9px 0 #1e2a4a33;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 左右のカプセル(しゃしん・どうぶつ)                                    */
+/* ------------------------------------------------------------------ */
+.scene-art { position: absolute; inset: 0; pointer-events: none; }
+
+.cap { position: absolute; top: 290px; width: 300px; text-align: center; }
+.cap-left  { left: 230px; }
+.cap-right { left: 1390px; }
+.cap-ball {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--dome);
+  border: 7px solid var(--ink);
+  box-shadow: 0 10px 0 #1e2a4a44;
+  transition: transform 0.6s cubic-bezier(.3, 1.4, .5, 1);
+}
+.cap-left  .cap-ball { --cap: var(--cap-b); transform: rotate(-8deg); }
+.cap-right .cap-ball { --cap: var(--cap-p); transform: rotate(8deg); }
+/* 下の色つきの半分(中身が見えるよう、下 1/3 だけにする) */
+.cap-ball::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 32%;
+  background: var(--cap);
+  border-top: 6px solid var(--ink);
+  z-index: 2;
+}
+/* 上のつや */
+.cap-ball::before {
+  content: "";
+  position: absolute;
+  left: 40px;
+  top: 22px;
+  width: 80px;
+  height: 34px;
+  border-radius: 50%;
+  background: #ffffffaa;
+  transform: rotate(-24deg);
+  z-index: 3;
+}
+.cap-window { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-bottom: 50px; }
+.cap-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+.cap-icon  { font-size: 120px; line-height: 1; display: none; }
+.cap-empty { font-size: 76px; opacity: 0.3; filter: grayscale(1); }
+.has-photo  .cap-photo,
+.has-animal .cap-icon { display: block; }
+.has-photo  .cap-left  .cap-empty,
+.has-animal .cap-right .cap-empty { display: none; }
+.tag {
+  display: inline-block;
+  margin: 22px 0 0;
+  padding: 2px 22px 6px;
+  font-family: var(--font-title);
+  font-size: 28px;
+  color: var(--ink);
+  background: var(--white);
+  border: 4px solid var(--ink);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* 中央:ガチャガチャの機械                                              */
+/* ------------------------------------------------------------------ */
+.machine-area { position: absolute; left: 580px; top: 240px; width: 760px; height: 600px; }
+.machine { position: absolute; inset: 0; }
+
+/* 透明なドーム */
+.dome {
+  position: absolute;
+  z-index: 1;
+  left: 170px;
+  top: 0;
+  width: 420px;
+  height: 400px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 34% 28%, #ffffff 0 8%, #ffffffaa 14%, transparent 30%), var(--dome);
+  border: 8px solid var(--ink);
+  transition: box-shadow 0.4s;
+}
+.ball {
+  position: absolute;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--c) 0 50%, var(--white) 50%);
+  border: 5px solid var(--ink);
+}
+.k1 { --c: var(--cap-b); left: 40px;  top: 228px; transform: rotate(20deg); }
+.k2 { --c: var(--cap-g); left: 126px; top: 262px; transform: rotate(-30deg); }
+.k3 { --c: var(--cap-p); left: 214px; top: 252px; transform: rotate(60deg); }
+.k4 { --c: var(--cap-y); left: 296px; top: 214px; transform: rotate(-12deg); }
+.k5 { --c: var(--cap-y); left: 86px;  top: 150px; transform: rotate(-50deg); }
+.k6 { --c: var(--cap-p); left: 174px; top: 170px; transform: rotate(10deg); }
+.k7 { --c: var(--cap-b); left: 256px; top: 136px; transform: rotate(40deg); }
+.k8 { --c: var(--cap-g); left: 140px; top: 82px;  transform: rotate(-80deg); }
+.dome-mark {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-size: 170px;
+  color: var(--white);
+  /* 中のカプセルの上でも読めるよう、紺で縁どる(text-stroke は字の内側が欠けて見えたので影で描く) */
+  text-shadow:
+    6px 0 0 var(--ink), -6px 0 0 var(--ink), 0 6px 0 var(--ink), 0 -6px 0 var(--ink),
+    4px 4px 0 var(--ink), -4px 4px 0 var(--ink), 4px -4px 0 var(--ink), -4px -4px 0 var(--ink),
+    0 12px 0 var(--ink);
+  padding-bottom: 20px;
+}
+
+/* 本体 */
+.body {
+  position: absolute;
+  z-index: 2;
+  left: 150px;
+  top: 330px;
+  width: 460px;
+  height: 260px;
+  border-radius: 34px 34px 22px 22px;
+  background:
+    radial-gradient(circle, #ffffff22 0 6px, transparent 7px) 0 0 / 36px 36px,
+    linear-gradient(180deg, #f2585d, var(--red) 40%, var(--red-dark));
+  border: 8px solid var(--ink);
+}
+.body-label {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0 18px 2px;
+  font-family: var(--font-title);
+  font-size: 24px;
+  color: var(--ink);
+  background: var(--cream);
+  border: 4px solid var(--ink);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+/* 回すハンドル */
+.dial {
+  position: absolute;
+  left: 165px;
+  top: 74px;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffffff, #d7dde6 70%, #aeb7c4);
+  border: 7px solid var(--ink);
+}
+.dial-bar {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 104px;
+  height: 30px;
+  margin: -15px 0 0 -52px;
+  border-radius: 15px;
+  background: var(--red);
+  border: 5px solid var(--ink);
+  transition: transform 0.6s cubic-bezier(.3, 1.4, .5, 1);
+}
+/* data-level にあわせて、ハンドルを1段ずつ回す(静的な角度) */
+[data-scene="s3"][data-level="1"] .dial-bar { transform: rotate(72deg); }
+[data-scene="s3"][data-level="2"] .dial-bar { transform: rotate(144deg); }
+[data-scene="s3"][data-level="3"] .dial-bar { transform: rotate(216deg); }
+[data-scene="s3"][data-level="4"] .dial-bar { transform: rotate(288deg); }
+[data-scene="s3"][data-level="5"] .dial-bar { transform: rotate(360deg); }
+/* 目盛りのメーター(--progress) */
+.gauge {
+  position: absolute;
+  right: 34px;
+  top: 74px;
+  width: 64px;
+  height: 150px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: repeating-linear-gradient(180deg, var(--white) 0 26px, #d9cfb4 26px 30px);
+  border: 5px solid var(--ink);
+}
+.gauge-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--progress, 0) * 100%);
+  background: linear-gradient(180deg, var(--cap-y), #f59e0b);
+}
+/* 取り出し口 */
+.chute {
+  position: absolute;
+  left: 30px;
+  top: 116px;
+  width: 104px;
+  height: 92px;
+  border-radius: 14px 14px 46px 46px;
+  background: radial-gradient(ellipse at 50% 30%, #0b1224, #2b3557);
+  border: 6px solid var(--ink);
+  box-shadow: inset 0 8px 0 #00000055;
+}
+
+/* たんじょう:転がり出て、パカッと割れるカプセル */
+.out-cap { position: absolute; z-index: 6; left: 260px; top: 160px; width: 240px; height: 240px; display: none; }
+.out-top, .out-bottom { position: absolute; left: 0; width: 240px; height: 120px; border: 8px solid var(--ink); box-sizing: border-box; }
+.out-top    { top: 0;    border-radius: 120px 120px 0 0; background: var(--cap-p); border-bottom-width: 4px; }
+.out-bottom { top: 120px; border-radius: 0 0 120px 120px; background: var(--white); border-top-width: 4px; }
+.spark {
+  position: absolute;
+  z-index: 5;
+  left: 380px;
+  top: 280px;
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  background: var(--cap-y);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0;
+}
+
+.machine-sub {
+  position: absolute;
+  top: 600px;
+  left: -100px;
+  right: -100px;
+  margin: 0;
+  text-align: center;
+  font-weight: 900;
+  font-size: 26px;
+  color: var(--ink);
+  text-shadow: 0 2px 0 var(--white);
+}
+
+/* ------------------------------------------------------------------ */
+/* がったい中の板(あそびかた・なまえ)と進み具合                          */
+/* ------------------------------------------------------------------ */
+.board {
+  position: absolute;
+  top: 716px;
+  width: 420px;
+  height: 158px;
+  padding: 12px 20px;
+  background: var(--white);
+  border: 5px solid var(--ink);
+  border-radius: 20px;
+  box-shadow: 0 7px 0 var(--ink);
+  display: none;
+}
+.board-left  { left: 190px; }
+.board-right { left: 1310px; }
+.board h3 { margin: 0 0 6px; font-family: var(--font-title); font-weight: 400; font-size: 26px; color: var(--red); }
+.tip { margin: 0; font-weight: 900; font-size: 24px; line-height: 1.45; word-break: keep-all; }
+.board-right h3 { display: inline; margin-right: 12px; }
+.name-help { display: inline; margin: 0; font-weight: 800; font-size: 20px; color: #6b6450; }
+.name-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.name-list li { font-family: var(--font-title); font-size: 21px; padding: 1px 14px; border-radius: 999px; border: 3px solid #d9cfb4; background: var(--white); }
+.name-list li.chosen { color: var(--white); background: var(--red); border-color: var(--ink); }
+
+.status-plate {
+  position: absolute;
+  top: 822px;
+  left: 640px;
+  width: 640px;
+  height: 62px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--ink);
+  border: 4px solid var(--white);
+  border-radius: 999px;
+}
+.status-steps { display: flex; gap: 22px; list-style: none; margin: 0; padding: 0; }
+.status-steps li { font-weight: 900; font-size: 22px; color: #6d7896; }
+.status-steps li.done { color: var(--dome); }
+.status-steps li.now  { color: var(--cap-y); }
+
+/* ------------------------------------------------------------------ */
+/* たんじょう:モンスターのカード                                         */
+/* ------------------------------------------------------------------ */
+.card {
+  position: absolute;
+  z-index: 7;
+  top: 226px;
+  left: 670px;
+  width: 580px;
+  padding: 14px;
+  background: var(--white);
+  color: var(--ink);
+  border: 10px solid var(--red);
+  border-radius: 22px;
+  box-shadow: 0 0 0 5px var(--ink), 0 0 90px #ffffffcc;
+  display: none;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  background: var(--ink);
+  border-radius: 12px;
+}
+.card-name { font-family: var(--font-title); font-size: 38px; color: var(--white); white-space: nowrap; }
+.card-element {
+  font-weight: 900;
+  font-size: 20px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  border: 3px solid var(--white);
+  color: #fff;
+  white-space: nowrap;
+}
+.el-fire    { background: #d9472f; }
+.el-water   { background: #2f7fd0; }
+.el-thunder { background: #e0b000; color: var(--ink); border-color: var(--ink); }
+.el-rock    { background: #8a6e4b; }
+.el-sharp   { background: #7a4fc4; }
+.el-soft    { background: #e07aa8; }
+.card-art {
+  margin-top: 12px;
+  aspect-ratio: 4 / 3;
+  border: 4px solid var(--ink);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--dome);
+}
+.card-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-foot { margin-top: 10px; }
+.card-recipe { margin: 0; font-weight: 800; font-size: 18px; color: var(--red); }
+.card-desc { margin: 2px 0 0; font-weight: 900; font-size: 22px; line-height: 1.4; word-break: keep-all; }
+.card-name.pop { animation: name-pop 0.5s cubic-bezier(.2, 1.6, .4, 1); display: inline-block; }
+@keyframes name-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ------------------------------------------------------------------ */
+/* 下:操作盤(3つのボタン = 丸いハンドル)                                */
+/* ------------------------------------------------------------------ */
+.deck {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 184px;
+  background:
+    radial-gradient(circle, #ffffff22 0 7px, transparent 8px) 0 0 / 44px 44px,
+    linear-gradient(180deg, #f2585d, var(--red) 40%, var(--red-dark));
+  border-top: 7px solid var(--ink);
+}
+.knob {
+  position: absolute;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.knob[data-pos="left"]   { left: 560px;  transform: translateX(-50%); }
+.knob[data-pos="center"] { left: 960px;  transform: translateX(-50%); }
+.knob[data-pos="right"]  { left: 1360px; transform: translateX(-50%); }
+.knob-face {
+  position: relative;
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffffff, #d7dde6 70%, #aeb7c4);
+  border: 6px solid var(--ink);
+  box-shadow: 0 7px 0 var(--ink);
+  transition: transform 0.08s;
+}
+/* ハンドルのつまみ */
+.knob-face::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70%;
+  height: 24%;
+  transform: translate(-50%, -50%) rotate(-30deg);
+  border-radius: 999px;
+  background: var(--cap-y);
+  border: 4px solid var(--ink);
+}
+.knob-side .knob-face { width: 80px; height: 80px; }
+.knob-main .knob-face { width: 96px; height: 96px; }
+.knob-label { margin-top: 12px; font-weight: 900; font-size: 26px; line-height: 1.2; color: var(--white); white-space: nowrap; text-shadow: 0 3px 0 var(--ink); }
+.knob-main .knob-label { font-size: 30px; color: var(--cream); }
+.knob.pressed .knob-face, .knob:active .knob-face { transform: translateY(6px) rotate(40deg); }
+.knob:disabled { cursor: default; }
+.knob:disabled .knob-face { background: radial-gradient(circle at 40% 35%, #c9c3c3, #8f8a8a); }
+.knob:disabled .knob-face::after { background: #b8b0a0; }
+.knob:disabled .knob-label { color: #f4b4b6; }
+.knob.empty { visibility: hidden; }
+.knob:focus-visible .knob-face { outline: 4px dashed var(--white); outline-offset: 14px; }
+[data-scene="s2"] .knob-main .knob-face { animation: knob-call 1.4s ease-in-out infinite; }
+@keyframes knob-call {
+  0%, 100% { box-shadow: 0 7px 0 var(--ink), 0 0 0 0 #facc1500; }
+  50%      { box-shadow: 0 7px 0 var(--ink), 0 0 46px 16px #facc15cc; }
+}
+
+/* 短いお知らせ */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 200px;
+  transform: translateX(-50%) translateY(20px);
+  margin: 0;
+  padding: 12px 30px;
+  font-family: var(--font-title);
+  font-size: 26px;
+  color: var(--white);
+  background: var(--ink);
+  border: 4px solid var(--white);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 8;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ------------------------------------------------------------------ */
+/* 場面ごとの見え方                                                      */
+/* ------------------------------------------------------------------ */
+/* s2:真ん中の ? が赤く光り、ハンドルが「回して」とゆれる */
+[data-scene="s2"] .dome-mark { color: var(--cap-y); animation: mark-pulse 1.2s ease-in-out infinite; }
+@keyframes mark-pulse { 50% { transform: scale(1.1); } }
+[data-scene="s2"] .dial-bar { animation: dial-wiggle 1.6s ease-in-out infinite; }
+@keyframes dial-wiggle { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-20deg); } 85% { transform: rotate(14deg); } }
+[data-scene="s2"] .machine-sub,
+[data-scene="s3"] .machine-sub,
+[data-scene="s4"] .machine-sub { display: none; }
+
+/* s3:材料のカプセルが機械のほうへ向かい、中がかき回され、光ってゆれる */
+[data-scene="s3"] .cap-left  .cap-ball { transform: translateX(40px) rotate(20deg); }
+[data-scene="s3"] .cap-right .cap-ball { transform: translateX(-40px) rotate(-20deg); }
+[data-scene="s3"] .dome-mark { display: none; }
+[data-scene="s3"]:is([data-level="2"], [data-level="3"], [data-level="4"], [data-level="5"]) .ball { animation: mix 0.5s ease-in-out infinite alternate; }
+[data-scene="s3"] .k2, [data-scene="s3"] .k5, [data-scene="s3"] .k7 { animation-delay: 0.2s; }
+[data-scene="s3"] .k3, [data-scene="s3"] .k8 { animation-delay: 0.35s; }
+@keyframes mix { to { translate: 0 -40px; rotate: 90deg; } }
+[data-scene="s3"][data-level="3"] .dome { box-shadow: 0 0 40px 8px #ffffffcc; }
+[data-scene="s3"]:is([data-level="4"], [data-level="5"]) .dome { box-shadow: 0 0 70px 20px #facc15cc; }
+[data-scene="s3"][data-level="4"] .machine { animation: rattle 0.28s linear infinite; }
+@keyframes rattle { 0%, 100% { transform: translate(0, 0) rotate(0); } 25% { transform: translate(-5px, -3px) rotate(-1deg); } 75% { transform: translate(5px, -2px) rotate(1deg); } }
+[data-scene="s3"] .board { display: block; }
+[data-scene="s3"] .status-plate { display: flex; }
+
+/* s4:たんじょう(取り出し口からカプセルが転がり出て、パカッと割れ、カードが出る) */
+[data-scene="s4"] .machine { animation: fade-out 0.6s ease-out 0.2s forwards; }
+@keyframes fade-out { to { opacity: 0; transform: scale(0.9); } }
+[data-scene="s4"] .out-cap { display: block; animation: roll-out 0.8s cubic-bezier(.3, .8, .4, 1) both; }
+@keyframes roll-out {
+  0%   { transform: translate(-147px, 195px) scale(0.35) rotate(0); }
+  100% { transform: translate(0, 0) scale(1) rotate(720deg); }
+}
+[data-scene="s4"] .out-top    { animation: split-top 0.6s ease-out 0.85s forwards; }
+[data-scene="s4"] .out-bottom { animation: split-bottom 0.6s ease-in 0.85s forwards; }
+@keyframes split-top    { to { transform: translate(-60px, -320px) rotate(-40deg); opacity: 0; } }
+@keyframes split-bottom { to { transform: translate(60px, 320px) rotate(30deg); opacity: 0; } }
+[data-scene="s4"] .spark { animation: spark 0.8s ease-out 0.85s forwards; }
+[data-scene="s4"] .s1 { --sx: -300px; --sy: -160px; }
+[data-scene="s4"] .s2 { --sx: 300px;  --sy: -180px; }
+[data-scene="s4"] .s3 { --sx: -280px; --sy: 160px; }
+[data-scene="s4"] .s4 { --sx: 290px;  --sy: 170px; }
+@keyframes spark {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(1.6) rotate(180deg); }
+}
+[data-scene="s4"] .card { display: block; animation: card-born 0.8s cubic-bezier(.2, 1.4, .4, 1) 0.95s both; }
+@keyframes card-born {
+  0%   { transform: scale(0.2) rotate(-8deg); opacity: 0; filter: brightness(2); }
+  70%  { transform: scale(1.04) rotate(1deg); opacity: 1; filter: brightness(1.15); }
+  100% { transform: scale(1) rotate(0); filter: brightness(1); }
+}
+
+/* ------------------------------------------------------------------ */
+/* 場面転換:カプセルが画面いっぱいに降ってくる                            */
+/* ------------------------------------------------------------------ */
+.rain { position: absolute; inset: 0; z-index: 10; pointer-events: none; overflow: hidden; }
+.drop {
+  position: absolute;
+  width: 290px;
+  height: 290px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 22%, #ffffffaa 0 10%, transparent 18%),
+    linear-gradient(180deg, var(--c) 0 48%, var(--ink) 48% 52%, var(--white) 52%);
+  border: 8px solid var(--ink);
+  transform: translateY(-1400px) rotate(var(--r));
+}
+.drop.b { --c: var(--cap-b); }
+.drop.g { --c: var(--cap-g); }
+.drop.p { --c: var(--cap-p); }
+.drop.y { --c: var(--cap-y); }
+/* 閉じる:上から降り積もる / 開く:下へ落ちて消える(ページを開いたときも、ここから始まる) */
+.stage.shut .drop { animation: drop-in 0.3s ease-in var(--d) both; }
+.stage:not(.shut) .drop { animation: drop-out 0.45s ease-in var(--d) both; }
+@keyframes drop-in  { from { transform: translateY(-1400px) rotate(calc(var(--r) - 120deg)); } to { transform: translateY(0) rotate(var(--r)); } }
+@keyframes drop-out { from { transform: translateY(0) rotate(var(--r)); } to { transform: translateY(1400px) rotate(calc(var(--r) + 90deg)); } }
+
+/* 動きを減らす設定のときは、カプセルを降らせない */
+@media (prefers-reduced-motion: reduce) {
+  .rain { display: none; }
+}

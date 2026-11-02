@@ -1,0 +1,13 @@
+# 設定ファイル(APIキーを含む)
+.env
+
+# 生成結果
+outputs/
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+outputs/api_usage_log.jsonl
