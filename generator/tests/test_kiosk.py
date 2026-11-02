@@ -28,3 +28,16 @@ def test_closing_browser_stops_server(monkeypatch):
 def test_handoff_to_open_kiosk_does_not_stop_server(monkeypatch):
     # 前のキオスクの窓が残っていると、新しいブラウザはすぐに終わる。そのときはサーバーを止めない
     assert watch(monkeypatch, lifetime=1) == []
+
+
+def test_port_in_use():
+    import socket
+
+    from app.net_utils import port_in_use
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen()
+        port = s.getsockname()[1]
+        assert port_in_use(port)
+    assert not port_in_use(port)

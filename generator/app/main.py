@@ -34,7 +34,7 @@ from .animals import ANIMAL_ICONS, ANIMALS, DEFAULT_ANIMAL_ICON, normalize_anima
 from .battle import DEMO_ID, demo_battle_monster, make_battle_stats, recent_monster_entry, to_battle_monster
 from .generator import GenerationResult, PartialCallback, get_generator
 from .kiosk import kiosk_enabled, open_kiosk_in_background
-from .net_utils import get_lan_ip
+from .net_utils import get_lan_ip, port_in_use
 from .openai_client import allow_person, image_prompt_style, is_dry_run
 from .pricing import format_cost, to_yen
 from .recognizer import choose_plan, combine, describe, generate_names, quick_check, recognize
@@ -915,6 +915,13 @@ async def api_name_test(
 def main() -> None:
     """`python -m app.main` で起動するための入口。"""
     import uvicorn
+
+    # ※ 2026年11月2日:前のサーバーが窓のないまま残っていると、新しいサーバーは起動に失敗するのに、
+    #   キオスクは前のサーバーの画面を開いてしまい、古いコードのまま動いているように見えた
+    if port_in_use(PORT):
+        print(f"\n  ポート {PORT} は、もう別のサーバーが使っています(前のサーバーが残っているかもしれません)。\n"
+              "  タスクマネージャーで python.exe を終わらせるか、PC を再起動してから、もう一度起動してください。\n", flush=True)
+        raise SystemExit(1)
 
     server = uvicorn.Server(uvicorn.Config("app.main:app", host="0.0.0.0", port=PORT, reload=False))
 

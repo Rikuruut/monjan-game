@@ -20,3 +20,10 @@ def get_lan_ip() -> str:
         return "127.0.0.1"
     finally:
         s.close()
+
+
+def port_in_use(port: int) -> bool:
+    """このPCで、そのポートをもう別のサーバーが使っているか(つないでみて、つながれば使われている)。"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
