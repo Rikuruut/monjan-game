@@ -58,7 +58,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
   - 場面転換は `#stage.shut` を CSS で見せる。時間は `--scene-close-ms` / `--scene-open-ms`
   - JavaScript の演出は任意:`window.themeFx.birth(showCard)` で誕生をまかせられる(失敗しても `app.js` がカードを出す)。段が変わると `#stage` に `levelchange`。
     今は fusion の `effects.js`(GSAP・tsParticles)。ライブラリが読めないときは `<html>` に `fx` が付かず、CSS の演出で動く
-  - 効果音 `window.sfx.play(名前)`:press・tick(段が上がった)・crack・fanfare。themeFx のあるテーマは誕生の音を自分で鳴らす。BGM は `sounds/bgm.mp3` をくり返す。`?sound=0` で消す
+  - 効果音 `window.sfx.play(名前)`:press・tick(段が上がった)・crack・fanfare。themeFx のあるテーマは誕生の音を自分で鳴らす。BGM は `sounds/bgm.mp3` をくり返す。がったい中(s3)は `fusion1〜3.mp3` の1つを流し、`bgm.mp3` を小さくする(開発者メニューで選ぶ)。`?sound=0` で消す
 - 確認用(API なし):`/?theme=…&demo=1&scene=s3&progress=0.8&photo=…&img=…&animal=…&name=…`、`&play=birth` で割れる直前から誕生後まで流す、`&dev=1` で開発者メニュー。`photo`・`img` を付けなければ見本(`static/demo/`)を使う
 
 ### スマホ(`/phone`)

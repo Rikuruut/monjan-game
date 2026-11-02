@@ -40,6 +40,7 @@
 
 const el = (id) => document.getElementById(id);
 const sound = (name) => { if (window.sfx) window.sfx.play(name); };
+const fusionBgm = (on) => { if (window.sfx && window.sfx.fusionBgm) window.sfx.fusionBgm(on); };
 const stage = el("stage");
 const params = new URLSearchParams(location.search);
 
@@ -105,6 +106,7 @@ function renderScene(scene) {
   state.scene = scene;
   stage.dataset.scene = scene;
   el("headline").textContent = headlineFor(scene);
+  fusionBgm(scene === "s3");   // がったい中の BGM(sound.js)
 
   // 段階のランプ
   const index = SCENES.indexOf(scene);
@@ -265,6 +267,7 @@ let endTimer = null;
 function endWithMessage(headline, detail) {
   state.generating = false;
   stopTimers();
+  fusionBgm(false);   // 撮り直し・エラーの表示のあいだは、がったい中の BGM を止める
   el("headline").textContent = headline;
   if (detail) toast(detail, 4.5);
   clearTimeout(endTimer);
@@ -593,6 +596,10 @@ document.body.insertAdjacentHTML("beforeend", `
       <button data-demo-sfx="tick">tick</button>
       <button data-demo-sfx="crack">crack</button>
       <button data-demo-sfx="fanfare">fanfare</button>
+    </p>
+    <p class="dev-row">がったい中の BGM
+      <span id="fusion-bgm-choices" class="dev-row"></span>
+      <span class="dev-muted">(s3 で試せます)</span>
     </p>
   </section>
   <section>
@@ -973,6 +980,26 @@ el("demo-reset").addEventListener("click", restart);
 document.querySelectorAll("[data-demo-sfx]").forEach((btn) => {
   btn.addEventListener("click", () => sound(btn.dataset.demoSfx));
 });
+
+// がったい中の BGM を選ぶ(1〜3・なし)。選んでいるものを太字にする
+function renderFusionBgmChoices() {
+  const box = el("fusion-bgm-choices");
+  if (!window.sfx || !window.sfx.fusionBgmNumbers) return;
+  box.replaceChildren();
+  const current = window.sfx.getFusionBgm();
+  [...window.sfx.fusionBgmNumbers, 0].forEach((number) => {
+    const btn = document.createElement("button");
+    btn.textContent = number ? String(number) : "なし";
+    btn.style.fontWeight = number === current ? "bold" : "";
+    btn.setAttribute("aria-pressed", String(number === current));
+    btn.addEventListener("click", () => {
+      window.sfx.setFusionBgm(number);
+      renderFusionBgmChoices();
+    });
+    box.appendChild(btn);
+  });
+}
+renderFusionBgmChoices();
 
 // ----------------------------------------------------------------------
 // 開発者メニューの共通の項目(バトルの開発者メニュー battle/src/DevMenu.tsx と同じ中身)
