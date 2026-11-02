@@ -142,7 +142,7 @@ monjan-prototype/
 │   │   ├── sound.js     効果音
 │   │   └── common.css   舞台の拡大縮小・開発者メニューの見た目
 │   ├── themes/<名前>/   PC 画面の見た目(テーマ)。index.html・style.css・theme.json
-│   │                    fusion(もりの つむじかぜ)だけ。effects.js で演出を足している。ほかは archive/20261102_before_fusion_only/
+│   │                    fusion(たんじょうのもり)だけ。effects.js で演出を足している。ほかは archive/20261102_before_fusion_only/
 │   ├── phone.html / phone.js / phone.css   スマホ用ページ
 │   ├── vendor/          ライブラリとフォント(ネットから読まないよう手元に置いている)
 │   └── sounds/          効果音(今は仮の音)

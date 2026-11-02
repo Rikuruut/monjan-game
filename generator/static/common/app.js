@@ -71,7 +71,7 @@ const SCENES = ["s1", "s2", "s3", "s4"];
 function headlineFor(scene) {
   if (scene === "s1") return "スマホで しゃしんを とってね";
   if (scene === "s2") return "しゃしん × " + (state.animal || "どうぶつ") + " = ?";
-  if (scene === "s3") return "がったい ちゅう…";
+  if (scene === "s3") return "なにが うまれるかな...?";
   return "たんじょう!";
 }
 

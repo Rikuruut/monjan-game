@@ -51,7 +51,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 - 1920×1080 の舞台を、モニターに合わせて拡大縮小(`app.js` の `fitStage`)。操作は3つのボタン = ← / Enter・Space / →。開発者メニュー(共通の項目は `../CLAUDE.md`)の撮影側だけの項目:テーマ・テストプレイ(見本のゴリラ × はさみで「がったい!」から誕生後まで通しで流す。がったい中 約25秒)・確認用の場面・演出・効果音のボタン(APIなし)・判定の JSON・時間・料金・名前のテスト
 - 場面は `#stage` の `data-scene`:s1 しゃしんを とろう / s2 しゃしん × どうぶつ = ? / s3 がったい中 / s4 たんじょう(左 もう一回・中 たたかう!・右 いんさつ)。バトルの「スタート!」で s1 に来る
 - **見た目はテーマで切りかえる**:`static/themes/<名前>/`(index.html・style.css・theme.json)。`/?theme=名前`、なければ `.env` の `PC_THEME`(既定 fusion。`.env` が知らない名前のときも fusion)。フォルダを足すだけで選べる
-  - 今あるテーマは fusion(もりのつむじかぜ)だけ(2026年11月2日に依頼者が決めた。ほかのテーマと元の背景 bg.png は `archive/20261102_before_fusion_only/`)。
+  - 今あるテーマは fusion(たんじょうのもり)だけ(2026年11月2日に依頼者が決めた。ほかのテーマと元の背景 bg.png は `archive/20261102_before_fusion_only/`)。
     写真と動物がうずのまわりを回りながら吸いこまれ、一点に縮んでから風がはじけて葉と花びらが舞う。背景は `static/themes/fusion/bg.webp`(依頼者の絵を 1920×1080 の WebP に)
   - テーマに用意する要素(ID)は `app.js` 先頭の「テーマとの約束」
   - 進み具合は `#stage` の `--progress`(0〜1)と `data-level`(0〜5)を CSS で見せる。**段ごとの見た目は静的な指定で出し、transition やアニメーションを使わない**(回る・ゆれる要素の中で途中のまま止まって見えた)
