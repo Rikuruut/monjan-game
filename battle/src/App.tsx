@@ -22,7 +22,6 @@ import { DevMenu, type DevJump, type FxDirection } from './DevMenu';
 import { readAutoplay, writeAutoplay, type Autoplay } from './devTools';
 import {
   cpuHandFor,
-  decideWinner,
   getGameOutcome,
   pickCpuHand,
   resolveRound,
@@ -323,91 +322,17 @@ function RarityNotice() {
   );
 }
 
-// ルール説明①の手当て問題:相手の手に かてる手を、会場の3つのボタン(グー・チョキ・パー)で答える
-type PracticeAnswer = 'none' | 'win' | 'lose' | 'tie';
-
-// 相手の手に かてる手
-const WINNING_HAND: Record<Hand, Hand> = { rock: 'paper', scissors: 'rock', paper: 'scissors' };
-
-function practiceAnswer(hand: Hand, cpuHand: Hand): PracticeAnswer {
-  const { winner } = decideWinner(hand, cpuHand, 1, 1);
-  return winner === 'player' ? 'win' : winner === 'cpu' ? 'lose' : 'tie';
-}
-
-function TutorialPractice({ cpuHand, picked, answer }: { cpuHand: Hand; picked: Hand | null; answer: PracticeAnswer }) {
-  const cpu = HAND_META[cpuHand];
-  const winning = WINNING_HAND[cpuHand];
-  const message = {
-    none: <>かてる手を <strong>えらんでね！</strong></>,
-    win: <><strong>せいかい！</strong> {HAND_META[winning].emoji} は {cpu.emoji} に かつ！</>,
-    lose: <><strong>おしい！</strong> {cpu.emoji} には {HAND_META[winning].emoji} で かてるよ</>,
-    tie: <><strong>あいこ！</strong> ちがう手で かってみよう</>,
-  }[answer];
-
-  return (
-    <div className="tutorial-page">
-      <h2 id="tutorial-title">じゃんけんで 勝負！</h2>
-      <div className="tutorial-practice">
-        <div className="practice-cpu">
-          <small>あいては</small>
-          <b aria-label={cpu.label}>{cpu.emoji}</b>
-          <small>を だすよ！</small>
-        </div>
-        <div className="practice-hands" aria-hidden="true">
-          {HANDS.map((hand) => (
-            <span
-              key={hand}
-              className={[
-                'practice-hand',
-                picked === hand ? `practice-hand--${answer}` : '',
-                answer === 'lose' && hand === winning ? 'practice-hand--hint' : '',
-              ].filter(Boolean).join(' ')}
-            >
-              <b>{HAND_META[hand].emoji}</b>
-              <small>{HAND_KEYS[hand]} {HAND_META[hand].label}</small>
-            </span>
-          ))}
-        </div>
-      </div>
-      <p className={`practice-message practice-message--${answer}`} role="status">{message}</p>
-    </div>
-  );
-}
-
-function Tutorial({
-  onClose,
-  isReview,
-  playSound,
-}: {
-  onClose: () => void;
-  isReview: boolean;
-  playSound: (...args: Parameters<typeof playGameSound>) => void;
-}) {
+function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolean }) {
   const [step, setStep] = useState(0);
-  // ①の手当て問題(最初のルール説明だけ。見直しでは今までの説明ページ)。②からもどっても、正解したままにする
-  const [practiceCpu] = useState<Hand>(() => pickCpuHand());
-  const [picked, setPicked] = useState<Hand | null>(null);
-  const [answer, setAnswer] = useState<PracticeAnswer>('none');
-  const practicing = !isReview && step === 0 && answer !== 'win';
   const isLastStep = step === 2;
   const next = () => { if (isLastStep) onClose(); else setStep((current) => current + 1); };
   const back = () => setStep((current) => Math.max(0, current - 1));
 
-  const pick = (hand: Hand) => {
-    const result = practiceAnswer(hand, practiceCpu);
-    setPicked(hand);
-    setAnswer(result);
-    playSound(result === 'win' ? 'reveal' : 'tie');
-  };
-
-  // ①で答えるまでは 左・中・右 = グー・チョキ・パー。そのあとは 左「もどる」・中「つぎへ」
+  // 左「もどる」・中「つぎへ」
   usePadButtons((button) => {
-    if (practicing) pick(HANDS[['left', 'center', 'right'].indexOf(button)]);
-    else if (button === 'center') next();
+    if (button === 'center') next();
     else if (button === 'left' && step > 0) back();
   });
-
-  const handKnob = (hand: Hand) => ({ label: `${HAND_META[hand].emoji} ${HAND_META[hand].label}`, onClick: () => pick(hand) });
 
   return (
     <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
@@ -420,9 +345,7 @@ function Tutorial({
           ))}
         </div>
 
-        {step === 0 && !isReview && <TutorialPractice cpuHand={practiceCpu} picked={picked} answer={answer} />}
-
-        {step === 0 && isReview && (
+        {step === 0 && (
           <div className="tutorial-page">
             <h2 id="tutorial-title">じゃんけんで 勝負！</h2>
             <p>グー・チョキ・パーから<br /><strong>1つ えらぼう！</strong></p>
@@ -460,16 +383,14 @@ function Tutorial({
       </section>
 
       <Deck
-        knobs={practicing
-          ? { left: handKnob('rock'), center: handKnob('scissors'), right: handKnob('paper') }
-          : {
-            left: step > 0 ? { label: 'もどる', onClick: back } : undefined,
-            center: {
-              label: isLastStep ? (isReview ? 'バトルにもどる' : 'バトルスタート！') : 'つぎへ',
-              onClick: next,
-              call: true,
-            },
-          }}
+        knobs={{
+          left: step > 0 ? { label: 'もどる', onClick: back } : undefined,
+          center: {
+            label: isLastStep ? (isReview ? 'バトルにもどる' : 'バトルスタート！') : 'つぎへ',
+            onClick: next,
+            call: true,
+          },
+        }}
       />
     </div>
   );
@@ -648,7 +569,6 @@ function BattleScreen({
   onCloseTutorial,
   onOpenRules,
   onSelect,
-  playSound,
   fxLabel,
 }: {
   data: GameData;
@@ -665,7 +585,6 @@ function BattleScreen({
   onCloseTutorial: () => void;
   onOpenRules: () => void;
   onSelect: (hand: Hand) => void;
-  playSound: (...args: Parameters<typeof playGameSound>) => void;
   fxLabel?: string;
 }) {
   const tutorialOpen = tutorialMode !== null;
@@ -833,7 +752,7 @@ function BattleScreen({
       {phase === 'impact' && <div className="hit-flash" aria-hidden="true" />}
       <ParticleLayer ref={canvasRef} />
       {fxLabel && <p className="fx-preview-label" aria-hidden="true">{fxLabel}</p>}
-      {tutorialOpen && <Tutorial onClose={onCloseTutorial} isReview={tutorialMode === 'review'} playSound={playSound} />}
+      {tutorialOpen && <Tutorial onClose={onCloseTutorial} isReview={tutorialMode === 'review'} />}
     </main>
   );
 }
@@ -1419,7 +1338,6 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         onCloseTutorial={closeTutorial}
         onOpenRules={openRules}
         onSelect={chooseHand}
-        playSound={playSound}
       />
     );
   }
