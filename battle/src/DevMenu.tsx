@@ -20,7 +20,7 @@ export type DevJump= 'title' | 'rules' | 'battle' | 'victory' | 'defeat' | 'draw
 
 const JUMPS: { target: DevJump; label: string }[] = [
   { target: 'title', label: 'タイトル' },
-  { target: 'rules', label: 'ルール' },
+  { target: 'rules', label: 'れんしゅう' },
   { target: 'battle', label: 'バトル' },
   { target: 'victory', label: 'かち' },
   { target: 'defeat', label: 'まけ' },

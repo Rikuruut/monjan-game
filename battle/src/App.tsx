@@ -43,7 +43,8 @@ import { Stage } from './stage';
 import { HANDS, type Hand, type Monster, type RoundResult, type StarMap, type Winner } from './types';
 
 type Screen = 'title' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
-type TutorialMode = 'intro' | 'review';
+// 立て札のルール説明は、「📖 ルール」の見直しだけ。最初は本物のバトル画面で練習ラウンド(practice)をする
+type TutorialMode = 'review';
 const TITLE_LOGO_PATH = assetUrl('/assets/monjan-title-logo.png');
 export type BattlePhase =
   | 'summon'
@@ -73,6 +74,8 @@ export const STAR_SHOWDOWN_MS = 1200;
 export const ATTACK_DISPLAY_MS = 700;
 // 命中:一瞬止まって(ヒットストップ)から ゆれる(2026年11月2日 420 → 600ms)
 export const IMPACT_DISPLAY_MS = 600;
+// 練習の はじまりで、スタートの音のあとに召喚の音を鳴らすまで
+const PRACTICE_SUMMON_SOUND_MS = 350;
 // あいこの攻撃で、2つめのタイプの音を遅らせる
 const TIE_SECOND_SOUND_MS = 60;
 // 開発者メニューの「攻撃エフェクトを見る」:バトル画面へ移ってから始めるまで / 「8つ順番に」の間かく
@@ -322,7 +325,7 @@ function RarityNotice() {
   );
 }
 
-function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolean }) {
+function Tutorial({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState(0);
   const isLastStep = step === 2;
   const next = () => { if (isLastStep) onClose(); else setStep((current) => current + 1); };
@@ -386,7 +389,7 @@ function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolea
         knobs={{
           left: step > 0 ? { label: 'もどる', onClick: back } : undefined,
           center: {
-            label: isLastStep ? (isReview ? 'バトルにもどる' : 'バトルスタート！') : 'つぎへ',
+            label: isLastStep ? 'バトルにもどる' : 'つぎへ',
             onClick: next,
             call: true,
           },
@@ -396,21 +399,52 @@ function Tutorial({ onClose, isReview }: { onClose: () => void; isReview: boolea
   );
 }
 
+// 練習ラウンドの吹き出し。手をえらぶ前(choose)と、結果で止まっているとき(result)。見た目は battle.css の .coach
+function PracticeCoach({ step }: { step: 'choose' | 'result' }) {
+  return (
+    <aside className={`coach coach--${step}`} aria-live="polite">
+      {step === 'choose' ? (
+        <>
+          <p className="coach-title">れんしゅうだよ！</p>
+          <p>グー・チョキ・パーから <strong>1つ えらぼう！</strong></p>
+          <p className="coach-sub">◀ ● ▶ の ボタンでも えらべるよ</p>
+          <p className="coach-stars"><strong>★</strong> は つよさ。同じ手のときは <strong>★が多い方の かち！</strong></p>
+        </>
+      ) : (
+        <>
+          <p className="coach-title">かったね！</p>
+          <p>かつと <strong>⚔の数だけ</strong> 相手の♡が へるよ！</p>
+          <p><strong>相手の♡を ぜんぶなくしたら かち！</strong></p>
+          <p className="coach-sub">つぎから 本番だよ！</p>
+        </>
+      )}
+    </aside>
+  );
+}
+
+// 練習のあいだ、CPU の♡は 自分の⚔より多くする(♡が0になって、勝負が終わらないように)
+function practiceData(data: GameData): GameData {
+  const hp = Math.max(data.cpu.hp, data.player.attack + 1000) as Monster['hp'];
+  return hp === data.cpu.hp ? data : { ...data, cpu: { ...data.cpu, hp } };
+}
+
 function ChoiceButtons({
   stars,
   disabled,
   selected,
   rolling,
+  coach = false,
   onSelect,
 }: {
   stars: StarMap;
   disabled: boolean;
   selected: Hand | null;
   rolling: boolean;
+  coach?: boolean;
   onSelect: (hand: Hand) => void;
 }) {
   return (
-    <div className={`choice-area ${disabled ? 'choice-area--locked' : ''}`.trim()}>
+    <div className={['choice-area', disabled ? 'choice-area--locked' : '', coach ? 'choice-area--coach' : ''].filter(Boolean).join(' ')}>
       <p className="choice-prompt">{disabled ? 'しょうぶの けっかは…' : 'どの手にする？'}</p>
       <div className="choice-buttons">
         {HANDS.map((hand) => (
@@ -566,8 +600,10 @@ function BattleScreen({
   playerHand,
   cpuHand,
   result,
+  practice,
   onCloseTutorial,
   onOpenRules,
+  onEndPractice,
   onSelect,
   fxLabel,
 }: {
@@ -582,8 +618,10 @@ function BattleScreen({
   playerHand: Hand | null;
   cpuHand: Hand | null;
   result: RoundResult | null;
+  practice: boolean;
   onCloseTutorial: () => void;
   onOpenRules: () => void;
+  onEndPractice: () => void;
   onSelect: (hand: Hand) => void;
   fxLabel?: string;
 }) {
@@ -638,6 +676,7 @@ function BattleScreen({
     'battle-screen',
     `battle-screen--${phase}`,
     tutorialOpen ? 'battle-screen--tutorial' : '',
+    practice && phase === 'result' ? 'battle-screen--practice-result' : '',
     phase === 'attack' ? `battle-screen--attack-${attackerTheme}` : '',
     isFinalBlow ? 'battle-screen--final-blow' : '',
   ].filter(Boolean).join(' ');
@@ -659,11 +698,12 @@ function BattleScreen({
           <span className="signboard__title">じゃんけん バトル</span>
         </div>
         <span className="round-chip">ラウンド <b>{round}</b></span>
+        {practice && <span className="practice-chip">れんしゅう</span>}
         <button
           className="rule-button"
           type="button"
           onClick={onOpenRules}
-          disabled={phase !== 'choosing' || tutorialOpen}
+          disabled={phase !== 'choosing' || tutorialOpen || practice}
           aria-label="ルールをもう一度見る"
         >
           <span aria-hidden="true">📖</span> ルール
@@ -717,6 +757,7 @@ function BattleScreen({
           disabled={phase !== 'choosing' || tutorialOpen}
           selected={playerHand}
           rolling={phase === 'rarity'}
+          coach={practice && phase === 'choosing'}
           onSelect={onSelect}
         />
       ) : result && playerHand && cpuHand ? (
@@ -752,7 +793,14 @@ function BattleScreen({
       {phase === 'impact' && <div className="hit-flash" aria-hidden="true" />}
       <ParticleLayer ref={canvasRef} />
       {fxLabel && <p className="fx-preview-label" aria-hidden="true">{fxLabel}</p>}
-      {tutorialOpen && <Tutorial onClose={onCloseTutorial} isReview={tutorialMode === 'review'} />}
+      {practice && phase === 'choosing' && <PracticeCoach step="choose" />}
+      {practice && phase === 'result' && (
+        <>
+          <PracticeCoach step="result" />
+          <Deck knobs={{ center: { label: 'バトルスタート！', onClick: onEndPractice, call: true } }} />
+        </>
+      )}
+      {tutorialOpen && <Tutorial onClose={onCloseTutorial} />}
     </main>
   );
 }
@@ -860,6 +908,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [error, setError] = useState('');
   const [screen, setScreen] = useState<Screen>('title');
   const [tutorialMode, setTutorialMode] = useState<TutorialMode | null>(null);
+  // 練習ラウンド(最初のスタートのあと、本物のバトル画面で1回だけ。必ず勝つ。♡は本番の前にもどす)
+  const [practice, setPractice] = useState(false);
   const [playerHp, setPlayerHp] = useState(0);
   const [cpuHp, setCpuHp] = useState(0);
   const [playerStars, setPlayerStars] = useState<StarMap>(() => shuffleStars());
@@ -1019,14 +1069,29 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     if (!data) return;
     clearTimers();
     fillHp(data);
+    setCpuHp(statCount(practiceData(data).cpu.hp));
     resetRound();
-    setTutorialMode('intro');
+    setTutorialMode(null);
+    setPractice(true);
     setScreen('battle');
     if (soundEnabledRef.current) {
       void unlockGameAudio();
       playGameSound('start');
       void startGameBgm();
     }
+    schedule(() => playSound('summon'), PRACTICE_SUMMON_SOUND_MS);
+    schedule(startRarityRoll, SUMMON_DISPLAY_MS);
+  };
+
+  // 練習のおわり:♡を本番の数にもどして、ラウンド1(星の抽選)から本番を始める
+  const endPractice = () => {
+    if (!data) return;
+    clearTimers();
+    setPractice(false);
+    fillHp(data);
+    lockRef.current = true;
+    playSound('start');
+    startRarityRoll();
   };
 
   // タイトルの「スタート!」。展示では撮影・合体の画面へ進む(バトルには「たたかう!」で戻ってくる)
@@ -1040,21 +1105,12 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   };
 
   const closeTutorial = () => {
-    if (tutorialMode === 'review') {
-      setTutorialMode(null);
-      lockRef.current = false;
-      return;
-    }
-
     setTutorialMode(null);
-    setPhase('summon');
-    lockRef.current = true;
-    playSound('summon');
-    schedule(startRarityRoll, SUMMON_DISPLAY_MS);
+    lockRef.current = false;
   };
 
   const openRules = () => {
-    if (screen !== 'battle' || phase !== 'choosing' || tutorialOpen) return;
+    if (screen !== 'battle' || phase !== 'choosing' || tutorialOpen || practice) return;
     lockRef.current = true;
     setTutorialMode('review');
   };
@@ -1072,9 +1128,10 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const chooseHand = (hand: Hand) => {
     if (!data || lockRef.current || tutorialOpen || phase !== 'choosing') return;
     lockRef.current = true;
-    // 開発者メニューで勝ち負けを決めているときは、その結果になる手にする(あいこは星もそろえて完全なあいこ)
-    const chosenCpuHand = forced === 'normal' ? pickCpuHand() : cpuHandFor(hand, forced);
-    const roundCpuStars = forced === 'tie' ? withStarAt(cpuStars, chosenCpuHand, playerStars[hand]) : cpuStars;
+    // 練習は必ず勝つ。開発者メニューで勝ち負けを決めているときは、その結果になる手にする(あいこは星もそろえて完全なあいこ)
+    const mode: ForcedResult = practice ? 'win' : forced;
+    const chosenCpuHand = mode === 'normal' ? pickCpuHand() : cpuHandFor(hand, mode);
+    const roundCpuStars = mode === 'tie' ? withStarAt(cpuStars, chosenCpuHand, playerStars[hand]) : cpuStars;
     if (roundCpuStars !== cpuStars) setCpuStars(roundCpuStars);
     const nextResult = resolveRound({
       playerHand: hand,
@@ -1105,6 +1162,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
         schedule(() => {
           setPhase('result');
+          // 練習は ここで止まって、吹き出しを読んでもらう(「バトルスタート!」で本番へ)
+          if (practice) return;
           schedule(() => {
             const outcome = getGameOutcome(nextResult.playerHp, nextResult.cpuHp);
             if (outcome === 'ongoing') {
@@ -1155,6 +1214,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     clearTimers();
     setScreen('title');
     setTutorialMode(null);
+    setPractice(false);
     setPlayerHp(0);
     setCpuHp(0);
     resetRound();
@@ -1166,13 +1226,17 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   };
 
   // 会場の3つのボタン。手は左からグー・チョキ・パー(画面のボタンの並びと同じ)。
-  // ルール説明のあいだはチュートリアルが受け取る
+  // 見直しのルール説明のあいだはチュートリアルが受け取る。練習の結果では 中ボタンで本番へ
   const pressPad = (button: PadButton) => {
     if (!data) return;
     if (screen === 'title') {
       if (button === 'center') pressStart();
     } else if (screen === 'battle') {
-      if (!tutorialOpen) chooseHand(HANDS[['left', 'center', 'right'].indexOf(button)]);
+      if (practice && phase === 'result') {
+        if (button === 'center') endPractice();
+      } else if (!tutorialOpen) {
+        chooseHand(HANDS[['left', 'center', 'right'].indexOf(button)]);
+      }
     } else if (screen === 'thanks') {
       if (button === 'center') returnToTitle();
     } else if (button === 'center') {
@@ -1203,6 +1267,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     }
     clearTimers();
     setTutorialMode(null);
+    setPractice(false);
     if (target === 'battle') {
       fillHp(data);
       setScreen('battle');
@@ -1249,6 +1314,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     clearTimers();
     setDevOpen(false);
     setTutorialMode(null);
+    setPractice(false);
     fillHp(data);
     setScreen('battle');
     setPhase('choosing');
@@ -1268,8 +1334,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       action = pressStart;
       delay = AUTOPLAY_TITLE_MS;
     } else if (screen === 'battle') {
-      if (tutorialMode === 'intro') {
-        action = closeTutorial;
+      if (practice && phase === 'result') {
+        action = endPractice;
         delay = AUTOPLAY_RULES_MS;
       } else if (!tutorialOpen && phase === 'choosing') {
         action = () => chooseHand(HANDS[Math.floor(Math.random() * HANDS.length)]);
@@ -1286,7 +1352,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     if (!action) return;
     const timer = window.setTimeout(action, delay);
     return () => window.clearTimeout(timer);
-  }, [autoplay, data, devOpen, screen, phase, tutorialMode]);
+  }, [autoplay, data, devOpen, screen, phase, tutorialMode, practice]);
 
   if (error) {
     return (
@@ -1315,12 +1381,13 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   } else {
     // 「攻撃エフェクトを見る」のあいだは、攻撃する側(あいこは両方)のタイプを選んだものにする
     const fxTheme = fxPreview ? getAttributeTheme(fxPreview.attribute) : null;
+    const battleData = practice ? practiceData(data) : data;
     const shownData = fxPreview
       ? {
-        player: fxPreview.direction === 'cpu' ? data.player : { ...data.player, attribute: fxPreview.attribute },
-        cpu: fxPreview.direction === 'player' ? data.cpu : { ...data.cpu, attribute: fxPreview.attribute },
+        player: fxPreview.direction === 'cpu' ? battleData.player : { ...battleData.player, attribute: fxPreview.attribute },
+        cpu: fxPreview.direction === 'player' ? battleData.cpu : { ...battleData.cpu, attribute: fxPreview.attribute },
       }
-      : data;
+      : battleData;
     content = (
       <BattleScreen
         data={shownData}
@@ -1335,8 +1402,10 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         playerHand={playerHand}
         cpuHand={cpuHand}
         result={result}
+        practice={practice}
         onCloseTutorial={closeTutorial}
         onOpenRules={openRules}
+        onEndPractice={endPractice}
         onSelect={chooseHand}
       />
     );

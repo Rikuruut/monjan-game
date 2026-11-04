@@ -95,24 +95,36 @@ async function advance(milliseconds: number) {
   });
 }
 
-async function startToTutorial() {
+// スタートを押す(最初は、本物のバトル画面で練習ラウンドから始まる)
+async function startToPractice() {
   render(<App />);
   const startButton = await screen.findByRole('button', { name: /スタート！/ });
   vi.useFakeTimers();
   fireEvent.click(startButton);
 }
 
-async function closeTutorialToChoosing() {
-  fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
-  fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
-  fireEvent.click(screen.getByRole('button', { name: 'バトルスタート！' }));
+// 練習ラウンドを、結果で止まるところまで進める(グーを出す。練習は必ず勝つ)
+async function playPractice() {
   await advance(SUMMON_DISPLAY_MS);
   await advance(RARITY_ROLL_MS);
+  fireEvent.click(screen.getByRole('button', { name: /グー 星/ }));
+  await advanceSelectedToReveal();
+  await advanceRevealToAttack(false);
+  await advance(ATTACK_DISPLAY_MS);
+  await advance(IMPACT_DISPLAY_MS);
+}
+
+// 「バトルスタート!」で本番へ。練習で鳴った音は消して、本番ラウンド1の手えらびまで進める
+async function endPracticeToChoosing() {
+  fireEvent.click(screen.getByRole('button', { name: 'バトルスタート！' }));
+  await advance(RARITY_ROLL_MS);
+  vi.mocked(playGameSound).mockClear();
 }
 
 async function openBattle() {
-  await startToTutorial();
-  await closeTutorialToChoosing();
+  await startToPractice();
+  await playPractice();
+  await endPracticeToChoosing();
 }
 
 async function advanceSelectedToReveal() {
@@ -175,32 +187,75 @@ describe('画面上のゲーム進行と演出', () => {
     expect(STAR_SHOWDOWN_MS).toBe(1200);
   });
 
-  it('初回チュートリアルを大きな絵と短い3ステップで説明し、最後まで召喚を始めない', async () => {
-    await startToTutorial();
+  it('最初のスタートは練習ラウンド:吹き出しを出し、どの手でも勝ち、結果で止まって、バトルスタートで♡を満タンにして本番へ', async () => {
+    await startToPractice();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('れんしゅう')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /ルール/ })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('モンスター召喚');
 
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
-    expect(dialog).toHaveTextContent(/グー・チョキ・パーから\s*1つ\s*えらぼう/);
-    expect(dialog).toHaveTextContent('✊');
-    expect(dialog).toHaveTextContent('✌');
-    expect(dialog).toHaveTextContent('✋');
-    expect(playGameSound).not.toHaveBeenCalledWith('summon');
+    await advance(SUMMON_DISPLAY_MS);
+    await advance(RARITY_ROLL_MS);
+    // 吹き出し①:手をえらぶまで待つ
+    expect(screen.getByText('れんしゅうだよ！')).toBeInTheDocument();
+    expect(screen.getByText(/★が多い方の かち/)).toBeInTheDocument();
+    await advance(RESULT_DISPLAY_MS * 2);
+    expect(screen.getByText('れんしゅうだよ！')).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'つぎへ' }));
-    expect(within(dialog).getByRole('heading', { name: /同じ手なら\s*星で勝負/ })).toBeInTheDocument();
-    expect(dialog).toHaveTextContent('★★★');
-    expect(dialog).toHaveTextContent(/おたがいの♡が\s*1つへる/);
-    expect(playGameSound).not.toHaveBeenCalledWith('summon');
+    // どの手を出しても勝つ(練習)。⚔の数だけ相手の♡がへる
+    fireEvent.click(screen.getByRole('button', { name: /チョキ 星/ }));
+    expect(screen.queryByText('れんしゅうだよ！')).not.toBeInTheDocument();
+    await advanceSelectedToReveal();
+    await advanceRevealToAttack(false);
+    await advance(ATTACK_DISPLAY_MS);
+    expect(screen.getByLabelText('HP 3 / 5')).toBeInTheDocument();
+    expect(screen.getByLabelText('HP 4 / 4')).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'つぎへ' }));
-    expect(within(dialog).getByRole('heading', { name: /相手の\s*ハートをへらそう/ })).toBeInTheDocument();
-    expect(dialog).toHaveTextContent('⚔');
-    expect(dialog).toHaveTextContent(/相手の♡を\s*ぜんぶなくしたら\s*かち/);
-    expect(within(dialog).getByRole('button', { name: 'バトルスタート！' })).toBeInTheDocument();
-    expect(playGameSound).not.toHaveBeenCalledWith('summon');
+    // 吹き出し②:結果で止まったまま、進まない
+    await advance(IMPACT_DISPLAY_MS);
+    expect(screen.getByText('かったね！')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'バトルスタート！' })).toBeInTheDocument();
+    await advance(RESULT_DISPLAY_MS * 2);
+    expect(screen.getByText('かったね！')).toBeInTheDocument();
+    expect(screen.getByLabelText('HP 3 / 5')).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'バトルスタート！' }));
-    expect(playGameSound).toHaveBeenCalledWith('summon');
+    // 本番へ:♡は満タン、ラウンド1、練習の表示は消える
+    fireEvent.click(screen.getByRole('button', { name: 'バトルスタート！' }));
+    expect(screen.getByLabelText('HP 4 / 4')).toBeInTheDocument();
+    expect(screen.getByLabelText('HP 5 / 5')).toBeInTheDocument();
+    expect(screen.queryByText('れんしゅう')).not.toBeInTheDocument();
+    expect(document.querySelector('.round-chip b')).toHaveTextContent('1');
+    await advance(RARITY_ROLL_MS);
+    expect(screen.getByRole('button', { name: /グー 星/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /ルール/ })).toBeEnabled();
+  });
+
+  it('CPU の♡が少なくても、練習では♡が0にならず、勝負が終わらない', async () => {
+    const weakCpu = { ...cpu, hp: 1000 };
+    const byPath: Record<string, unknown> = {
+      '/data/game-config.json': {
+        samplePlayerMonsterId: 'MON-0001',
+        sampleCpuMonsterId: 'MON-0002',
+        monsters: ['/player.json', '/cpu.json'],
+      },
+      '/player.json': player,
+      '/cpu.json': weakCpu,
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => byPath[String(input)],
+    })));
+
+    await startToPractice();
+    await playPractice();
+    // 練習のあいだ CPU の♡は、自分の⚔(2)より多い 3 つ。2へって 1 のこる
+    expect(screen.getByLabelText('HP 1 / 3')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'しょうり！' })).not.toBeInTheDocument();
+    expect(document.querySelector('.final-banner')).toBeNull();
+
+    // 本番では、本来の♡(1つ)にもどる
+    await endPracticeToChoosing();
+    expect(screen.getByLabelText('HP 1 / 1')).toBeInTheDocument();
   });
 
   it('タイトルには指定ロゴだけを正しい比率で表示し、モンスター画像はバトル開始後だけ表示する', async () => {
@@ -240,18 +295,12 @@ describe('画面上のゲーム進行と演出', () => {
   });
 
   it('召喚と抽選後にだけ選択でき、じゃん・けん・ぽんの後までCPUの手と星をDOMへ出さない', async () => {
-    await startToTutorial();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /グー 星/ })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
-    fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
-    fireEvent.click(screen.getByRole('button', { name: 'バトルスタート！' }));
+    await startToPractice();
     expect(screen.getByRole('status')).toHaveTextContent('モンスター召喚');
     expect(screen.queryByRole('button', { name: /グー 星/ })).not.toBeInTheDocument();
-    expect(playGameSound).toHaveBeenCalledWith('summon');
 
     await advance(SUMMON_DISPLAY_MS - 1);
+    expect(playGameSound).toHaveBeenCalledWith('summon');
     expect(screen.getByRole('status')).toHaveTextContent('モンスター召喚');
     await advance(1);
 
@@ -292,10 +341,11 @@ describe('画面上のゲーム進行と演出', () => {
   });
 
   it('同じ手だけ星勝負を表示し、星が多い側の攻撃へ進む', async () => {
-    await startToTutorial();
-    // プレイヤーrock=★2、CPU rock=★1、CPU手=rock。
+    await startToPractice();
+    await playPractice();
+    // 本番のラウンド1:プレイヤーrock=★2、CPU rock=★1、CPU手=rock。
     setRandomSequence(0, 0, 0.999, 0.999, 0);
-    await closeTutorialToChoosing();
+    await endPracticeToChoosing();
 
     fireEvent.click(screen.getByRole('button', { name: /グー 星2/ }));
     await advanceSelectedToReveal();
@@ -356,7 +406,11 @@ describe('画面上のゲーム進行と演出', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /ルール/ }));
     const dialog = screen.getByRole('dialog');
+    // 見直しは今までの3ページ(練習ラウンドは出さない)
     expect(within(dialog).getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
+    expect(dialog).toHaveTextContent(/グー・チョキ・パーから\s*1つ\s*えらぼう/);
+    expect(screen.queryByText('れんしゅうだよ！')).not.toBeInTheDocument();
+    expect(screen.queryByText('れんしゅう')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /パー 星/ })).toBeDisabled();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'つぎへ' }));
@@ -486,7 +540,8 @@ describe('画面上のゲーム進行と演出', () => {
     fireEvent.click(screen.getByRole('button', { name: /スタート！/ }));
     expect(screen.getByLabelText('HP 4 / 4')).toBeInTheDocument();
     expect(screen.getByLabelText('HP 5 / 5')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    // もう一度はじめると、また練習ラウンドから
+    expect(screen.getByText('れんしゅう')).toBeInTheDocument();
   });
 });
 
@@ -535,34 +590,43 @@ describe('撮影・合体の画面とのつなぎと、会場の3つのボタン
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('「たたかう!」から来たら、生まれたモンスターでタイトルを飛ばしてルール説明から始める', async () => {
+  it('「たたかう!」から来たら、生まれたモンスターでタイトルを飛ばして練習ラウンドから始める', async () => {
     render(<App launch={{ photoId: 'abc', skipTitle: true, toGenerator: true }} />);
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(await screen.findByText('れんしゅう')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByAltText('ゴリシザー')).toHaveAttribute('src', '/api/monster-image/abc');
     expect(screen.getByText('とがってるタイプ')).toBeInTheDocument();
     expect(screen.getByLabelText('HP 3 / 3')).toBeInTheDocument();
     expect(navigateTo).not.toHaveBeenCalled();
   });
 
-  it('← / Enter / → だけで、スタートからじゃんけんまで遊べる', async () => {
+  it('← / Enter / → だけで、スタートから練習ラウンド・本番のじゃんけんまで遊べる', async () => {
     render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
     await screen.findByRole('button', { name: /スタート！/ });
     vi.useFakeTimers();
 
-    press('Enter');
-    expect(screen.getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
-    press('Enter');
-    press('ArrowLeft');   // もどる
-    expect(screen.getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
-    press('Enter');
-    press('Enter');
-    // ルール説明のあいだは、手を選ばない
-    press('ArrowRight');
-    expect(playGameSound).not.toHaveBeenCalledWith('select');
-    press('Enter');       // バトルスタート！
+    press('Enter');       // スタート → 練習ラウンド
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await advance(SUMMON_DISPLAY_MS);
     await advance(RARITY_ROLL_MS);
+    expect(screen.getByText('れんしゅうだよ！')).toBeInTheDocument();
+
+    press('ArrowRight');  // → はパー(練習は必ず勝つ)
+    expect(screen.getByRole('button', { name: /パー 星/ })).toHaveClass('hand-button--selected');
+    await advanceSelectedToReveal();
+    await advanceRevealToAttack(false);
+    await advance(ATTACK_DISPLAY_MS);
+    await advance(IMPACT_DISPLAY_MS);
+    expect(screen.getByText('かったね！')).toBeInTheDocument();
+
+    // 結果では ← → では進まない。中ボタンで本番へ
+    press('ArrowLeft');
+    press('ArrowRight');
+    expect(screen.getByText('かったね！')).toBeInTheDocument();
+    press('Enter');
+    expect(screen.queryByText('れんしゅう')).not.toBeInTheDocument();
+    await advance(RARITY_ROLL_MS);
+    vi.mocked(playGameSound).mockClear();
 
     press('ArrowRight');  // → はパー
     expect(screen.getByRole('button', { name: /パー 星/ })).toHaveClass('hand-button--selected');

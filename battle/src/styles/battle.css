@@ -478,3 +478,50 @@
 .tutorial-damage small { font-size: 28px; font-weight: 800; }
 .tutorial-damage > strong { font-family: var(--font-title); font-size: 70px; }
 .tutorial-note { margin: 24px 0 0; font-size: 34px; font-weight: 800; line-height: 1.45; }
+
+/* ------------------------------------------------------------------ */
+/* 練習ラウンド:「れんしゅう」のチップと、吹き出し(手をえらぶ前・結果)    */
+/* ------------------------------------------------------------------ */
+.practice-chip {
+  position: absolute;
+  left: calc(50% + 170px);
+  padding: 6px 26px 8px;
+  background: var(--petal);
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  font-family: var(--font-title);
+  font-size: 30px;
+  color: var(--ink);
+  white-space: nowrap;
+  animation: practiceChip 1.4s ease-in-out infinite alternate;
+}
+@keyframes practiceChip { to { transform: translateY(-4px); } }
+.coach {
+  position: absolute;
+  z-index: 22;
+  left: 50%;
+  top: 270px;
+  width: 1080px;
+  padding: 26px 50px 30px;
+  background: var(--panel);
+  border: 4px solid var(--sun);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--forest-deep), 0 0 60px #0d2219;
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: coachIn 0.35s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+@keyframes coachIn { from { opacity: 0; transform: translateX(-50%) translateY(30px) scale(0.9); } }
+.coach p { margin: 8px 0 0; font-size: 42px; font-weight: 800; line-height: 1.4; }
+.coach strong { color: var(--sun); }
+.coach .coach-title { margin: 0 0 6px; font-family: var(--font-title); font-size: 68px; font-weight: 400; color: var(--sun); text-shadow: var(--ink-outline); }
+.coach .coach-sub { font-size: 32px; color: #bcd8c8; }
+.coach .coach-stars { margin-top: 14px; font-size: 38px; }
+.coach .coach-stars strong:first-child { color: var(--gold); font-size: 56px; text-shadow: 0 3px 0 var(--ink); }
+/* ①のあいだ、手のボタンと ★ を光らせて指す */
+.choice-area--coach .hand-button { box-shadow: 0 0 0 4px var(--sun), 0 9px 0 4px #061510, 0 0 40px 10px #ffe9a8aa; }
+.choice-area--coach .star-badge { animation: starPoint 0.7s ease-in-out infinite alternate; }
+@keyframes starPoint { to { transform: scale(1.25) translateY(-6px); } }
+/* 結果で止まっているあいだは、下の操作盤が「バトルスタート!」を出すので、絵の下のひとことは隠す */
+.battle-screen--practice-result .feedback-copy { display: none; }
