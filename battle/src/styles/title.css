@@ -1,6 +1,9 @@
 /* ==================================================================
    タイトル:草原の背景に、友人のロゴを大きく。スタートは下の操作盤の中ボタン(光って呼びかける)
    ================================================================== */
+/* タイトルだけ、専用の背景(fantasy-title.png)。ほかの画面は base.css の .screen::before の草原 */
+.title-screen::before { background-image: url('/backgrounds/fantasy-title.png'); }
+
 .title-copy {
   position: absolute;
   z-index: 2;
