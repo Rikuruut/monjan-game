@@ -102,7 +102,13 @@ async function startToTutorial() {
   fireEvent.click(startButton);
 }
 
+// ルール説明①の手当て問題に答える(Math.random が 0 なので相手はグー。パーで かつ)
+function answerPractice() {
+  fireEvent.click(screen.getByRole('button', { name: '✋ パー' }));
+}
+
 async function closeTutorialToChoosing() {
+  answerPractice();
   fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
   fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
   fireEvent.click(screen.getByRole('button', { name: 'バトルスタート！' }));
@@ -180,11 +186,24 @@ describe('画面上のゲーム進行と演出', () => {
 
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
-    expect(dialog).toHaveTextContent(/グー・チョキ・パーから\s*1つ\s*えらぼう/);
-    expect(dialog).toHaveTextContent('✊');
-    expect(dialog).toHaveTextContent('✌');
-    expect(dialog).toHaveTextContent('✋');
+    // ①は手当て問題。相手(グー)に かてる手を えらぶまで、つぎへ進めない
+    expect(dialog).toHaveTextContent(/あいては\s*✊\s*を だすよ/);
+    expect(within(dialog).queryByRole('button', { name: 'つぎへ' })).not.toBeInTheDocument();
     expect(playGameSound).not.toHaveBeenCalledWith('summon');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /チョキ/ }));
+    expect(dialog).toHaveTextContent(/おしい！\s*✊ には ✋ で かてるよ/);
+    expect(playGameSound).toHaveBeenCalledWith('tie');
+    expect(within(dialog).queryByRole('button', { name: 'つぎへ' })).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '✊ グー' }));
+    expect(dialog).toHaveTextContent('あいこ！');
+    expect(within(dialog).queryByRole('button', { name: 'つぎへ' })).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '✋ パー' }));
+    expect(dialog).toHaveTextContent(/せいかい！\s*✋ は ✊ に かつ/);
+    expect(playGameSound).toHaveBeenCalledWith('reveal');
+    expect(within(dialog).queryByRole('button', { name: '✋ パー' })).not.toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'つぎへ' }));
     expect(within(dialog).getByRole('heading', { name: /同じ手なら\s*星で勝負/ })).toBeInTheDocument();
@@ -244,6 +263,7 @@ describe('画面上のゲーム進行と演出', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /グー 星/ })).not.toBeInTheDocument();
 
+    answerPractice();
     fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
     fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
     fireEvent.click(screen.getByRole('button', { name: 'バトルスタート！' }));
@@ -357,6 +377,9 @@ describe('画面上のゲーム進行と演出', () => {
     fireEvent.click(screen.getByRole('button', { name: /ルール/ }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
+    // 見直しでは手当て問題を出さず、今までの説明ページ
+    expect(dialog).toHaveTextContent(/グー・チョキ・パーから\s*1つ\s*えらぼう/);
+    expect(within(dialog).queryByRole('button', { name: '✋ パー' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /パー 星/ })).toBeDisabled();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'つぎへ' }));
@@ -551,9 +574,15 @@ describe('撮影・合体の画面とのつなぎと、会場の3つのボタン
 
     press('Enter');
     expect(screen.getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
-    press('Enter');
-    press('ArrowLeft');   // もどる
+    // ①の手当て問題は ← / Enter / → がグー・チョキ・パー(相手はグー)
+    press('Enter');       // チョキ:まける
+    expect(screen.getByRole('dialog')).toHaveTextContent('おしい！');
+    press('ArrowRight');  // パー:かつ
+    expect(screen.getByRole('dialog')).toHaveTextContent('せいかい！');
+    press('Enter');       // つぎへ
+    press('ArrowLeft');   // もどる(正解したまま)
     expect(screen.getByRole('heading', { name: /じゃんけんで\s*勝負/ })).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent('せいかい！');
     press('Enter');
     press('Enter');
     // ルール説明のあいだは、手を選ばない
