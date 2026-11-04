@@ -16,11 +16,12 @@ const FX_DIRECTIONS: { direction: FxDirection; label: string }[] = [
   { direction: 'tie', label: 'あいこ' },
 ];
 
-export type DevJump= 'title' | 'rules' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
+export type DevJump = 'title' | 'rules' | 'practice-clear' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
 
 const JUMPS: { target: DevJump; label: string }[] = [
   { target: 'title', label: 'タイトル' },
   { target: 'rules', label: 'れんしゅう' },
+  { target: 'practice-clear', label: 'れんしゅうクリア' },
   { target: 'battle', label: 'バトル' },
   { target: 'victory', label: 'かち' },
   { target: 'defeat', label: 'まけ' },

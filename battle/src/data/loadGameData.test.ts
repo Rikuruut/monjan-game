@@ -69,6 +69,53 @@ describe('モンスターデータ検証', () => {
     expect(data.cpu.id).toBe('MON-0001');
   });
 
+  describe('練習の相手', () => {
+    const third = { ...player, id: 'MON-0003', name: 'バッタ', image: '/monsters/third.png' };
+    // missing:絵が読めない(404)見本の画像
+    const fetcherFor = (monsters: Record<string, unknown>, missing: string[] = []) => {
+      const byPath: Record<string, unknown> = {
+        '/data/game-config.json': {
+          samplePlayerMonsterId: 'MON-0001',
+          sampleCpuMonsterId: 'MON-0002',
+          monsters: Object.keys(monsters),
+        },
+        ...monsters,
+        '/api/battle-monster/abc': { ...player, id: 'abc', image: '/api/monster-image/abc' },
+      };
+      return vi.fn(async (input: RequestInfo | URL) => ({
+        ok: !missing.includes(String(input)),
+        json: async () => byPath[String(input)],
+      })) as unknown as typeof fetch;
+    };
+
+    it('絵が読めない見本は、練習の相手に選ばない(選べなければ本番の CPU と同じ)', async () => {
+      const monsters = { '/player.json': player, '/cpu.json': cpu, '/third.json': third };
+      const data = await loadGameData(fetcherFor(monsters, [third.image]));
+      expect(data.practiceCpu.id).toBe(data.cpu.id);
+    });
+
+    it('見本が3つあるときは、本番の CPU と自分のモンスター以外から選ぶ', async () => {
+      const data = await loadGameData(fetcherFor({ '/player.json': player, '/cpu.json': cpu, '/third.json': third }));
+      expect(data.cpu.id).toBe('MON-0002');
+      expect(data.practiceCpu.id).toBe('MON-0003');
+    });
+
+    it('生成したモンスターのときは、本番の CPU 以外の見本から選ぶ', async () => {
+      const data = await loadGameData(
+        fetcherFor({ '/player.json': player, '/cpu.json': cpu, '/third.json': third }),
+        { photoId: 'abc', pickIndex: () => 0 },
+      );
+      expect(data.cpu.id).toBe('MON-0001');
+      expect(data.practiceCpu.id).toBe('MON-0002');
+      expect(data.practiceCpu.id).not.toBe(data.cpu.id);
+    });
+
+    it('見本が足りないときだけ、本番の CPU と同じにする', async () => {
+      const data = await loadGameData(fetcherFor({ '/player.json': player, '/cpu.json': cpu }));
+      expect(data.practiceCpu.id).toBe(data.cpu.id);
+    });
+  });
+
   it('生成したモンスターを読めなければエラーにする', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => (
       String(input).startsWith('/api/')

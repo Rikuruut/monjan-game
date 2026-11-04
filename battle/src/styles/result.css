@@ -89,7 +89,7 @@
   transform: translateX(-50%);
 }
 .result-monster { box-shadow: 0 0 0 4px var(--ink), 0 0 60px 20px #fff2c0, 0 0 120px #c8f0c099; }
-.result-monster--victory { animation: victoryCard 0.9s cubic-bezier(.2, 1.4, .4, 1) 0.2s both, victoryHop 1.6s ease-in-out 1.2s infinite; }
+.result-monster--victory, .result-monster--practice { animation: victoryCard 0.9s cubic-bezier(.2, 1.4, .4, 1) 0.2s both, victoryHop 1.6s ease-in-out 1.2s infinite; }
 .result-monster--defeat { box-shadow: 0 0 0 4px var(--ink), 0 0 50px 10px #d6e8ff99; animation: victoryCard 0.9s ease-out 0.2s both, defeatSway 3s ease-in-out 1.2s infinite alternate; }
 @keyframes victoryCard {
   0%   { opacity: 0; transform: scale(0.3) rotate(-10deg); filter: brightness(3); }

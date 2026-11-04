@@ -42,7 +42,7 @@ import {
 import { Stage } from './stage';
 import { HANDS, type Hand, type Monster, type RoundResult, type StarMap, type Winner } from './types';
 
-type Screen = 'title' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
+type Screen = 'title' | 'battle' | 'practice-clear' | 'victory' | 'defeat' | 'draw' | 'thanks';
 // 立て札のルール説明は、「📖 ルール」の見直しだけ。最初は本物のバトル画面で練習ラウンド(practice)をする
 type TutorialMode = 'review';
 const TITLE_LOGO_PATH = assetUrl('/assets/monjan-title-logo.png');
@@ -111,6 +111,12 @@ const RESULT_COPY = {
     eyebrow: 'まさかの',
     title: '引き分け！',
     message: '最後は本物のじゃんけん！！',
+  },
+  // 練習ラウンドのおわり(本番とは別の、練習だけで完結する画面)
+  practice: {
+    eyebrow: 'ルールは ばっちり！',
+    title: 'れんしゅう クリア！',
+    message: 'つぎは いよいよ ほんばん！ あいては だれかな…？',
   },
 } as const;
 
@@ -415,17 +421,19 @@ function PracticeCoach({ step }: { step: 'choose' | 'result' }) {
           <p className="coach-title">かったね！</p>
           <p>かつと <strong>⚔の数だけ</strong> 相手の♡が へるよ！</p>
           <p><strong>相手の♡を ぜんぶなくしたら かち！</strong></p>
-          <p className="coach-sub">つぎから 本番だよ！</p>
+          <p className="coach-sub">れんしゅうは これで おしまい！</p>
         </>
       )}
     </aside>
   );
 }
 
-// 練習のあいだ、CPU の♡は 自分の⚔より多くする(♡が0になって、勝負が終わらないように)
-function practiceData(data: GameData): GameData {
-  const hp = Math.max(data.cpu.hp, data.player.attack + 1000) as Monster['hp'];
-  return hp === data.cpu.hp ? data : { ...data, cpu: { ...data.cpu, hp } };
+// 練習の対戦:相手は練習用の見本(本番の相手は、本番の召喚まで見せない)。
+// 相手の♡は 自分の⚔より多くする(♡が0になって、勝負が終わらないように)
+function practiceData(data: GameData): Pick<GameData, 'player' | 'cpu'> {
+  const cpu = data.practiceCpu;
+  const hp = Math.max(cpu.hp, data.player.attack + 1000) as Monster['hp'];
+  return { player: data.player, cpu: hp === cpu.hp ? cpu : { ...cpu, hp } };
 }
 
 function ChoiceButtons({
@@ -607,7 +615,7 @@ function BattleScreen({
   onSelect,
   fxLabel,
 }: {
-  data: GameData;
+  data: Pick<GameData, 'player' | 'cpu'>;
   playerHp: number;
   cpuHp: number;
   playerStars: StarMap;
@@ -772,14 +780,14 @@ function BattleScreen({
       ) : (
         <div className="choice-area choice-area--waiting">
           <p className="choice-prompt">
-            {tutorialOpen ? 'バトルの じゅんびをしよう！' : 'モンスター召喚！'}
+            {tutorialOpen ? 'バトルの じゅんびをしよう！' : practice ? 'れんしゅう スタート！' : 'モンスター召喚！'}
           </p>
         </div>
       )}
       {phase === 'summon' && !tutorialOpen && (
         <div className="banner-layer" role="status" aria-live="assertive">
           <div className="banner summon-announcement">
-            <strong>モンスター召喚！</strong>
+            <strong>{practice ? 'れんしゅう スタート！' : 'モンスター召喚！'}</strong>
           </div>
         </div>
       )}
@@ -797,7 +805,7 @@ function BattleScreen({
       {practice && phase === 'result' && (
         <>
           <PracticeCoach step="result" />
-          <Deck knobs={{ center: { label: 'バトルスタート！', onClick: onEndPractice, call: true } }} />
+          <Deck knobs={{ center: { label: 'つぎへ', onClick: onEndPractice, call: true } }} />
         </>
       )}
       {tutorialOpen && <Tutorial onClose={onCloseTutorial} />}
@@ -831,7 +839,7 @@ function ResultScreen({
   monster,
   onContinue,
 }: {
-  kind: 'victory' | 'defeat' | 'draw';
+  kind: 'victory' | 'defeat' | 'draw' | 'practice';
   monster: Monster;
   onContinue: () => void;
 }) {
@@ -870,7 +878,7 @@ function ResultScreen({
           )}
         </div>
       </section>
-      <Deck knobs={{ center: { label: kind === 'draw' ? 'じゃんけんしたよ！' : 'つぎへ', onClick: onContinue, call: true } }} />
+      <Deck knobs={{ center: { label: kind === 'draw' ? 'じゃんけんしたよ！' : kind === 'practice' ? 'ほんばん スタート！' : 'つぎへ', onClick: onContinue, call: true } }} />
     </main>
   );
 }
@@ -1065,14 +1073,15 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setGameBgmVolume(value);
   };
 
-  const startGame = () => {
+  // バトルのはじまり(召喚 → 星の抽選 → 手をえらぶ)。練習も本番も、ここから一から始める
+  const beginBattle = (isPractice: boolean) => {
     if (!data) return;
     clearTimers();
     fillHp(data);
-    setCpuHp(statCount(practiceData(data).cpu.hp));
+    if (isPractice) setCpuHp(statCount(practiceData(data).cpu.hp));
     resetRound();
     setTutorialMode(null);
-    setPractice(true);
+    setPractice(isPractice);
     setScreen('battle');
     if (soundEnabledRef.current) {
       void unlockGameAudio();
@@ -1083,16 +1092,19 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     schedule(startRarityRoll, SUMMON_DISPLAY_MS);
   };
 
-  // 練習のおわり:♡を本番の数にもどして、ラウンド1(星の抽選)から本番を始める
-  const endPractice = () => {
-    if (!data) return;
+  // 最初のスタート:練習ラウンドから
+  const startGame = () => beginBattle(true);
+
+  // 練習のおわり:練習だけで完結する「れんしゅうクリア」の画面へ(本番はそこから一から始める)
+  const finishPractice = () => {
     clearTimers();
     setPractice(false);
-    fillHp(data);
-    lockRef.current = true;
-    playSound('start');
-    startRarityRoll();
+    setScreen('practice-clear');
+    playSound('victory');
   };
+
+  // 「ほんばん スタート!」:本番の相手を召喚するところから
+  const startBattle = () => beginBattle(false);
 
   // タイトルの「スタート!」。展示では撮影・合体の画面へ進む(バトルには「たたかう!」で戻ってくる)
   const pressStart = () => {
@@ -1128,6 +1140,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const chooseHand = (hand: Hand) => {
     if (!data || lockRef.current || tutorialOpen || phase !== 'choosing') return;
     lockRef.current = true;
+    const { player: playerMonster, cpu: cpuMonster } = practice ? practiceData(data) : data;
     // 練習は必ず勝つ。開発者メニューで勝ち負けを決めているときは、その結果になる手にする(あいこは星もそろえて完全なあいこ)
     const mode: ForcedResult = practice ? 'win' : forced;
     const chosenCpuHand = mode === 'normal' ? pickCpuHand() : cpuHandFor(hand, mode);
@@ -1138,8 +1151,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       cpuHand: chosenCpuHand,
       playerStar: playerStars[hand],
       cpuStar: roundCpuStars[chosenCpuHand],
-      playerAttack: statCount(data.player.attack),
-      cpuAttack: statCount(data.cpu.attack),
+      playerAttack: statCount(playerMonster.attack),
+      cpuAttack: statCount(cpuMonster.attack),
       playerHp,
       cpuHp,
     });
@@ -1151,7 +1164,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
     const beginAttack = () => {
       setPhase('attack');
-      playAttackSound(nextResult.winner, data.player.attribute, data.cpu.attribute);
+      playAttackSound(nextResult.winner, playerMonster.attribute, cpuMonster.attribute);
 
       schedule(() => {
         setPlayerHp(nextResult.playerHp);
@@ -1162,7 +1175,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
         schedule(() => {
           setPhase('result');
-          // 練習は ここで止まって、吹き出しを読んでもらう(「バトルスタート!」で本番へ)
+          // 練習は ここで止まって、吹き出しを読んでもらう(「つぎへ」で「れんしゅうクリア」の画面へ)
           if (practice) return;
           schedule(() => {
             const outcome = getGameOutcome(nextResult.playerHp, nextResult.cpuHp);
@@ -1226,17 +1239,19 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   };
 
   // 会場の3つのボタン。手は左からグー・チョキ・パー(画面のボタンの並びと同じ)。
-  // 見直しのルール説明のあいだはチュートリアルが受け取る。練習の結果では 中ボタンで本番へ
+  // 見直しのルール説明のあいだはチュートリアルが受け取る。練習の結果では 中ボタンで「れんしゅうクリア」へ、そこから中ボタンで本番へ
   const pressPad = (button: PadButton) => {
     if (!data) return;
     if (screen === 'title') {
       if (button === 'center') pressStart();
     } else if (screen === 'battle') {
       if (practice && phase === 'result') {
-        if (button === 'center') endPractice();
+        if (button === 'center') finishPractice();
       } else if (!tutorialOpen) {
         chooseHand(HANDS[['left', 'center', 'right'].indexOf(button)]);
       }
+    } else if (screen === 'practice-clear') {
+      if (button === 'center') startBattle();
     } else if (screen === 'thanks') {
       if (button === 'center') returnToTitle();
     } else if (button === 'center') {
@@ -1335,12 +1350,15 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       delay = AUTOPLAY_TITLE_MS;
     } else if (screen === 'battle') {
       if (practice && phase === 'result') {
-        action = endPractice;
+        action = finishPractice;
         delay = AUTOPLAY_RULES_MS;
       } else if (!tutorialOpen && phase === 'choosing') {
         action = () => chooseHand(HANDS[Math.floor(Math.random() * HANDS.length)]);
         delay = AUTOPLAY_HAND_MS;
       }
+    } else if (screen === 'practice-clear') {
+      action = startBattle;
+      delay = AUTOPLAY_RULES_MS;
     } else if (screen === 'thanks') {
       action = () => {
         setAutoplay({ on: true, loops: autoplay.loops + 1 });
@@ -1376,6 +1394,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     content = <TitleScreen onStart={pressStart} />;
   } else if (screen === 'thanks') {
     content = <ThanksScreen monster={data.player} onTitle={returnToTitle} />;
+  } else if (screen === 'practice-clear') {
+    content = <ResultScreen kind="practice" monster={data.player} onContinue={startBattle} />;
   } else if (screen !== 'battle') {
     content = <ResultScreen kind={screen} monster={data.player} onContinue={finishGame} />;
   } else {
@@ -1405,7 +1425,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         practice={practice}
         onCloseTutorial={closeTutorial}
         onOpenRules={openRules}
-        onEndPractice={endPractice}
+        onEndPractice={finishPractice}
         onSelect={chooseHand}
       />
     );

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   App,
   ATTACK_DISPLAY_MS,
+  AUTOPLAY_HAND_MS,
+  AUTOPLAY_RULES_MS,
   AUTOPLAY_TITLE_MS,
   IMPACT_DISPLAY_MS,
   JANKEN_BEAT_MS,
@@ -114,9 +116,12 @@ async function playPractice() {
   await advance(IMPACT_DISPLAY_MS);
 }
 
-// 「バトルスタート!」で本番へ。練習で鳴った音は消して、本番ラウンド1の手えらびまで進める
+// 「つぎへ」で「れんしゅうクリア」の画面へ、「ほんばん スタート!」で本番の召喚から。
+// 練習で鳴った音は消して、本番ラウンド1の手えらびまで進める
 async function endPracticeToChoosing() {
-  fireEvent.click(screen.getByRole('button', { name: 'バトルスタート！' }));
+  fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
+  fireEvent.click(screen.getByRole('button', { name: 'ほんばん スタート！' }));
+  await advance(SUMMON_DISPLAY_MS);
   await advance(RARITY_ROLL_MS);
   vi.mocked(playGameSound).mockClear();
 }
@@ -187,12 +192,12 @@ describe('画面上のゲーム進行と演出', () => {
     expect(STAR_SHOWDOWN_MS).toBe(1200);
   });
 
-  it('最初のスタートは練習ラウンド:吹き出しを出し、どの手でも勝ち、結果で止まって、バトルスタートで♡を満タンにして本番へ', async () => {
+  it('最初のスタートは練習ラウンド:吹き出し→どの手でも勝つ→結果で止まる→れんしゅうクリア→本番は召喚から', async () => {
     await startToPractice();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('れんしゅう')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /ルール/ })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('モンスター召喚');
+    expect(screen.getByRole('status')).toHaveTextContent('れんしゅう スタート');
 
     await advance(SUMMON_DISPLAY_MS);
     await advance(RARITY_ROLL_MS);
@@ -214,20 +219,59 @@ describe('画面上のゲーム進行と演出', () => {
     // 吹き出し②:結果で止まったまま、進まない
     await advance(IMPACT_DISPLAY_MS);
     expect(screen.getByText('かったね！')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'バトルスタート！' })).toBeInTheDocument();
     await advance(RESULT_DISPLAY_MS * 2);
     expect(screen.getByText('かったね！')).toBeInTheDocument();
     expect(screen.getByLabelText('HP 3 / 5')).toBeInTheDocument();
 
-    // 本番へ:♡は満タン、ラウンド1、練習の表示は消える
-    fireEvent.click(screen.getByRole('button', { name: 'バトルスタート！' }));
+    // 「つぎへ」で、練習だけで完結する「れんしゅうクリア」の画面へ(バトルの表示は消える)
+    fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
+    expect(screen.getByRole('heading', { name: 'れんしゅう クリア！' })).toBeInTheDocument();
+    expect(screen.getByAltText(player.name)).toBeInTheDocument();
+    expect(screen.queryByText('れんしゅう')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /グー 星/ })).not.toBeInTheDocument();
+    expect(playGameSound).toHaveBeenCalledWith('victory');
+    await advance(RESULT_DISPLAY_MS * 2);
+    expect(screen.getByRole('heading', { name: 'れんしゅう クリア！' })).toBeInTheDocument();
+
+    // 「ほんばん スタート！」で、本番を召喚から始める:♡は満タン、ラウンド1
+    fireEvent.click(screen.getByRole('button', { name: 'ほんばん スタート！' }));
+    expect(screen.getByRole('status')).toHaveTextContent('モンスター召喚');
     expect(screen.getByLabelText('HP 4 / 4')).toBeInTheDocument();
     expect(screen.getByLabelText('HP 5 / 5')).toBeInTheDocument();
     expect(screen.queryByText('れんしゅう')).not.toBeInTheDocument();
     expect(document.querySelector('.round-chip b')).toHaveTextContent('1');
+    await advance(SUMMON_DISPLAY_MS);
     await advance(RARITY_ROLL_MS);
     expect(screen.getByRole('button', { name: /グー 星/ })).toBeEnabled();
     expect(screen.getByRole('button', { name: /ルール/ })).toBeEnabled();
+  });
+
+  it('練習の相手は本番の相手とは別の見本で、本番の相手は本番の召喚ではじめて出てくる', async () => {
+    const third = { ...cpu, id: 'MON-0003', name: 'バッタ', image: '/monsters/third.png' };
+    const byPath: Record<string, unknown> = {
+      '/data/game-config.json': {
+        samplePlayerMonsterId: 'MON-0001',
+        sampleCpuMonsterId: 'MON-0002',
+        monsters: ['/player.json', '/cpu.json', '/third.json'],
+      },
+      '/player.json': player,
+      '/cpu.json': cpu,
+      '/third.json': third,
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => byPath[String(input)],
+    })));
+
+    await startToPractice();
+    await playPractice();
+    expect(screen.getByAltText('バッタ')).toBeInTheDocument();
+    expect(screen.queryByAltText(cpu.name)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'つぎへ' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ほんばん スタート！' }));
+    expect(screen.getByAltText(cpu.name)).toBeInTheDocument();
+    expect(screen.queryByAltText('バッタ')).not.toBeInTheDocument();
   });
 
   it('CPU の♡が少なくても、練習では♡が0にならず、勝負が終わらない', async () => {
@@ -296,12 +340,12 @@ describe('画面上のゲーム進行と演出', () => {
 
   it('召喚と抽選後にだけ選択でき、じゃん・けん・ぽんの後までCPUの手と星をDOMへ出さない', async () => {
     await startToPractice();
-    expect(screen.getByRole('status')).toHaveTextContent('モンスター召喚');
+    expect(screen.getByRole('status')).toHaveTextContent('れんしゅう スタート');
     expect(screen.queryByRole('button', { name: /グー 星/ })).not.toBeInTheDocument();
 
     await advance(SUMMON_DISPLAY_MS - 1);
     expect(playGameSound).toHaveBeenCalledWith('summon');
-    expect(screen.getByRole('status')).toHaveTextContent('モンスター召喚');
+    expect(screen.getByRole('status')).toHaveTextContent('れんしゅう スタート');
     await advance(1);
 
     expect(screen.getByText('★ レア度抽選！')).toBeInTheDocument();
@@ -619,12 +663,20 @@ describe('撮影・合体の画面とのつなぎと、会場の3つのボタン
     await advance(IMPACT_DISPLAY_MS);
     expect(screen.getByText('かったね！')).toBeInTheDocument();
 
-    // 結果では ← → では進まない。中ボタンで本番へ
+    // 結果では ← → では進まない。中ボタンで「れんしゅうクリア」へ
     press('ArrowLeft');
     press('ArrowRight');
     expect(screen.getByText('かったね！')).toBeInTheDocument();
     press('Enter');
-    expect(screen.queryByText('れんしゅう')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'れんしゅう クリア！' })).toBeInTheDocument();
+    // ここでも ← → では進まない。中ボタンで、本番を召喚から
+    press('ArrowLeft');
+    press('ArrowRight');
+    expect(screen.getByRole('heading', { name: 'れんしゅう クリア！' })).toBeInTheDocument();
+    press('Enter');
+    expect(screen.queryByRole('heading', { name: 'れんしゅう クリア！' })).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('モンスター召喚');
+    await advance(SUMMON_DISPLAY_MS);
     await advance(RARITY_ROLL_MS);
     vi.mocked(playGameSound).mockClear();
 
@@ -688,6 +740,32 @@ describe('開発者メニュー(D キー)', () => {
     await advance(ATTACK_DISPLAY_MS);
     await advance(IMPACT_DISPLAY_MS);
     expect(screen.getByRole('status')).toHaveTextContent('あなたの かち');
+  });
+
+  it('通しの自動プレイは、練習 → れんしゅうクリア → 本番の召喚 と進む', async () => {
+    render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
+    await screen.findByRole('button', { name: /スタート！/ });
+    vi.useFakeTimers();
+    openMenu();
+    fireEvent.click(screen.getByRole('button', { name: /開始/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'とじる' }));
+
+    await advance(AUTOPLAY_TITLE_MS);
+    expect(screen.getByText('れんしゅう')).toBeInTheDocument();
+    await advance(SUMMON_DISPLAY_MS);
+    await advance(RARITY_ROLL_MS);
+    await advance(AUTOPLAY_HAND_MS);
+    await advanceSelectedToReveal();
+    await advanceRevealToAttack(false);
+    await advance(ATTACK_DISPLAY_MS);
+    await advance(IMPACT_DISPLAY_MS);
+    expect(screen.getByText('かったね！')).toBeInTheDocument();
+
+    await advance(AUTOPLAY_RULES_MS);
+    expect(screen.getByRole('heading', { name: 'れんしゅう クリア！' })).toBeInTheDocument();
+    await advance(AUTOPLAY_RULES_MS);
+    expect(screen.getByRole('status')).toHaveTextContent('モンスター召喚');
+    expect(screen.queryByText('れんしゅう')).not.toBeInTheDocument();
   });
 
   it('通しの自動プレイ中は、タイトルで少し待ってから撮影の画面へ進む', async () => {

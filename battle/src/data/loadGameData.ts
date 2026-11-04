@@ -10,9 +10,11 @@ interface GameConfig {
 export interface GameData {
   player: Monster;
   cpu: Monster;
+  /** 練習ラウンドの相手。本番の CPU とは別の見本(選べないときだけ本番の CPU と同じ) */
+  practiceCpu: Monster;
 }
 
-type Fetcher = (input: RequestInfo | URL) => Promise<Response>;
+type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export interface LoadOptions {
   /** 生成したモンスターの ID。あればプレイヤーをサーバーから読み、CPU は見本から選ぶ */
@@ -72,25 +74,48 @@ function withAssetImage(monster: Monster): Monster {
   return { ...monster, image: assetUrl(monster.image) };
 }
 
+async function imageAvailable(fetcher: Fetcher, monster: Monster): Promise<boolean> {
+  try {
+    return (await fetcher(monster.image, { method: 'HEAD' })).ok;
+  } catch {
+    return false;
+  }
+}
+
+// 練習の相手は、本番の CPU と自分のモンスター以外の見本から選ぶ(本番の相手を、本番の召喚まで見せないため)。
+// 絵が読めない見本だと、相手が「？」の枠になってしまうので、絵が読めるものだけから選ぶ
+async function pickPracticeCpu(
+  fetcher: Fetcher,
+  monsters: Monster[],
+  player: Monster,
+  cpu: Monster,
+  pickIndex: (length: number) => number,
+): Promise<Monster> {
+  const others = monsters.filter((monster) => monster.id !== cpu.id && monster.id !== player.id);
+  const checked = await Promise.all(others.map(async (monster) => ((await imageAvailable(fetcher, monster)) ? monster : null)));
+  const available = checked.filter((monster): monster is Monster => monster !== null);
+  return available[pickIndex(available.length)] ?? cpu;
+}
+
 export async function loadGameData(fetcher: Fetcher = fetch, options: LoadOptions = {}): Promise<GameData> {
   const config = parseConfig(await fetchJson(fetcher, assetUrl('/data/game-config.json')));
   const monsters = await Promise.all(
     config.monsters.map(async (path) => withAssetImage(parseMonster(await fetchJson(fetcher, assetUrl(path))))),
   );
+  const pickIndex = options.pickIndex ?? ((length: number) => Math.floor(Math.random() * length));
 
   if (options.photoId) {
     // 撮影・合体の画面で生まれたモンスター。画像はサーバーの API(/api/monster-image/…)なので、そのまま使う
     const player = parseMonster(await fetchJson(fetcher, battleMonsterUrl(options.photoId, options.playerName)));
     // 相手は見本のモンスターから毎回ランダムに選ぶ(最初に出す相手は仕様で未決定。結合のときに決めた)
-    const pickIndex = options.pickIndex ?? ((length: number) => Math.floor(Math.random() * length));
     const cpu = monsters[pickIndex(monsters.length)];
     if (!cpu) throw new Error('対戦に使うモンスターが見つかりません。');
-    return { player, cpu };
+    return { player, cpu, practiceCpu: await pickPracticeCpu(fetcher, monsters, player, cpu, pickIndex) };
   }
 
   const player = monsters.find((monster) => monster.id === config.samplePlayerMonsterId);
   const cpu = monsters.find((monster) => monster.id === config.sampleCpuMonsterId);
 
   if (!player || !cpu) throw new Error('対戦に使うモンスターが見つかりません。');
-  return { player, cpu };
+  return { player, cpu, practiceCpu: await pickPracticeCpu(fetcher, monsters, player, cpu, pickIndex) };
 }
