@@ -1,3 +1,5 @@
+import { getAttributeTheme } from '../attributes';
+
 export type GameSound =
   | 'start'
   | 'select'
@@ -164,19 +166,8 @@ export function setSfxMuted(value: boolean) {
   applyMasterVolume();
 }
 
-function attributeTheme(attribute = '') {
-  if (/火|炎|fire|あつい/i.test(attribute)) return 'fire';
-  if (/水|海|氷|water|ice|みず/i.test(attribute)) return 'water';
-  if (/草|木|花|nature|grass|やわらかい/i.test(attribute)) return 'nature';
-  if (/光|聖|light|でんき/i.test(attribute)) return 'light';
-  if (/闇|影|dark/i.test(attribute)) return 'dark';
-  if (/風|空|wind|とがってる/i.test(attribute)) return 'wind';
-  if (/土|岩|earth|rock|かたい/i.test(attribute)) return 'earth';
-  return 'neutral';
-}
-
 function playAttributeAttack(context: AudioContext, now: number, attribute?: string) {
-  switch (attributeTheme(attribute)) {
+  switch (getAttributeTheme(attribute)) {
     case 'fire':
       scheduleTone(context, now, 170, 0.3, 0.07, 'sawtooth', 520);
       scheduleTone(context, now + 0.08, 680, 0.16, 0.04, 'square', 260);

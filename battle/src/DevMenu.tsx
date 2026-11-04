@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ELEMENTS } from './attributes';
 import { battleUrlFor, DEV_PAGES, loadRecentMonsters, type Autoplay, type RecentMonster } from './devTools';
 import type { GameData } from './data/loadGameData';
 import type { ForcedResult } from './game/logic';
@@ -6,7 +7,16 @@ import { navigateTo } from './integration';
 
 // 開発者メニュー(D キー・⚙)。見た目と上の3つの項目は、撮影・合体の画面のメニューと同じ
 
-export type DevJump = 'title' | 'rules' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
+// 攻撃エフェクトを見るときの向き(自分→相手 / 相手→自分 / あいこ)
+export type FxDirection = 'player' | 'cpu' | 'tie';
+
+const FX_DIRECTIONS: { direction: FxDirection; label: string }[] = [
+  { direction: 'player', label: '自分→相手' },
+  { direction: 'cpu', label: '相手→自分' },
+  { direction: 'tie', label: 'あいこ' },
+];
+
+export type DevJump= 'title' | 'rules' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
 
 const JUMPS: { target: DevJump; label: string }[] = [
   { target: 'title', label: 'タイトル' },
@@ -68,6 +78,7 @@ export function DevMenu({
   onForced,
   onLowHp,
   onAutoplay,
+  onPreviewFx,
 }: {
   open: boolean;
   data: GameData;
@@ -79,7 +90,9 @@ export function DevMenu({
   onForced: (mode: ForcedResult) => void;
   onLowHp: (side: 'player' | 'cpu') => void;
   onAutoplay: (on: boolean) => void;
+  onPreviewFx: (attributes: string[], direction: FxDirection) => void;
 }) {
+  const [fxDirection, setFxDirection] = useState<FxDirection>('player');
   return (
     <>
       {autoplay.on && <p className="dev-autoplay-badge">自動プレイ中 {autoplay.loops}周(D でメニュー → 停止)</p>}
@@ -138,6 +151,32 @@ export function DevMenu({
             <p className="dev-row">
               <button type="button" onClick={() => onLowHp('player')}>自分の♡を1に</button>
               <button type="button" onClick={() => onLowHp('cpu')}>相手の♡を1に</button>
+            </p>
+          </section>
+
+          <section>
+            <h4>攻撃エフェクトを見る</h4>
+            <p className="dev-muted">タイプごとの 攻撃 → 命中(飛び道具・光の輪・粒・音)を流します。HP は変わりません。</p>
+            <p className="dev-row" role="radiogroup" aria-label="攻撃の向き">
+              {FX_DIRECTIONS.map((item) => (
+                <label key={item.direction}>
+                  <input type="radio" name="dev-fx-direction" checked={fxDirection === item.direction} onChange={() => setFxDirection(item.direction)} />
+                  {item.label}
+                </label>
+              ))}
+            </p>
+            <p className="dev-row">
+              {ELEMENTS.map((element) => (
+                <button
+                  type="button"
+                  key={element.attribute}
+                  className={`dev-fx el-${element.theme}`}
+                  onClick={() => onPreviewFx([element.attribute], fxDirection)}
+                >
+                  {element.attribute}
+                </button>
+              ))}
+              <button type="button" onClick={() => onPreviewFx(ELEMENTS.map((element) => element.attribute), fxDirection)}>8つ順番に</button>
             </p>
           </section>
 

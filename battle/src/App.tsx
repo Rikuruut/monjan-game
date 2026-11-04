@@ -13,10 +13,12 @@ import {
   setGameBgmVolume,
   startGameBgm,
 } from './audio/gameBgm';
-import { AttackProjectile, Drift, ImpactBurst, type AttributeTheme } from './BattleEffects';
+import { burstAt, chargeAt, createParticleFire, type ParticleFire } from './attackParticles';
+import { getAttributeTheme } from './attributes';
+import { AttackProjectile, Drift, ImpactBurst, ParticleLayer } from './BattleEffects';
 import { loadGameData, type GameData } from './data/loadGameData';
 import { Deck } from './Deck';
-import { DevMenu, type DevJump } from './DevMenu';
+import { DevMenu, type DevJump, type FxDirection } from './DevMenu';
 import { readAutoplay, writeAutoplay, type Autoplay } from './devTools';
 import {
   cpuHandFor,
@@ -38,7 +40,7 @@ import {
   type PadButton,
 } from './integration';
 import { Stage } from './stage';
-import { HANDS, type Hand, type Monster, type RoundResult, type StarMap } from './types';
+import { HANDS, type Hand, type Monster, type RoundResult, type StarMap, type Winner } from './types';
 
 type Screen = 'title' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
 type TutorialMode = 'intro' | 'review';
@@ -71,6 +73,11 @@ export const STAR_SHOWDOWN_MS = 1200;
 export const ATTACK_DISPLAY_MS = 700;
 // 命中:一瞬止まって(ヒットストップ)から ゆれる(2026年11月2日 420 → 600ms)
 export const IMPACT_DISPLAY_MS = 600;
+// あいこの攻撃で、2つめのタイプの音を遅らせる
+const TIE_SECOND_SOUND_MS = 60;
+// 開発者メニューの「攻撃エフェクトを見る」:バトル画面へ移ってから始めるまで / 「8つ順番に」の間かく
+export const FX_PREVIEW_LEAD_MS = 300;
+export const FX_PREVIEW_STEP_MS = 1600;
 // 通しの自動プレイ(開発者メニュー)で、ボタンを押すまでに待つ時間
 export const AUTOPLAY_TITLE_MS = 2000;
 export const AUTOPLAY_RULES_MS = 800;
@@ -110,18 +117,6 @@ const FINAL_BLOW_COPY = {
   defeat: 'まけちゃった…',
   draw: 'あいうち！',
 } as const;
-
-// ひらがなの6つ(あつい など)は、撮影・合体の画面で生まれたモンスターの性質
-function getAttributeTheme(attribute: string): AttributeTheme {
-  if (/火|炎|fire|あつい/i.test(attribute)) return 'fire';
-  if (/水|海|氷|water|ice|みず/i.test(attribute)) return 'water';
-  if (/草|木|花|nature|grass|やわらかい/i.test(attribute)) return 'nature';
-  if (/光|聖|light|でんき/i.test(attribute)) return 'light';
-  if (/闇|影|dark/i.test(attribute)) return 'dark';
-  if (/風|空|wind|とがってる/i.test(attribute)) return 'wind';
-  if (/土|岩|earth|rock|かたい/i.test(attribute)) return 'earth';
-  return 'neutral';
-}
 
 function statCount(value: number): number {
   return value / 1000;
@@ -574,6 +569,7 @@ function BattleScreen({
   onCloseTutorial,
   onOpenRules,
   onSelect,
+  fxLabel,
 }: {
   data: GameData;
   playerHp: number;
@@ -589,6 +585,7 @@ function BattleScreen({
   onCloseTutorial: () => void;
   onOpenRules: () => void;
   onSelect: (hand: Hand) => void;
+  fxLabel?: string;
 }) {
   const tutorialOpen = tutorialMode !== null;
   const playerTheme = getAttributeTheme(data.player.attribute);
@@ -603,6 +600,39 @@ function BattleScreen({
   const outcome = result ? getGameOutcome(result.playerHp, result.cpuHp) : 'ongoing';
   // 画面のゆれは、大きいほうのダメージで強くする(1〜3)
   const shake = result ? Math.min(3, Math.max(result.playerDamage, result.cpuDamage)) : 0;
+
+  // タイプの粒(attackParticles.ts):攻撃のはじめに攻撃する側でためて、命中で当たったカードの上にはじける
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fireRef = useRef<ParticleFire | null>(null);
+  useEffect(() => {
+    if (canvasRef.current) fireRef.current = createParticleFire(canvasRef.current);
+    return () => {
+      fireRef.current?.reset();
+      fireRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    const fire = fireRef.current;
+    if (!fire || !result) return;
+    if (phase === 'attack') {
+      if (result.winner === 'none') {
+        chargeAt(fire, 'player', playerTheme);
+        chargeAt(fire, 'cpu', cpuTheme);
+      } else {
+        chargeAt(fire, result.winner, attackerTheme);
+      }
+    } else if (phase === 'impact') {
+      if (result.winner === 'none') {
+        burstAt(fire, 'center', playerTheme, { power: 1 });
+        burstAt(fire, 'center', cpuTheme, { power: 1 });
+      } else {
+        const at = result.winner === 'player' ? 'cpu' : 'player';
+        const damage = result.winner === 'player' ? result.cpuDamage : result.playerDamage;
+        burstAt(fire, at, attackerTheme, { dir: result.winner === 'player' ? 1 : -1, power: damage, final: isFinalBlow });
+      }
+    }
+  }, [phase, result]);
+
   const screenClass = [
     'screen',
     'battle-screen',
@@ -720,6 +750,8 @@ function BattleScreen({
         </div>
       )}
       {phase === 'impact' && <div className="hit-flash" aria-hidden="true" />}
+      <ParticleLayer ref={canvasRef} />
+      {fxLabel && <p className="fx-preview-label" aria-hidden="true">{fxLabel}</p>}
       {tutorialOpen && <Tutorial onClose={onCloseTutorial} isReview={tutorialMode === 'review'} />}
     </main>
   );
@@ -850,6 +882,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [devOpen, setDevOpen] = useState(false);
   const [forced, setForced] = useState<ForcedResult>('normal');
   const [autoplay, setAutoplayState] = useState<Autoplay>(() => readAutoplay());
+  // 「攻撃エフェクトを見る」で流しているタイプ(そのあいだ、見せるモンスターのタイプを置きかえる)
+  const [fxPreview, setFxPreview] = useState<{ attribute: string; direction: FxDirection } | null>(null);
   const setAutoplay = (next: Autoplay) => {
     writeAutoplay(next);
     setAutoplayState(next);
@@ -1025,6 +1059,16 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setTutorialMode('review');
   };
 
+  // 攻撃の音は、攻撃する側のタイプで鳴らす。あいこは両方から飛ぶので、2つのタイプを少しずらして鳴らす
+  const playAttackSound = (winner: Winner, playerAttribute: string, cpuAttribute: string) => {
+    if (winner === 'cpu') {
+      playSound('attack', { attribute: cpuAttribute });
+      return;
+    }
+    playSound('attack', { attribute: playerAttribute });
+    if (winner === 'none') schedule(() => playSound('attack', { attribute: cpuAttribute }), TIE_SECOND_SOUND_MS);
+  };
+
   const chooseHand = (hand: Hand) => {
     if (!data || lockRef.current || tutorialOpen || phase !== 'choosing') return;
     lockRef.current = true;
@@ -1050,12 +1094,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
     const beginAttack = () => {
       setPhase('attack');
-      const attackAttribute = nextResult.winner === 'player'
-        ? data.player.attribute
-        : nextResult.winner === 'cpu'
-          ? data.cpu.attribute
-          : undefined;
-      playSound('attack', attackAttribute ? { attribute: attackAttribute } : {});
+      playAttackSound(nextResult.winner, data.player.attribute, data.cpu.attribute);
 
       schedule(() => {
         setPlayerHp(nextResult.playerHp);
@@ -1173,6 +1212,52 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setScreen(target);
   };
 
+  // 開発者メニューの「攻撃エフェクトを見る」:バトル画面で、選んだタイプの 攻撃 → 命中 だけを流す。
+  // 本番と同じ部品(飛び道具・光の輪・粒・音)を使う。HP と勝ち負けは変えない
+  const showFx = (attribute: string, direction: FxDirection, isLast: boolean) => {
+    if (!data) return;
+    const winner: Winner = direction === 'tie' ? 'none' : direction;
+    setFxPreview({ attribute, direction });
+    setPlayerHand('rock');
+    setCpuHand(winner === 'player' ? 'scissors' : winner === 'cpu' ? 'paper' : 'rock');
+    setResult({
+      winner,
+      reason: 'hand',
+      playerDamage: winner === 'player' ? 0 : 1,
+      cpuDamage: winner === 'cpu' ? 0 : 1,
+      playerHp: statCount(data.player.hp),
+      cpuHp: statCount(data.cpu.hp),
+    });
+    setPhase('attack');
+    playAttackSound(winner, attribute, attribute);
+    schedule(() => {
+      setPhase('impact');
+      playSound('impact');
+      schedule(() => {
+        setPhase('choosing');
+        setResult(null);
+        setPlayerHand(null);
+        setCpuHand(null);
+        setFxPreview(null);
+        if (isLast) lockRef.current = false;
+      }, IMPACT_DISPLAY_MS);
+    }, ATTACK_DISPLAY_MS);
+  };
+
+  const previewFx = (attributes: string[], direction: FxDirection) => {
+    if (!data) return;
+    clearTimers();
+    setDevOpen(false);
+    setTutorialMode(null);
+    fillHp(data);
+    setScreen('battle');
+    setPhase('choosing');
+    lockRef.current = true;
+    attributes.forEach((attribute, index) => {
+      schedule(() => showFx(attribute, direction, index === attributes.length - 1), FX_PREVIEW_LEAD_MS + index * FX_PREVIEW_STEP_MS);
+    });
+  };
+
   // 通しの自動プレイ:画面ごとに、少し待ってから会場のボタンを押したのと同じことをする。
   // メニューを開いているあいだは止まる(停止ボタンを押せるように)
   useEffect(() => {
@@ -1228,9 +1313,18 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   } else if (screen !== 'battle') {
     content = <ResultScreen kind={screen} monster={data.player} onContinue={finishGame} />;
   } else {
+    // 「攻撃エフェクトを見る」のあいだは、攻撃する側(あいこは両方)のタイプを選んだものにする
+    const fxTheme = fxPreview ? getAttributeTheme(fxPreview.attribute) : null;
+    const shownData = fxPreview
+      ? {
+        player: fxPreview.direction === 'cpu' ? data.player : { ...data.player, attribute: fxPreview.attribute },
+        cpu: fxPreview.direction === 'player' ? data.cpu : { ...data.cpu, attribute: fxPreview.attribute },
+      }
+      : data;
     content = (
       <BattleScreen
-        data={data}
+        data={shownData}
+        fxLabel={fxPreview ? `${fxPreview.attribute}タイプ(${fxTheme})` : undefined}
         playerHp={playerHp}
         cpuHp={cpuHp}
         playerStars={playerStars}
@@ -1273,6 +1367,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         onForced={setForced}
         onLowHp={(side) => (side === 'player' ? setPlayerHp(1) : setCpuHp(1))}
         onAutoplay={(on) => setAutoplay({ on, loops: 0 })}
+        onPreviewFx={previewFx}
       />
     </>
   );

@@ -51,5 +51,6 @@ D キーか右下の ⚙ で開く(会場の3つのボタンでは開かない)�
 - ページ:タイトル・撮影・テストプレイ(`/?autotest=1`)・見本でバトル
 - 通しの自動プレイ:タイトル → テストプレイ → バトル(手はランダム)→ 結果 → タイトル をくり返す(API なし。展示前の耐久テスト用)。`sessionStorage` の `monjan-autoplay` で2つのページに受け渡す。メニューを開いているあいだは止まる
 - 作ったモンスターで戦う:`GET /api/recent-monsters`(`outputs/` の新しい順に30件)から選ぶと `/battle/?photo=<フォルダ名>`(サーバーを再起動したあとでも戦える)
-- バトルだけ:画面へとぶ(タイトル〜ありがとう)・勝ち負けを決める(ふつう / かつ / まける / あいこ。`logic.ts` の `cpuHandFor`)・♡を1に・自分と相手の JSON
+- バトルだけ:画面へとぶ(タイトル〜ありがとう)・勝ち負けを決める(ふつう / かつ / まける / あいこ。`logic.ts` の `cpuHandFor`)・♡を1に・攻撃エフェクトを見る(8タイプ × 自分→相手 / 相手→自分 / あいこ。「8つ順番に」もある。HP は変わらない)・自分と相手の JSON
+- 攻撃の演出は CSS(`battle/src/styles/effects.css`)と、命中ではじける粒(`battle/src/attackParticles.ts`。canvas-confetti)。タイプの判定は `battle/src/attributes.ts` の1か所
 - 撮影・合体だけ:`generator/CLAUDE.md` の 5.

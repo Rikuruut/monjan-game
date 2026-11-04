@@ -1,5 +1,5 @@
 /* ==================================================================
-   戦闘の演出(CSS だけ。ライブラリは使わない)
+   戦闘の演出(CSS。命中ではじける粒だけは canvas-confetti で描く:attackParticles.ts)
    ------------------------------------------------------------------
    召喚 … カードが光の中から出てくる(1.2秒)
    攻撃 … 攻撃した側のカードが前へ出て、タイプごとの飛び道具が相手のカードへ飛ぶ(0.7秒。ATTACK_DISPLAY_MS)
@@ -20,6 +20,49 @@
 .projectile--earth,   .impact-effect--earth   { --fx-a: #e8cfa4; --fx-b: #8a6a4a; }
 /* 無:白だと明るい草原にとけたので、金のふちをつける */
 .projectile--neutral, .impact-effect--neutral { --fx-a: #fff6d0; --fx-b: #ff9f1c; }
+/* 攻撃のあいだ、画面のふちが攻撃する側のタイプの色で光る(あいこは neutral) */
+.battle-screen--attack-fire    { --fx-edge: #ff6a00; }
+.battle-screen--attack-water   { --fx-edge: #1a8fe8; }
+.battle-screen--attack-nature  { --fx-edge: #5cc23a; }
+.battle-screen--attack-light   { --fx-edge: #ffd23f; }
+.battle-screen--attack-dark    { --fx-edge: #7b4fd8; }
+.battle-screen--attack-wind    { --fx-edge: #7ad9b8; }
+.battle-screen--attack-earth   { --fx-edge: #b0844f; }
+.battle-screen--attack-neutral { --fx-edge: #ff9f1c; }
+.battle-screen--attack::after {
+  position: absolute;
+  z-index: 11;
+  inset: 0;
+  content: '';
+  pointer-events: none;
+  box-shadow: inset 0 0 160px 40px var(--fx-edge, #fff);
+  animation: edgeGlow 0.7s ease-in-out both;
+}
+@keyframes edgeGlow {
+  0%   { opacity: 0; }
+  30%  { opacity: 0.9; }
+  100% { opacity: 0.2; }
+}
+
+/* 粒の canvas(canvas-confetti)。命中の光の輪より上、画面の白い光より下 */
+.particle-layer { position: absolute; z-index: 15; inset: 0; width: 1920px; height: 1080px; pointer-events: none; }
+
+/* 開発者メニューの「攻撃エフェクトを見る」で、いま流しているタイプ */
+.fx-preview-label {
+  position: absolute;
+  z-index: 30;
+  top: 118px;
+  left: 50%;
+  margin: 0;
+  padding: 4px 28px;
+  color: #fff;
+  font-family: var(--font-title);
+  font-size: 40px;
+  background: #1F2F4Fcc;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
 
 /* ------------------------------------------------------------------ */
 /* 召喚:足もとに魔法陣、カードが光の中から上がってくる                    */
@@ -214,6 +257,28 @@
   animation: impactRing 0.5s ease-out 0.08s both;
 }
 .impact-ring--late { border-width: 6px; border-color: #fff; animation-delay: 0.16s; }
+/* 大きく広がる3つめの輪(細く、ゆっくり) */
+.impact-ring--wide { border-width: 4px; border-color: var(--fx-b); box-shadow: none; animation: impactRingWide 0.6s ease-out 0.12s both; }
+@keyframes impactRingWide {
+  0%   { opacity: 0.9; transform: scale(0.5); }
+  100% { opacity: 0; transform: scale(7); }
+}
+/* 当たったところに、タイプの色の広い光 */
+.impact-glow {
+  position: absolute;
+  left: -320px;
+  top: -320px;
+  width: 640px;
+  height: 640px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffc 0 10%, var(--fx-a) 30%, transparent 68%);
+  opacity: 0;
+  animation: impactGlow 0.35s ease-out 0.08s both;
+}
+@keyframes impactGlow {
+  0%   { opacity: 0.95; transform: scale(0.4); }
+  100% { opacity: 0; transform: scale(1.2); }
+}
 @keyframes impactRing {
   0%   { opacity: 1; transform: scale(0.2); }
   100% { opacity: 0; transform: scale(4); }

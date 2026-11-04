@@ -97,3 +97,6 @@
   border-radius: 999px;
   pointer-events: none;
 }
+
+/* 攻撃エフェクトを見る:タイプの色のボタン(色は base.css の .el-<テーマ>) */
+.dev-row .dev-fx { min-width: 34px; color: #fff; font-weight: 700; border: 1px solid #0006; border-radius: 4px; }

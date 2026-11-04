@@ -1,10 +1,12 @@
-import type { CSSProperties } from 'react';
+import { forwardRef, type CSSProperties } from 'react';
+import type { AttributeTheme } from './attributes';
 
 // 戦闘のエフェクト(見た目は styles/effects.css)。
 // 攻撃(attack)で、攻撃した側のカードから相手のカードへタイプごとの飛び道具が飛び、
-// 命中(impact)で、当たったカードの上に光の輪とかけらがはじける。あいこは両方から飛んで真ん中でぶつかる
+// 命中(impact)で、当たったカードの上に光の輪とかけらがはじける。あいこは両方から飛んで真ん中でぶつかる。
+// その上に、タイプごとの粒(attackParticles.ts。canvas-confetti)を ParticleLayer の canvas に出す
 
-export type AttributeTheme = 'fire' | 'water' | 'nature' | 'light' | 'dark' | 'wind' | 'earth' | 'neutral';
+export type { AttributeTheme };
 export type Side = 'player' | 'cpu';
 
 // 飛び道具のうしろに続く粒の数(--i で大きさと遅れを変える)
@@ -40,13 +42,20 @@ export function AttackProjectile({ from, theme, meet = false }: { from: Side; th
 export function ImpactBurst({ at, theme }: { at: Side | 'center'; theme: AttributeTheme }) {
   return (
     <div className={`impact-effect impact-effect--${at} impact-effect--${theme}`} aria-hidden="true">
+      <span className="impact-glow" />
       <span className="impact-ring" />
       <span className="impact-ring impact-ring--late" />
+      <span className="impact-ring impact-ring--wide" />
       {indexed(SHARDS, 'impact-shard')}
       <b className="impact-star">✦</b>
     </div>
   );
 }
+
+/** 粒を描く canvas(舞台と同じ 1920×1080)。描くのは attackParticles.ts */
+export const ParticleLayer = forwardRef<HTMLCanvasElement>(function ParticleLayer(_, ref) {
+  return <canvas ref={ref} className="particle-layer" width={1920} height={1080} aria-hidden="true" />;
+});
 
 /** 舞い落ちる葉と花びら(撮影・合体の画面の .drift と同じ飾り) */
 export function Drift() {
