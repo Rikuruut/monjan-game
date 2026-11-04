@@ -26,3 +26,22 @@ export const ELEMENTS: { attribute: string; theme: AttributeTheme }[] = [
   { attribute: '土', theme: 'earth' },
   { attribute: '無', theme: 'neutral' },
 ];
+
+// ピンチの必殺技の名前に使う、タイプの言葉
+const SPECIAL_WORDS: Record<AttributeTheme, string> = {
+  fire: 'ファイヤー',
+  water: 'スプラッシュ',
+  nature: 'リーフ',
+  light: 'フラッシュ',
+  dark: 'シャドー',
+  wind: 'ストーム',
+  earth: 'クエイク',
+  neutral: 'アタック',
+};
+
+/** 必殺技の名前:撮った物 + タイプの言葉(例「はさみ ストーム!」)。撮った物がなければ「ひっさつわざ!」 */
+export function specialMoveName(monster: { attribute: string; source?: { object?: string } }): string {
+  const object = monster.source?.object?.trim();
+  if (!object) return 'ひっさつわざ!';
+  return `${object} ${SPECIAL_WORDS[getAttributeTheme(monster.attribute)]}!`;
+}

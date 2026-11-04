@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ELEMENTS, getAttributeTheme, type AttributeTheme } from './attributes';
+import { ELEMENTS, getAttributeTheme, specialMoveName, type AttributeTheme } from './attributes';
 
 describe('getAttributeTheme', () => {
   const cases: [string, AttributeTheme][] = [
@@ -22,5 +22,17 @@ describe('getAttributeTheme', () => {
   it('開発者メニューの8つは、判定と同じテーマになる', () => {
     ELEMENTS.forEach(({ attribute, theme }) => expect(getAttributeTheme(attribute)).toBe(theme));
     expect(new Set(ELEMENTS.map((element) => element.theme)).size).toBe(8);
+  });
+});
+
+describe('必殺技の名前', () => {
+  it('撮った物 + タイプの言葉', () => {
+    expect(specialMoveName({ attribute: '風', source: { object: 'はさみ' } })).toBe('はさみ ストーム!');
+    expect(specialMoveName({ attribute: '火', source: { object: 'えんぴつ' } })).toBe('えんぴつ ファイヤー!');
+  });
+
+  it('撮った物がなければ ひっさつわざ', () => {
+    expect(specialMoveName({ attribute: '水', source: { object: '' } })).toBe('ひっさつわざ!');
+    expect(specialMoveName({ attribute: '水' })).toBe('ひっさつわざ!');
   });
 });

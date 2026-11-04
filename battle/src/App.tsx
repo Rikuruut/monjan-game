@@ -14,15 +14,19 @@ import {
   startGameBgm,
 } from './audio/gameBgm';
 import { burstAt, chargeAt, createParticleFire, type ParticleFire } from './attackParticles';
-import { getAttributeTheme } from './attributes';
+import { getAttributeTheme, specialMoveName } from './attributes';
 import { AttackProjectile, Drift, ImpactBurst, ParticleLayer } from './BattleEffects';
 import { loadGameData, type GameData } from './data/loadGameData';
 import { Deck } from './Deck';
 import { DevMenu, type DevJump, type FxDirection } from './DevMenu';
 import { readAutoplay, writeAutoplay, type Autoplay } from './devTools';
 import {
+  applyPlayerBonus,
   cpuHandFor,
   getGameOutcome,
+  isPinch,
+  MASH_FULL,
+  mashBonus,
   pickCpuHand,
   resolveRound,
   shuffleStars,
@@ -56,6 +60,9 @@ export type BattlePhase =
   | 'janken-pon'
   | 'reveal'
   | 'star-showdown'
+  // プレイヤーが勝ったときだけ:ピンチなら必殺技のカットイン(special)→ 連打(power-up)→ 攻撃
+  | 'special'
+  | 'power-up'
   | 'attack'
   | 'impact'
   | 'result'
@@ -74,6 +81,10 @@ export const STAR_SHOWDOWN_MS = 1200;
 export const ATTACK_DISPLAY_MS = 700;
 // 命中:一瞬止まって(ヒットストップ)から ゆれる(2026年11月2日 420 → 600ms)
 export const IMPACT_DISPLAY_MS = 600;
+// 必殺技のカットイン(自分の♡が1のときに勝つと、⚔×2)
+export const SPECIAL_DISPLAY_MS = 1400;
+// 勝ったあとの連打の時間(ゲージが満タンになると +1ダメージ。満タンの回数は logic.ts の MASH_FULL)
+export const POWER_UP_MS = 2000;
 // 練習の はじまりで、スタートの音のあとに召喚の音を鳴らすまで
 const PRACTICE_SUMMON_SOUND_MS = 350;
 // あいこの攻撃で、2つめのタイプの音を遅らせる
@@ -86,6 +97,7 @@ export const AUTOPLAY_TITLE_MS = 2000;
 export const AUTOPLAY_RULES_MS = 800;
 export const AUTOPLAY_HAND_MS = 1000;
 export const AUTOPLAY_WAIT_MS = 3000;
+export const AUTOPLAY_MASH_MS = 300;
 
 const HAND_META: Record<Hand, { emoji: string; label: string }> = {
   rock: { emoji: '✊', label: 'グー' },
@@ -254,6 +266,7 @@ function MonsterPanel({
   phase,
   result,
   isHit,
+  pinch = false,
 }: {
   monster: Monster;
   hp: number;
@@ -261,6 +274,7 @@ function MonsterPanel({
   phase: BattlePhase;
   result: RoundResult | null;
   isHit: boolean;
+  pinch?: boolean;
 }) {
   const theme = getAttributeTheme(monster.attribute);
   const damage = side === 'player' ? result?.playerDamage ?? 0 : result?.cpuDamage ?? 0;
@@ -286,6 +300,7 @@ function MonsterPanel({
         isRoundWinner ? 'monster-panel--round-winner' : '',
         isRoundLoser ? 'monster-panel--round-loser' : '',
         isDefeated ? 'monster-panel--defeated' : '',
+        pinch ? 'monster-panel--pinch' : '',
       ].filter(Boolean).join(' ')}
     >
       <div className="monster-tag">
@@ -405,6 +420,21 @@ function Tutorial({ onClose }: { onClose: () => void }) {
   );
 }
 
+// 勝ったあとの連打のゲージ。会場の3つのボタンのどれでも1回(画面を押しても数える)
+function PowerUpGauge({ count, onMash }: { count: number; onMash: () => void }) {
+  const full = count >= MASH_FULL;
+  const ratio = Math.min(1, count / MASH_FULL);
+  return (
+    <div className={['power-up', full ? 'power-up--full' : ''].filter(Boolean).join(' ')} role="status" aria-live="polite">
+      <strong>{full ? 'パワー MAX！ ダメージ +1' : 'ボタンを れんだ！'}</strong>
+      <button type="button" className="power-up__gauge" onClick={onMash} aria-label={`れんだ ${count}かい`}>
+        <span className="power-up__fill" style={{ width: `${ratio * 100}%` }} />
+      </button>
+      <span className="power-up__keys" aria-hidden="true">◀ ● ▶</span>
+    </div>
+  );
+}
+
 // 練習ラウンドの吹き出し。手をえらぶ前(choose)と、結果で止まっているとき(result)。見た目は battle.css の .coach
 function PracticeCoach({ step }: { step: 'choose' | 'result' }) {
   return (
@@ -420,6 +450,7 @@ function PracticeCoach({ step }: { step: 'choose' | 'result' }) {
         <>
           <p className="coach-title">かったね！</p>
           <p>かつと <strong>⚔の数だけ</strong> 相手の♡が へるよ！</p>
+          <p>かったら <strong>ボタンを れんだ！</strong> 満タンで ダメージ +1</p>
           <p><strong>相手の♡を ぜんぶなくしたら かち！</strong></p>
           <p className="coach-sub">れんしゅうは これで おしまい！</p>
         </>
@@ -429,10 +460,10 @@ function PracticeCoach({ step }: { step: 'choose' | 'result' }) {
 }
 
 // 練習の対戦:相手は練習用の見本(本番の相手は、本番の召喚まで見せない)。
-// 相手の♡は 自分の⚔より多くする(♡が0になって、勝負が終わらないように)
+// 相手の♡は 自分の⚔ + 連打の1 より多くする(♡が0になって、勝負が終わらないように)
 function practiceData(data: GameData): Pick<GameData, 'player' | 'cpu'> {
   const cpu = data.practiceCpu;
-  const hp = Math.max(cpu.hp, data.player.attack + 1000) as Monster['hp'];
+  const hp = Math.min(5000, Math.max(cpu.hp, data.player.attack + 2000)) as Monster['hp'];
   return { player: data.player, cpu: hp === cpu.hp ? cpu : { ...cpu, hp } };
 }
 
@@ -494,7 +525,7 @@ function RoundFeedback({
   playerStar: number;
   cpuStar: number;
 }) {
-  const cpuVisible = ['reveal', 'star-showdown', 'attack', 'impact', 'result'].includes(phase);
+  const cpuVisible = ['reveal', 'star-showdown', 'special', 'power-up', 'attack', 'impact', 'result'].includes(phase);
   const sameHand = result.reason === 'star' || result.reason === 'perfect-tie';
   const starShowdown = phase === 'star-showdown';
   // 手のぶつかりで、勝った手を大きく、負けた手を灰色にする(ぽん!のあと、手を見せてから)
@@ -531,6 +562,12 @@ function RoundFeedback({
   } else if (starShowdown) {
     phaseMessage = result.reason === 'perfect-tie' ? 'あいこ！' : '星の強さで勝負！';
     phaseSub = result.reason === 'perfect-tie' ? '手も★も おなじ！' : '★が多い方が かち！';
+  } else if (phase === 'special') {
+    phaseMessage = 'ひっさつわざ！';
+    phaseSub = 'ピンチで こうげき 2ばい！';
+  } else if (phase === 'power-up') {
+    phaseMessage = 'れんだ！';
+    phaseSub = 'ボタンを たくさん おそう！';
   } else if (phase === 'attack') {
     phaseMessage = result.winner === 'none' ? 'あいこ！' : 'こうげき！';
     phaseSub = result.winner === 'none' ? 'おたがいに ダメージ！' : 'モンスターが とびだした！';
@@ -550,7 +587,7 @@ function RoundFeedback({
     side === 'cpu' && !cpuVisible ? 'revealed-hand--concealed' : '',
   ].filter(Boolean).join(' ');
   // 同じ手のときは、2つの手のあいだに ★ の くらべ(> < =)を出す
-  const starCompare = sameHand && ['star-showdown', 'attack', 'impact', 'result'].includes(phase)
+  const starCompare = sameHand && ['star-showdown', 'special', 'power-up', 'attack', 'impact', 'result'].includes(phase)
     ? (result.winner === 'player' ? '＞' : result.winner === 'cpu' ? '＜' : '＝')
     : null;
 
@@ -613,6 +650,8 @@ function BattleScreen({
   onOpenRules,
   onEndPractice,
   onSelect,
+  mash,
+  onMash,
   fxLabel,
 }: {
   data: Pick<GameData, 'player' | 'cpu'>;
@@ -631,9 +670,14 @@ function BattleScreen({
   onOpenRules: () => void;
   onEndPractice: () => void;
   onSelect: (hand: Hand) => void;
+  mash: number;
+  onMash: () => void;
   fxLabel?: string;
 }) {
   const tutorialOpen = tutorialMode !== null;
+  // ピンチ(自分の♡が1):手を選ぶあいだと必殺技のあいだ、自分のカードを光らせる
+  const pinch = !practice && isPinch(playerHp)
+    && ['rarity', 'choosing', 'selected', 'janken-jan', 'janken-ken', 'janken-pon', 'reveal', 'star-showdown', 'special'].includes(phase);
   const playerTheme = getAttributeTheme(data.player.attribute);
   const cpuTheme = getAttributeTheme(data.cpu.attribute);
   const attackerTheme =
@@ -725,6 +769,7 @@ function BattleScreen({
           phase={phase}
           result={result}
           isHit={phase === 'impact' && Boolean(result?.playerDamage)}
+          pinch={pinch}
         />
         <div className="versus" aria-label="バーサス">
           <span>V</span><span>S</span>
@@ -792,6 +837,17 @@ function BattleScreen({
         </div>
       )}
       {phase === 'rarity' && <RarityNotice />}
+      {pinch && phase === 'choosing' && !tutorialOpen && (
+        <p className="pinch-notice" role="status">ピンチ！ かてば <strong>ひっさつわざ！</strong></p>
+      )}
+      {phase === 'special' && (
+        <div className="special-cutin" role="status" aria-live="assertive">
+          <small>ひっさつわざ！</small>
+          <strong>{specialMoveName(data.player)}</strong>
+          <span>こうげき 2ばい！</span>
+        </div>
+      )}
+      {phase === 'power-up' && <PowerUpGauge count={mash} onMash={onMash} />}
       {phase === 'next-round' && <NextRoundNotice round={round} />}
       {phase === 'result' && isFinalBlow && outcome !== 'ongoing' && (
         <div className={`final-banner final-banner--${outcome}`} aria-hidden="true">
@@ -927,6 +983,9 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [cpuHand, setCpuHand] = useState<Hand | null>(null);
   const [result, setResult] = useState<RoundResult | null>(null);
   const [phase, setPhase] = useState<BattlePhase>('summon');
+  // 勝ったあとの連打の回数(数えるのは ref。表示のために state にも入れる)
+  const [mash, setMash] = useState(0);
+  const mashRef = useRef(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [bgmVolume, setBgmVolume] = useState(0.55);
   const [sfxVolume, setSfxVolumeState] = useState(0.9);
@@ -1146,6 +1205,9 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     const chosenCpuHand = mode === 'normal' ? pickCpuHand() : cpuHandFor(hand, mode);
     const roundCpuStars = mode === 'tie' ? withStarAt(cpuStars, chosenCpuHand, playerStars[hand]) : cpuStars;
     if (roundCpuStars !== cpuStars) setCpuStars(roundCpuStars);
+    // ピンチ(ラウンドの前に自分の♡が1)で勝つと必殺技。CPU の♡は、連打の分を足すときに使う
+    const pinch = !practice && isPinch(playerHp);
+    const cpuHpBefore = cpuHp;
     const nextResult = resolveRound({
       playerHand: hand,
       cpuHand: chosenCpuHand,
@@ -1162,13 +1224,13 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setPhase('selected');
     playSound('select');
 
-    const beginAttack = () => {
+    const beginAttack = (finalResult: RoundResult) => {
       setPhase('attack');
-      playAttackSound(nextResult.winner, playerMonster.attribute, cpuMonster.attribute);
+      playAttackSound(finalResult.winner, playerMonster.attribute, cpuMonster.attribute);
 
       schedule(() => {
-        setPlayerHp(nextResult.playerHp);
-        setCpuHp(nextResult.cpuHp);
+        setPlayerHp(finalResult.playerHp);
+        setCpuHp(finalResult.cpuHp);
         setPhase('impact');
         playSound('impact');
         playSound('hp-loss');
@@ -1178,7 +1240,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
           // 練習は ここで止まって、吹き出しを読んでもらう(「つぎへ」で「れんしゅうクリア」の画面へ)
           if (practice) return;
           schedule(() => {
-            const outcome = getGameOutcome(nextResult.playerHp, nextResult.cpuHp);
+            const outcome = getGameOutcome(finalResult.playerHp, finalResult.cpuHp);
             if (outcome === 'ongoing') {
               prepareNextRound();
             } else {
@@ -1188,6 +1250,31 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
           }, RESULT_DISPLAY_MS);
         }, IMPACT_DISPLAY_MS);
       }, ATTACK_DISPLAY_MS);
+    };
+
+    // 連打:POWER_UP_MS のあいだ数えて、必殺技と連打の分を足した結果で攻撃する
+    const beginPowerUp = () => {
+      mashRef.current = 0;
+      setMash(0);
+      setPhase('power-up');
+      schedule(() => {
+        const finalResult = applyPlayerBonus(nextResult, { pinch, mash: mashBonus(mashRef.current), cpuHpBefore });
+        setResult(finalResult);
+        beginAttack(finalResult);
+      }, POWER_UP_MS);
+    };
+
+    // 手を見せたあと:プレイヤーの勝ちなら(ピンチなら必殺技 →)連打、ほかは そのまま攻撃
+    const afterReveal = () => {
+      if (nextResult.winner !== 'player') {
+        beginAttack(nextResult);
+      } else if (pinch) {
+        setPhase('special');
+        playSound('star-showdown');
+        schedule(beginPowerUp, SPECIAL_DISPLAY_MS);
+      } else {
+        beginPowerUp();
+      }
     };
 
     schedule(() => {
@@ -1210,15 +1297,23 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
               if (nextResult.reason !== 'hand') {
                 setPhase('star-showdown');
                 playSound(nextResult.reason === 'perfect-tie' ? 'tie' : 'star-showdown');
-                schedule(beginAttack, STAR_SHOWDOWN_MS);
+                schedule(afterReveal, STAR_SHOWDOWN_MS);
               } else {
-                beginAttack();
+                afterReveal();
               }
             }, REVEAL_DISPLAY_MS);
           }, JANKEN_BEAT_MS);
         }, JANKEN_BEAT_MS);
       }, JANKEN_BEAT_MS);
     }, SELECTED_DISPLAY_MS);
+  };
+
+  // 連打を1回数える(満タンになった瞬間だけ音を変える)
+  const pressMash = () => {
+    if (phase !== 'power-up') return;
+    mashRef.current += 1;
+    setMash(mashRef.current);
+    playSound(mashRef.current === MASH_FULL ? 'star-showdown' : 'select');
   };
 
   const returnToTitle = () => {
@@ -1245,7 +1340,9 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     if (screen === 'title') {
       if (button === 'center') pressStart();
     } else if (screen === 'battle') {
-      if (practice && phase === 'result') {
+      if (phase === 'power-up') {
+        pressMash();
+      } else if (practice && phase === 'result') {
         if (button === 'center') finishPractice();
       } else if (!tutorialOpen) {
         chooseHand(HANDS[['left', 'center', 'right'].indexOf(button)]);
@@ -1352,6 +1449,13 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       if (practice && phase === 'result') {
         action = finishPractice;
         delay = AUTOPLAY_RULES_MS;
+      } else if (phase === 'power-up') {
+        // 連打:満タンになったり ならなかったりする回数を、まとめて押したことにする
+        action = () => {
+          mashRef.current += Math.floor(Math.random() * MASH_FULL * 1.5);
+          setMash(mashRef.current);
+        };
+        delay = AUTOPLAY_MASH_MS;
       } else if (!tutorialOpen && phase === 'choosing') {
         action = () => chooseHand(HANDS[Math.floor(Math.random() * HANDS.length)]);
         delay = AUTOPLAY_HAND_MS;
@@ -1427,6 +1531,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         onOpenRules={openRules}
         onEndPractice={finishPractice}
         onSelect={chooseHand}
+        mash={mash}
+        onMash={pressMash}
       />
     );
   }

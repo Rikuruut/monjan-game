@@ -1,5 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { cpuHandFor, decideWinner, getGameOutcome, pickCpuHand, resolveRound, shuffleStars, withStarAt } from './logic';
+import {
+  applyPlayerBonus,
+  cpuHandFor,
+  decideWinner,
+  getGameOutcome,
+  isPinch,
+  MASH_FULL,
+  mashBonus,
+  pickCpuHand,
+  resolveRound,
+  shuffleStars,
+  withStarAt,
+} from './logic';
 
 describe('じゃんけん判定', () => {
   it.each([
@@ -134,5 +146,50 @@ describe('開発者メニューの「勝ち負けを決める」', () => {
     const stars = { rock: 1, scissors: 2, paper: 3 } as const;
     expect(withStarAt(stars, 'rock', 3)).toEqual({ rock: 3, scissors: 2, paper: 1 });
     expect(withStarAt(stars, 'rock', 1)).toBe(stars);
+  });
+});
+
+describe('ピンチの必殺技と連打', () => {
+  const base = { playerStar: 1, cpuStar: 1, playerAttack: 2, cpuAttack: 1, playerHp: 1, cpuHp: 5 } as const;
+  const win = resolveRound({ ...base, playerHand: 'rock', cpuHand: 'scissors' });
+
+  it('ピンチは♡が1のときだけ', () => {
+    expect(isPinch(1)).toBe(true);
+    expect(isPinch(0)).toBe(false);
+    expect(isPinch(2)).toBe(false);
+  });
+
+  it('連打は満タンで +1、足りなければ 0', () => {
+    expect(mashBonus(MASH_FULL - 1)).toBe(0);
+    expect(mashBonus(MASH_FULL)).toBe(1);
+    expect(mashBonus(MASH_FULL + 10)).toBe(1);
+  });
+
+  it('何もなければ そのまま', () => {
+    expect(applyPlayerBonus(win, { pinch: false, mash: 0, cpuHpBefore: 5 })).toEqual(win);
+  });
+
+  it('ピンチで勝つと⚔×2、連打の分はそのあとに足す', () => {
+    const next = applyPlayerBonus(win, { pinch: true, mash: 1, cpuHpBefore: 5 });
+    expect(next.cpuDamage).toBe(5);
+    expect(next.cpuHp).toBe(0);
+  });
+
+  it('連打だけなら +1', () => {
+    const next = applyPlayerBonus(win, { pinch: false, mash: 1, cpuHpBefore: 5 });
+    expect(next.cpuDamage).toBe(3);
+    expect(next.cpuHp).toBe(2);
+  });
+
+  it('CPU の♡は 0 で止まる(元の♡から計算する)', () => {
+    const low = resolveRound({ ...base, cpuHp: 1, playerHand: 'rock', cpuHand: 'scissors' });
+    expect(applyPlayerBonus(low, { pinch: true, mash: 1, cpuHpBefore: 1 }).cpuHp).toBe(0);
+  });
+
+  it('負けとあいこは変えない', () => {
+    const lose = resolveRound({ ...base, playerHand: 'rock', cpuHand: 'paper' });
+    const tie = resolveRound({ ...base, playerHand: 'rock', cpuHand: 'rock' });
+    expect(applyPlayerBonus(lose, { pinch: true, mash: 1, cpuHpBefore: 5 })).toEqual(lose);
+    expect(applyPlayerBonus(tie, { pinch: true, mash: 1, cpuHpBefore: 5 })).toEqual(tie);
   });
 });

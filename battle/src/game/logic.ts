@@ -90,3 +90,30 @@ export function withStarAt(stars: StarMap, hand: Hand, star: Star): StarMap {
   if (!other || other === hand) return stars;
   return { ...stars, [hand]: star, [other]: stars[hand] };
 }
+
+/** 勝ったあとの連打で、ゲージが満タンになる回数(満タンで +1ダメージ) */
+export const MASH_FULL = 8;
+
+/** ピンチ:ラウンドが始まったときに自分の♡が1。勝てば必殺技(⚔×2) */
+export function isPinch(hp: number): boolean {
+  return hp === 1;
+}
+
+/** 連打の回数から足すダメージ。満タンで 1、ほかは 0 */
+export function mashBonus(presses: number): number {
+  return presses >= MASH_FULL ? 1 : 0;
+}
+
+/**
+ * プレイヤーが勝ったラウンドに、必殺技と連打の分を足す。
+ * cpuHpBefore はラウンドの前の CPU の♡(result.cpuHp は 0 で止まっているので、そこからは戻せない)。
+ * 与えるダメージ = 基本(⚔の数)× (ピンチなら 2) + 連打の分。CPU の勝ち・あいこは変えない
+ */
+export function applyPlayerBonus(
+  result: RoundResult,
+  bonus: { pinch: boolean; mash: number; cpuHpBefore: number },
+): RoundResult {
+  if (result.winner !== 'player') return result;
+  const cpuDamage = result.cpuDamage * (bonus.pinch ? 2 : 1) + bonus.mash;
+  return { ...result, cpuDamage, cpuHp: Math.max(0, bonus.cpuHpBefore - cpuDamage) };
+}

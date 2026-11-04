@@ -9,13 +9,16 @@ import {
   IMPACT_DISPLAY_MS,
   JANKEN_BEAT_MS,
   NEXT_ROUND_DISPLAY_MS,
+  POWER_UP_MS,
   RARITY_ROLL_MS,
   RESULT_DISPLAY_MS,
   REVEAL_DISPLAY_MS,
   SELECTED_DISPLAY_MS,
+  SPECIAL_DISPLAY_MS,
   STAR_SHOWDOWN_MS,
   SUMMON_DISPLAY_MS,
 } from './App';
+import { MASH_FULL } from './game/logic';
 import {
   pauseGameBgm,
   setGameBgmMuted,
@@ -139,9 +142,11 @@ async function advanceSelectedToReveal() {
   await advance(JANKEN_BEAT_MS);
 }
 
-async function advanceRevealToAttack(hasStarShowdown: boolean) {
+// プレイヤーが勝ったときは、攻撃の前に連打(power-up)の時間がある
+async function advanceRevealToAttack(hasStarShowdown: boolean, playerWins = true) {
   await advance(REVEAL_DISPLAY_MS);
   if (hasStarShowdown) await advance(STAR_SHOWDOWN_MS);
+  if (playerWins) await advance(POWER_UP_MS);
 }
 
 async function completeDifferentHandRound() {
@@ -292,8 +297,8 @@ describe('画面上のゲーム進行と演出', () => {
 
     await startToPractice();
     await playPractice();
-    // 練習のあいだ CPU の♡は、自分の⚔(2)より多い 3 つ。2へって 1 のこる
-    expect(screen.getByLabelText('HP 1 / 3')).toBeInTheDocument();
+    // 練習のあいだ CPU の♡は、自分の⚔(2)+ 連打の1 より多い 4 つ。2へって 2 のこる
+    expect(screen.getByLabelText('HP 2 / 4')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'しょうり！' })).not.toBeInTheDocument();
     expect(document.querySelector('.final-banner')).toBeNull();
 
@@ -380,8 +385,11 @@ describe('画面上のゲーム進行と演出', () => {
     expect(cpuHand.querySelector('.star-strength')).toHaveTextContent('★★');
 
     await advance(REVEAL_DISPLAY_MS);
-    expect(screen.getByRole('status')).toHaveTextContent('こうげき');
+    // 勝ったので、攻撃の前に連打
+    expect(screen.getByText('ボタンを れんだ！')).toBeInTheDocument();
     expect(screen.queryByText('星の強さで勝負！')).not.toBeInTheDocument();
+    await advance(POWER_UP_MS);
+    expect(screen.getByRole('status')).toHaveTextContent('こうげき');
   });
 
   it('同じ手だけ星勝負を表示し、星が多い側の攻撃へ進む', async () => {
@@ -408,7 +416,9 @@ describe('画面上のゲーム進行と演出', () => {
     await advance(STAR_SHOWDOWN_MS - 1);
     expect(screen.getByRole('status')).toHaveTextContent('星の強さで勝負');
     await advance(1);
-    expect(screen.getByRole('status')).toHaveTextContent('こうげき');
+    expect(screen.getByText('ボタンを れんだ！')).toBeInTheDocument();
+    await advance(POWER_UP_MS);
+    expect(screen.getAllByRole('status')[0]).toHaveTextContent('こうげき');
 
     await advance(ATTACK_DISPLAY_MS);
     expect(screen.getByLabelText('HP 3 / 5')).toBeInTheDocument();
@@ -586,6 +596,97 @@ describe('画面上のゲーム進行と演出', () => {
     expect(screen.getByLabelText('HP 5 / 5')).toBeInTheDocument();
     // もう一度はじめると、また練習ラウンドから
     expect(screen.getByText('れんしゅう')).toBeInTheDocument();
+  });
+
+  it('勝ったあとの連打:ゲージが満タンになると +1ダメージ', async () => {
+    await openBattle();
+    fireEvent.click(screen.getByRole('button', { name: /パー 星/ }));
+    await advanceSelectedToReveal();
+    await advance(REVEAL_DISPLAY_MS);
+    expect(screen.getByText('ボタンを れんだ！')).toBeInTheDocument();
+    // 会場の3つのボタンのどれでも1回
+    for (let index = 0; index < MASH_FULL; index += 1) {
+      fireEvent.keyDown(window, { key: ['ArrowLeft', 'Enter', 'ArrowRight'][index % 3] });
+    }
+    expect(screen.getByText('パワー MAX！ ダメージ +1')).toBeInTheDocument();
+    // 押しっぱなし(repeat)は数えない
+    fireEvent.keyDown(window, { key: 'Enter', repeat: true });
+    expect(screen.getByLabelText(`れんだ ${MASH_FULL}かい`)).toBeInTheDocument();
+
+    await advance(POWER_UP_MS);
+    await advance(ATTACK_DISPLAY_MS);
+    // ⚔2 + 1 = 3
+    expect(screen.getByLabelText('HP 2 / 5')).toBeInTheDocument();
+    expect(screen.getByLabelText('3ダメージ')).toBeInTheDocument();
+  });
+
+  it('連打が足りなければ、ダメージはそのまま', async () => {
+    await openBattle();
+    fireEvent.click(screen.getByRole('button', { name: /パー 星/ }));
+    await advanceSelectedToReveal();
+    await advance(REVEAL_DISPLAY_MS);
+    for (let index = 0; index < MASH_FULL - 1; index += 1) fireEvent.keyDown(window, { key: 'Enter' });
+    expect(screen.getByText('ボタンを れんだ！')).toBeInTheDocument();
+    await advance(POWER_UP_MS);
+    await advance(ATTACK_DISPLAY_MS);
+    expect(screen.getByLabelText('HP 3 / 5')).toBeInTheDocument();
+  });
+
+  it('負けたときは連打の時間がない', async () => {
+    await openBattle();
+    // CPU はグー(Math.random = 0)。チョキは負け
+    fireEvent.click(screen.getByRole('button', { name: /チョキ 星/ }));
+    await advanceSelectedToReveal();
+    await advance(REVEAL_DISPLAY_MS);
+    expect(screen.queryByText('ボタンを れんだ！')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('こうげき');
+  });
+
+  it('ピンチ(自分の♡が1)で勝つと、必殺技のカットインのあと ⚔×2', async () => {
+    const weakPlayer = { ...player, hp: 1000 };
+    const byPath: Record<string, unknown> = {
+      '/data/game-config.json': {
+        samplePlayerMonsterId: 'MON-0001',
+        sampleCpuMonsterId: 'MON-0002',
+        monsters: ['/player.json', '/cpu.json'],
+      },
+      '/player.json': weakPlayer,
+      '/cpu.json': cpu,
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => byPath[String(input)],
+    })));
+
+    await startToPractice();
+    await advance(SUMMON_DISPLAY_MS);
+    await advance(RARITY_ROLL_MS);
+    // 練習ではピンチにしない
+    expect(document.querySelector('.pinch-notice')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /グー 星/ }));
+    await advanceSelectedToReveal();
+    await advance(REVEAL_DISPLAY_MS);
+    expect(document.querySelector('.special-cutin')).toBeNull();
+    await advance(POWER_UP_MS);
+    await advance(ATTACK_DISPLAY_MS);
+    await advance(IMPACT_DISPLAY_MS);
+    await endPracticeToChoosing();
+
+    expect(screen.getByText(/ピンチ！/)).toBeInTheDocument();
+    expect(document.querySelector('.monster-panel--player')).toHaveClass('monster-panel--pinch');
+    fireEvent.click(screen.getByRole('button', { name: /パー 星/ }));
+    await advanceSelectedToReveal();
+    await advance(REVEAL_DISPLAY_MS);
+    // 名前は 撮った物 + タイプの言葉
+    expect(screen.getByText('水筒 スプラッシュ!')).toBeInTheDocument();
+    expect(playGameSound).toHaveBeenCalledWith('star-showdown');
+    await advance(SPECIAL_DISPLAY_MS);
+    expect(screen.getByText('ボタンを れんだ！')).toBeInTheDocument();
+    await advance(POWER_UP_MS);
+    await advance(ATTACK_DISPLAY_MS);
+    // ⚔2 × 2 = 4
+    expect(screen.getByLabelText('HP 1 / 5')).toBeInTheDocument();
+    expect(screen.getByLabelText('4ダメージ')).toBeInTheDocument();
   });
 });
 

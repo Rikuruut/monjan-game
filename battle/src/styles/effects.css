@@ -426,3 +426,120 @@
   0%   { opacity: 0; transform: scale(2.6) rotate(-8deg); }
   100% { opacity: 1; transform: scale(1) rotate(-4deg); }
 }
+
+/* ------------------------------------------------------------------ */
+/* ピンチの必殺技(自分の♡が1)と、勝ったあとの連打                       */
+/* ------------------------------------------------------------------ */
+/* ピンチ:自分のカードが赤く脈打つ */
+.monster-panel--pinch .monster-card-motion {
+  animation: pinchPulse 0.7s ease-in-out infinite alternate;
+}
+@keyframes pinchPulse {
+  from { filter: drop-shadow(0 0 6px #ff5a5a); }
+  to   { filter: drop-shadow(0 0 34px #ff2d2d) brightness(1.08); }
+}
+.pinch-notice {
+  position: absolute;
+  z-index: 24;
+  top: 150px;
+  left: 50%;
+  margin: 0;
+  padding: 10px 44px 12px;
+  transform: translateX(-50%);
+  border: 4px solid #ff6b6b;
+  border-radius: 999px;
+  background: #3a0d0dee;
+  font-size: 44px;
+  font-weight: 900;
+  color: var(--white);
+  white-space: nowrap;
+  animation: pinchNotice 0.6s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.pinch-notice strong { color: var(--sun); }
+@keyframes pinchNotice { to { transform: translateX(-50%) scale(1.06); } }
+
+/* 必殺技のカットイン:斜めの帯に名前を大きく */
+.special-cutin {
+  position: absolute;
+  z-index: 27;
+  inset: 0 0 184px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+  background: linear-gradient(170deg, transparent 30%, #ff3b1fcc 30%, #ffb21fcc 70%, transparent 70%);
+  animation: cutinIn 0.35s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.special-cutin small {
+  font-family: var(--font-title);
+  font-size: 56px;
+  color: var(--white);
+  text-shadow: var(--ink-outline);
+}
+.special-cutin strong {
+  font-family: var(--font-title);
+  font-size: 150px;
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--sun);
+  text-shadow:
+    -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
+    0 12px 0 var(--ink), 0 0 60px #ffe9a8;
+  white-space: nowrap;
+  animation: finalSlam 0.5s cubic-bezier(.2, 1.4, .4, 1) 0.15s both;
+}
+.special-cutin span { font-size: 44px; font-weight: 900; color: var(--white); text-shadow: var(--ink-outline); }
+@keyframes cutinIn {
+  from { opacity: 0; transform: translateX(-30%) skewX(-12deg); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 連打のゲージ */
+.power-up {
+  position: absolute;
+  z-index: 26;
+  left: 50%;
+  top: 170px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(-50%);
+  animation: bannerIn 0.3s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.power-up strong {
+  font-family: var(--font-title);
+  font-size: 84px;
+  font-weight: 400;
+  color: var(--sun);
+  text-shadow: var(--ink-outline);
+  white-space: nowrap;
+  animation: mashCall 0.25s ease-in-out infinite alternate;
+}
+@keyframes mashCall { to { transform: scale(1.08); } }
+.power-up__gauge {
+  position: relative;
+  width: 760px;
+  height: 64px;
+  padding: 0;
+  overflow: hidden;
+  border: 6px solid var(--ink);
+  border-radius: 999px;
+  background: #1c2b24;
+  box-shadow: 0 0 0 4px var(--sun), 0 8px 0 4px #061510;
+  cursor: pointer;
+}
+.power-up__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #ffd23f, #ff8a1f, #ff3b1f);
+  transition: width 0.08s ease-out;
+}
+.power-up__keys { font-size: 40px; font-weight: 900; color: var(--white); text-shadow: var(--ink-outline); letter-spacing: 0.3em; }
+.power-up--full strong { color: #fff; text-shadow: var(--ink-outline), 0 0 40px #ffd23f; }
+.power-up--full .power-up__gauge { box-shadow: 0 0 0 4px #fff, 0 8px 0 4px #061510, 0 0 60px 16px #ffd23fcc; }
+.power-up--full .power-up__fill { animation: gaugeFull 0.3s ease-in-out infinite alternate; }
+@keyframes gaugeFull { to { filter: brightness(1.4); } }
