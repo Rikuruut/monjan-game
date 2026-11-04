@@ -123,7 +123,7 @@
 .versus span:last-child { color: var(--petal); text-shadow: var(--ink-outline); }
 /* 手がぶつかるあいだは、VS をよける */
 .battlefield:is(.battlefield--janken-jan, .battlefield--janken-ken, .battlefield--janken-pon, .battlefield--reveal,
-  .battlefield--star-showdown, .battlefield--attack, .battlefield--impact, .battlefield--result) .versus {
+  .battlefield--mash-duel, .battlefield--mash-result, .battlefield--special, .battlefield--attack, .battlefield--impact, .battlefield--result) .versus {
   opacity: 0;
   transform: translate(-50%, -50%) rotate(-6deg) scale(0.5);
 }
@@ -188,18 +188,6 @@
 .hand-button--paper    { left: 1210px; }
 .hand-emoji { font-size: 100px; line-height: 1; text-align: center; }
 .hand-label { font-family: var(--font-title); font-size: 56px; text-align: center; }
-.star-badge {
-  position: absolute;
-  top: -26px;
-  right: 14px;
-  padding: 0 12px;
-  background: var(--ink);
-  border-radius: 999px;
-  color: var(--gold);
-  font-size: 40px;
-  letter-spacing: 2px;
-  line-height: 1.25;
-}
 .hand-key {
   position: absolute;
   left: 50%;
@@ -222,16 +210,10 @@
   box-shadow: 0 0 0 4px var(--sun), 0 9px 0 4px #061510, 0 0 50px 16px #ffe9a8cc;
   animation: handPicked 0.4s cubic-bezier(.2, 1.6, .4, 1) both;
 }
-.choice-area--locked .hand-button:not(.hand-button--selected):not(.hand-button--rolling) { filter: grayscale(0.7) brightness(0.65); }
+.choice-area--locked .hand-button:not(.hand-button--selected) { filter: grayscale(0.7) brightness(0.65); }
 @keyframes handPicked {
   from { transform: translateY(0) scale(1); }
   to   { transform: translateY(-14px) scale(1.06); }
-}
-/* レア度抽選:★がくるくる入れかわる */
-.hand-button--rolling .star-badge { animation: starShuffle 0.16s steps(2) infinite; }
-@keyframes starShuffle {
-  0%   { transform: translateY(0); filter: brightness(1); }
-  100% { transform: translateY(-6px); filter: brightness(1.6); }
 }
 
 /* ------------------------------------------------------------------ */
@@ -278,22 +260,9 @@
   font-size: 24px;
 }
 .revealed-hand b { font-size: 124px; font-weight: 400; line-height: 1; }
-.star-strength {
-  position: absolute;
-  bottom: -26px;
-  padding: 0 14px;
-  background: var(--ink);
-  border-radius: 999px;
-  color: var(--gold);
-  font-size: 38px;
-  font-style: normal;
-  line-height: 1.3;
-  white-space: nowrap;
-}
 /* CPU の手は ぽん! まで ひみつ */
 .revealed-hand--concealed { background: radial-gradient(circle, #2f7d55, var(--ink)); }
 .revealed-hand--concealed b { color: var(--sun); animation: secretPulse 0.7s ease-in-out infinite alternate; }
-.revealed-hand--concealed .star-strength { color: #ffffff88; }
 @keyframes secretPulse { to { transform: scale(1.12); } }
 
 /* 選んだ → じゃん → けん → ぽん!:手がはねる(拍ごとに別の動きにして、毎回動き直す) */
@@ -339,10 +308,10 @@
   100% { opacity: 0; transform: scale(1.6) rotate(30deg); }
 }
 
-/* ぶつかったあとは、2つの手を寄せたままにする(同じ手のときは、★ の くらべを置くため少しあける) */
-.round-feedback:is(.round-feedback--star-showdown, .round-feedback--attack, .round-feedback--impact, .round-feedback--result) .revealed-hand--player { transform: translateX(50px); }
-.round-feedback:is(.round-feedback--star-showdown, .round-feedback--attack, .round-feedback--impact, .round-feedback--result) .revealed-hand--cpu { transform: translateX(-50px); }
-.round-feedback:is(.round-feedback--star-showdown, .round-feedback--attack, .round-feedback--impact, .round-feedback--result) .revealed-hand--same-hand { transform: none; }
+/* ぶつかったあとは、2つの手を寄せたままにする(同じ手のときは、少しあけたまま) */
+.round-feedback:is(.round-feedback--mash-duel, .round-feedback--mash-result, .round-feedback--special, .round-feedback--attack, .round-feedback--impact, .round-feedback--result) .revealed-hand--player { transform: translateX(50px); }
+.round-feedback:is(.round-feedback--mash-duel, .round-feedback--mash-result, .round-feedback--special, .round-feedback--attack, .round-feedback--impact, .round-feedback--result) .revealed-hand--cpu { transform: translateX(-50px); }
+.round-feedback:is(.round-feedback--mash-duel, .round-feedback--mash-result, .round-feedback--special, .round-feedback--attack, .round-feedback--impact, .round-feedback--result) .revealed-hand--same-hand { transform: none; }
 /* 勝った手は光って大きく、負けた手は灰色になって傾く(入れ物の位置はアニメーションが決めるので、中の手と色だけ変える) */
 .revealed-hand b { transition: transform 0.3s; }
 .revealed-hand--won { z-index: 1; box-shadow: 0 0 0 8px var(--sun), 0 0 60px 20px #ffe9a8dd; }
@@ -351,24 +320,6 @@
 .revealed-hand--lost b { transform: rotate(-20deg) scale(0.85); }
 .round-feedback--reveal .revealed-hand--won, .round-feedback--reveal .revealed-hand--lost,
 .round-feedback--reveal .revealed-hand--won b, .round-feedback--reveal .revealed-hand--lost b { transition-delay: 0.3s; }
-.revealed-hand--winner { box-shadow: 0 0 0 8px var(--sun), 0 0 60px 20px #ffe9a8dd; }
-.revealed-hand--winner .star-strength { animation: starWin 0.5s ease-out 0.3s both; }
-@keyframes starWin { 50% { transform: scale(1.5); color: #fff; } }
-.revealed-hand--perfect-tie { animation: tiePulse 0.5s ease-in-out 2 alternate; }
-@keyframes tiePulse { to { box-shadow: 0 0 0 8px var(--white), 0 0 40px 10px #ffffffaa; } }
-.star-compare {
-  position: absolute;
-  left: 0;
-  top: 0;
-  font-family: var(--font-title);
-  font-size: 110px;
-  line-height: 1;
-  color: var(--sun);
-  text-shadow: var(--ink-outline);
-  transform: translate(-50%, -50%);
-  animation: comparePop 0.4s cubic-bezier(.2, 1.6, .4, 1) both;
-}
-@keyframes comparePop { from { opacity: 0; transform: translate(-50%, -50%) scale(0.2); } }
 
 /* 実況の帯:いま起きていることを、下の帯に1つずつ大きく出す */
 .feedback-copy {
@@ -470,8 +421,9 @@
 .tutorial-rps { flex-direction: column; gap: 4px; }
 .tutorial-rps div { display: flex; align-items: center; gap: 18px; font-size: 36px; font-weight: 800; }
 .tutorial-rps b { font-size: 76px; font-weight: 400; }
-.tutorial-stars strong { color: var(--gold); font-size: 80px; text-shadow: 0 4px 0 var(--ink); }
-.tutorial-stars b { font-family: var(--font-title); font-size: 70px; font-weight: 400; }
+.tutorial-mash { gap: 24px; }
+.tutorial-mash strong { font-family: var(--font-title); font-size: 72px; font-weight: 400; color: var(--ink); }
+.tutorial-mash b { font-size: 40px; font-weight: 800; }
 .tutorial-damage span { display: grid; justify-items: center; }
 .tutorial-damage b { font-size: 76px; color: var(--heart); }
 .tutorial-damage span:first-child b { color: var(--gold); text-shadow: 0 4px 0 var(--ink); }
@@ -518,10 +470,7 @@
 .coach .coach-title { margin: 0 0 6px; font-family: var(--font-title); font-size: 68px; font-weight: 400; color: var(--sun); text-shadow: var(--ink-outline); }
 .coach .coach-sub { font-size: 32px; color: #bcd8c8; }
 .coach .coach-stars { margin-top: 14px; font-size: 38px; }
-.coach .coach-stars strong:first-child { color: var(--gold); font-size: 56px; text-shadow: 0 3px 0 var(--ink); }
-/* ①のあいだ、手のボタンと ★ を光らせて指す */
+/* ①のあいだ、手のボタンを光らせて指す */
 .choice-area--coach .hand-button { box-shadow: 0 0 0 4px var(--sun), 0 9px 0 4px #061510, 0 0 40px 10px #ffe9a8aa; }
-.choice-area--coach .star-badge { animation: starPoint 0.7s ease-in-out infinite alternate; }
-@keyframes starPoint { to { transform: scale(1.25) translateY(-6px); } }
 /* 結果で止まっているあいだは、下の操作盤が「バトルスタート!」を出すので、絵の下のひとことは隠す */
 .battle-screen--practice-result .feedback-copy { display: none; }

@@ -1,16 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  applyPlayerBonus,
+  CPU_MASH_MAX,
+  CPU_MASH_MIN,
   cpuHandFor,
+  decideMashDuel,
   decideWinner,
   getGameOutcome,
   isPinch,
-  MASH_FULL,
-  mashBonus,
   pickCpuHand,
+  pickCpuMash,
   resolveRound,
-  shuffleStars,
-  withStarAt,
 } from './logic';
 
 describe('じゃんけん判定', () => {
@@ -18,84 +17,69 @@ describe('じゃんけん判定', () => {
     ['rock', 'scissors'],
     ['scissors', 'paper'],
     ['paper', 'rock'],
-  ] as const)('%s は %s に星の数と関係なく勝つ', (player, cpu) => {
-    expect(decideWinner(player, cpu, 1, 3)).toEqual({ winner: 'player', reason: 'hand' });
+  ] as const)('%s は %s に勝つ', (player, cpu) => {
+    expect(decideWinner(player, cpu)).toBe('player');
+    expect(decideWinner(cpu, player)).toBe('cpu');
   });
 
-  it('同じ手では星が多いプレイヤーが勝つ', () => {
-    expect(decideWinner('rock', 'rock', 3, 1)).toEqual({ winner: 'player', reason: 'star' });
+  it('同じ手は あいこ(このあと連打勝負)', () => {
+    for (const hand of ['rock', 'scissors', 'paper'] as const) expect(decideWinner(hand, hand)).toBe('tie');
+  });
+});
+
+describe('あいこの連打勝負', () => {
+  it('多く押した方の勝ち、同じ数なら勝者なし', () => {
+    expect(decideMashDuel(9, 7)).toBe('player');
+    expect(decideMashDuel(5, 7)).toBe('cpu');
+    expect(decideMashDuel(7, 7)).toBe('none');
   });
 
-  it('同じ手では星が多いCPUが勝つ', () => {
-    expect(decideWinner('paper', 'paper', 1, 3)).toEqual({ winner: 'cpu', reason: 'star' });
-  });
-
-  it('手も星も同じなら勝者なし', () => {
-    expect(decideWinner('scissors', 'scissors', 2, 2)).toEqual({
-      winner: 'none',
-      reason: 'perfect-tie',
-    });
+  it('CPU の回数は はばの中から、渡した乱数で決まる', () => {
+    expect(pickCpuMash(() => 0)).toBe(CPU_MASH_MIN);
+    expect(pickCpuMash(() => 0.999)).toBe(CPU_MASH_MAX);
+    for (const value of [0.1, 0.5, 0.8]) {
+      const presses = pickCpuMash(() => value);
+      expect(presses).toBeGreaterThanOrEqual(CPU_MASH_MIN);
+      expect(presses).toBeLessThanOrEqual(CPU_MASH_MAX);
+    }
   });
 });
 
 describe('ダメージとHP', () => {
-  it('プレイヤーのATK個数分だけCPUのHPを減らす', () => {
-    const result = resolveRound({
-      playerHand: 'rock',
-      cpuHand: 'scissors',
-      playerStar: 1,
-      cpuStar: 3,
-      playerAttack: 3,
-      cpuAttack: 1,
-      playerHp: 4,
-      cpuHp: 5,
+  const base = { reason: 'hand', playerAttack: 2, cpuAttack: 3, playerHp: 4, cpuHp: 5 } as const;
+
+  it('プレイヤーが勝つと⚔の数だけ CPU の♡を減らす', () => {
+    expect(resolveRound({ ...base, winner: 'player' })).toEqual({
+      winner: 'player', reason: 'hand', special: false, playerDamage: 0, cpuDamage: 2, playerHp: 4, cpuHp: 3,
     });
-    expect(result.cpuHp).toBe(2);
-    expect(result.cpuDamage).toBe(3);
-    expect(result.playerHp).toBe(4);
   });
 
-  it('CPUのATK個数分だけプレイヤーのHPを減らす', () => {
-    const result = resolveRound({
-      playerHand: 'rock',
-      cpuHand: 'paper',
-      playerStar: 3,
-      cpuStar: 1,
-      playerAttack: 1,
-      cpuAttack: 2,
-      playerHp: 4,
-      cpuHp: 5,
-    });
-    expect(result.playerHp).toBe(2);
-    expect(result.playerDamage).toBe(2);
+  it('CPU が勝つと CPU の⚔の数だけ減らす', () => {
+    expect(resolveRound({ ...base, winner: 'cpu' })).toMatchObject({ playerDamage: 3, playerHp: 1, cpuHp: 5 });
   });
 
-  it('完全なあいこはATKによらず双方1ダメージ', () => {
-    const result = resolveRound({
-      playerHand: 'paper',
-      cpuHand: 'paper',
-      playerStar: 2,
-      cpuStar: 2,
-      playerAttack: 3,
-      cpuAttack: 3,
-      playerHp: 4,
-      cpuHp: 5,
-    });
-    expect(result).toMatchObject({ playerHp: 3, cpuHp: 4, playerDamage: 1, cpuDamage: 1 });
+  it('勝者なし(連打が同じ数)は⚔によらず双方1ダメージ', () => {
+    expect(resolveRound({ ...base, reason: 'mash', winner: 'none' }))
+      .toMatchObject({ reason: 'mash', playerDamage: 1, cpuDamage: 1, playerHp: 3, cpuHp: 4 });
+  });
+
+  it('ピンチで勝つと必殺技で⚔×2', () => {
+    expect(resolveRound({ ...base, winner: 'player', pinch: true })).toMatchObject({ special: true, cpuDamage: 4, cpuHp: 1 });
+  });
+
+  it('ピンチでも、負けとあいこは必殺技にならない', () => {
+    expect(resolveRound({ ...base, winner: 'cpu', pinch: true })).toMatchObject({ special: false, cpuDamage: 0 });
+    expect(resolveRound({ ...base, winner: 'none', pinch: true })).toMatchObject({ special: false, cpuDamage: 1 });
   });
 
   it('HPは0未満にならない', () => {
-    const result = resolveRound({
-      playerHand: 'rock',
-      cpuHand: 'scissors',
-      playerStar: 1,
-      cpuStar: 3,
-      playerAttack: 3,
-      cpuAttack: 3,
-      playerHp: 1,
-      cpuHp: 1,
-    });
-    expect(result.cpuHp).toBe(0);
+    expect(resolveRound({ ...base, winner: 'player', pinch: true, cpuHp: 1 }).cpuHp).toBe(0);
+  });
+
+  it('ピンチは♡が1のときだけ', () => {
+    expect(isPinch(1)).toBe(true);
+    expect(isPinch(0)).toBe(false);
+    expect(isPinch(2)).toBe(false);
   });
 });
 
@@ -111,19 +95,6 @@ describe('ゲーム終了判定', () => {
 });
 
 describe('テスト可能な乱数処理', () => {
-  it('各手の星は常に1, 2, 3の順列になる', () => {
-    for (const value of [0, 0.2, 0.5, 0.999]) {
-      const stars = shuffleStars(() => value);
-      expect(Object.values(stars).sort()).toEqual([1, 2, 3]);
-    }
-  });
-
-  it('次のラウンドでは注入した乱数に応じて再抽選できる', () => {
-    const first = shuffleStars(vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(0));
-    const second = shuffleStars(vi.fn().mockReturnValueOnce(0.99).mockReturnValueOnce(0.99));
-    expect(first).not.toEqual(second);
-  });
-
   it('CPUの手は渡した乱数だけで選ばれる', () => {
     expect(pickCpuHand(() => 0)).toBe('rock');
     expect(pickCpuHand(() => 0.4)).toBe('scissors');
@@ -131,65 +102,16 @@ describe('テスト可能な乱数処理', () => {
   });
 });
 
-
 describe('開発者メニューの「勝ち負けを決める」', () => {
   it('かつ・まける・あいこ になる CPU の手を返す', () => {
     for (const hand of ['rock', 'scissors', 'paper'] as const) {
-      expect(decideWinner(hand, cpuHandFor(hand, 'win'), 1, 3).winner).toBe('player');
-      expect(decideWinner(hand, cpuHandFor(hand, 'lose'), 3, 1).winner).toBe('cpu');
-      expect(cpuHandFor(hand, 'tie')).toBe(hand);
+      expect(decideWinner(hand, cpuHandFor(hand, 'win'))).toBe('player');
+      expect(decideWinner(hand, cpuHandFor(hand, 'lose'))).toBe('cpu');
+      expect(decideWinner(hand, cpuHandFor(hand, 'tie'))).toBe('tie');
     }
-    expect(cpuHandFor('rock', 'normal', () => 0.99)).toBe('paper');
   });
 
-  it('星の並びをくずさずに、その手の星を入れかえる', () => {
-    const stars = { rock: 1, scissors: 2, paper: 3 } as const;
-    expect(withStarAt(stars, 'rock', 3)).toEqual({ rock: 3, scissors: 2, paper: 1 });
-    expect(withStarAt(stars, 'rock', 1)).toBe(stars);
-  });
-});
-
-describe('ピンチの必殺技と連打', () => {
-  const base = { playerStar: 1, cpuStar: 1, playerAttack: 2, cpuAttack: 1, playerHp: 1, cpuHp: 5 } as const;
-  const win = resolveRound({ ...base, playerHand: 'rock', cpuHand: 'scissors' });
-
-  it('ピンチは♡が1のときだけ', () => {
-    expect(isPinch(1)).toBe(true);
-    expect(isPinch(0)).toBe(false);
-    expect(isPinch(2)).toBe(false);
-  });
-
-  it('連打は満タンで +1、足りなければ 0', () => {
-    expect(mashBonus(MASH_FULL - 1)).toBe(0);
-    expect(mashBonus(MASH_FULL)).toBe(1);
-    expect(mashBonus(MASH_FULL + 10)).toBe(1);
-  });
-
-  it('何もなければ そのまま', () => {
-    expect(applyPlayerBonus(win, { pinch: false, mash: 0, cpuHpBefore: 5 })).toEqual(win);
-  });
-
-  it('ピンチで勝つと⚔×2、連打の分はそのあとに足す', () => {
-    const next = applyPlayerBonus(win, { pinch: true, mash: 1, cpuHpBefore: 5 });
-    expect(next.cpuDamage).toBe(5);
-    expect(next.cpuHp).toBe(0);
-  });
-
-  it('連打だけなら +1', () => {
-    const next = applyPlayerBonus(win, { pinch: false, mash: 1, cpuHpBefore: 5 });
-    expect(next.cpuDamage).toBe(3);
-    expect(next.cpuHp).toBe(2);
-  });
-
-  it('CPU の♡は 0 で止まる(元の♡から計算する)', () => {
-    const low = resolveRound({ ...base, cpuHp: 1, playerHand: 'rock', cpuHand: 'scissors' });
-    expect(applyPlayerBonus(low, { pinch: true, mash: 1, cpuHpBefore: 1 }).cpuHp).toBe(0);
-  });
-
-  it('負けとあいこは変えない', () => {
-    const lose = resolveRound({ ...base, playerHand: 'rock', cpuHand: 'paper' });
-    const tie = resolveRound({ ...base, playerHand: 'rock', cpuHand: 'rock' });
-    expect(applyPlayerBonus(lose, { pinch: true, mash: 1, cpuHpBefore: 5 })).toEqual(lose);
-    expect(applyPlayerBonus(tie, { pinch: true, mash: 1, cpuHpBefore: 5 })).toEqual(tie);
+  it('ふつう は乱数で選ぶ', () => {
+    expect(cpuHandFor('rock', 'normal', () => 0.9)).toBe('paper');
   });
 });

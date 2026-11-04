@@ -428,9 +428,9 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* ピンチの必殺技(自分の♡が1)と、勝ったあとの連打                       */
+/* ピンチ(自分の♡が1)                                                 */
 /* ------------------------------------------------------------------ */
-/* ピンチ:自分のカードが赤く脈打つ */
+/* 自分のカードが赤く脈打つ */
 .monster-panel--pinch .monster-card-motion {
   animation: pinchPulse 0.7s ease-in-out infinite alternate;
 }
@@ -459,87 +459,250 @@
 .pinch-notice strong { color: var(--sun); }
 @keyframes pinchNotice { to { transform: translateX(-50%) scale(1.06); } }
 
-/* 必殺技のカットイン:斜めの帯に名前を大きく */
+/* ------------------------------------------------------------------ */
+/* 必殺技のカットイン(ピンチで勝ったとき)                              */
+/* 暗い画面 → 白いフラッシュ → 集中線と斜めの帯 → 自分のモンスターがすべりこむ → 名前をたたきつける */
+/* ------------------------------------------------------------------ */
 .special-cutin {
+  --sp-a: #ffd23f;
+  --sp-b: #ff3b1f;
   position: absolute;
-  z-index: 27;
-  inset: 0 0 184px;
+  z-index: 30;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, #000000aa, #000000ee 75%);
+  animation: cutinDark 0.2s ease-out both;
+}
+.special-cutin--fire    { --sp-a: #ffd23f; --sp-b: #ff3b1f; }
+.special-cutin--water   { --sp-a: #9ff3ff; --sp-b: #1f7bff; }
+.special-cutin--nature  { --sp-a: #d8ff7a; --sp-b: #22b14c; }
+.special-cutin--light   { --sp-a: #fffbe0; --sp-b: #ffc928; }
+.special-cutin--dark    { --sp-a: #e6b3ff; --sp-b: #6a1fb5; }
+.special-cutin--wind    { --sp-a: #e8fff6; --sp-b: #31c8a0; }
+.special-cutin--earth   { --sp-a: #ffd9a0; --sp-b: #a0581f; }
+.special-cutin--neutral { --sp-a: #ffffff; --sp-b: #8a94a6; }
+@keyframes cutinDark { from { opacity: 0; } }
+
+/* 集中線:まわりから真ん中へ向かう線が、ぐるぐる回る */
+.special-cutin__lines {
+  position: absolute;
+  inset: -50%;
+  background: repeating-conic-gradient(from 0deg, transparent 0deg 4deg, color-mix(in srgb, var(--sp-a) 70%, transparent) 4deg 5deg, transparent 5deg 9deg);
+  -webkit-mask: radial-gradient(circle, transparent 18%, #000 42%);
+  mask: radial-gradient(circle, transparent 18%, #000 42%);
+  animation: speedLines 0.5s linear infinite;
+}
+@keyframes speedLines { to { transform: rotate(9deg); } }
+
+/* 斜めの帯 */
+.special-cutin__band {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: 330px;
+  height: 420px;
+  background: linear-gradient(90deg, var(--sp-b), var(--sp-a) 50%, var(--sp-b));
+  box-shadow: 0 0 0 10px var(--ink), 0 0 80px 20px var(--sp-a);
+  transform: rotate(-8deg);
+  animation: bandIn 0.3s cubic-bezier(.2, 1.4, .4, 1) 0.1s both;
+}
+@keyframes bandIn { from { transform: rotate(-8deg) scaleX(0); } }
+
+/* 自分のモンスターが左からすべりこむ */
+.special-cutin__monster {
+  position: absolute;
+  left: 90px;
+  top: 250px;
+  width: 640px;
+  height: 480px;
+  overflow: hidden;
+  border: 10px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 0 0 8px var(--sp-a), 0 0 90px 30px var(--sp-a);
+  transform: rotate(-8deg);
+  animation: monsterSlide 0.45s cubic-bezier(.2, 1.3, .4, 1) 0.15s both, monsterShiver 0.08s linear 0.6s infinite alternate;
+}
+.special-cutin__monster img { width: 100%; height: 100%; object-fit: cover; }
+@keyframes monsterSlide {
+  from { opacity: 0; transform: translateX(-900px) rotate(-8deg) scale(0.8); }
+}
+@keyframes monsterShiver { to { transform: translate(4px, -3px) rotate(-8deg); } }
+
+.special-cutin__copy {
+  position: absolute;
+  left: 760px;
+  right: 40px;
+  top: 300px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  pointer-events: none;
-  background: linear-gradient(170deg, transparent 30%, #ff3b1fcc 30%, #ffb21fcc 70%, transparent 70%);
-  animation: cutinIn 0.35s cubic-bezier(.2, 1.4, .4, 1) both;
+  gap: 4px;
+  transform: rotate(-8deg);
 }
-.special-cutin small {
+.special-cutin__copy small {
   font-family: var(--font-title);
-  font-size: 56px;
+  font-size: 64px;
   color: var(--white);
   text-shadow: var(--ink-outline);
+  animation: copyDrop 0.3s cubic-bezier(.2, 1.4, .4, 1) 0.2s both;
 }
-.special-cutin strong {
+.special-cutin__copy strong {
   font-family: var(--font-title);
-  font-size: 150px;
+  font-size: 140px;
   font-weight: 400;
   line-height: 1.1;
-  color: var(--sun);
+  color: var(--white);
   text-shadow:
-    -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
-    0 12px 0 var(--ink), 0 0 60px #ffe9a8;
+    -6px -6px 0 var(--ink), 6px -6px 0 var(--ink), -6px 6px 0 var(--ink), 6px 6px 0 var(--ink),
+    0 14px 0 var(--ink), 0 0 70px var(--sp-a);
   white-space: nowrap;
-  animation: finalSlam 0.5s cubic-bezier(.2, 1.4, .4, 1) 0.15s both;
+  animation: nameSlam 0.45s cubic-bezier(.2, 1.5, .4, 1) 0.35s both, namePulse 0.3s ease-in-out 0.8s infinite alternate;
 }
-.special-cutin span { font-size: 44px; font-weight: 900; color: var(--white); text-shadow: var(--ink-outline); }
-@keyframes cutinIn {
-  from { opacity: 0; transform: translateX(-30%) skewX(-12deg); }
-  to   { opacity: 1; transform: none; }
+.special-cutin__copy span {
+  font-size: 56px;
+  font-weight: 900;
+  color: var(--sun);
+  text-shadow: var(--ink-outline);
+  animation: copyDrop 0.3s cubic-bezier(.2, 1.4, .4, 1) 0.7s both;
+}
+@keyframes copyDrop { from { opacity: 0; transform: translateY(-60px); } }
+@keyframes nameSlam {
+  0%   { opacity: 0; transform: scale(3.5) rotate(-6deg); filter: blur(6px); }
+  70%  { opacity: 1; transform: scale(0.92) rotate(2deg); filter: none; }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes namePulse { to { transform: scale(1.06); } }
+
+/* はじめの白いフラッシュ(名前がたたきつけられたときも もう一度) */
+.special-cutin__flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: cutinFlash 0.9s ease-out both;
+}
+@keyframes cutinFlash {
+  0%   { opacity: 1; }
+  25%  { opacity: 0; }
+  42%  { opacity: 0.85; }
+  100% { opacity: 0; }
 }
 
-/* 連打のゲージ */
-.power-up {
+/* ------------------------------------------------------------------ */
+/* 必殺技の攻撃:ためを長く、飛び道具も命中も特大に                       */
+/* ------------------------------------------------------------------ */
+.battle-screen--special.battle-screen--attack .projectile {
+  scale: 2.4;
+  animation-duration: 1s;
+  filter: drop-shadow(0 0 30px #fff);
+}
+/* 攻撃のあいだ、まわりを暗くして 自分のカードを光らせる */
+.battle-screen--special.battle-screen--attack .scene-vignette {
+  background: radial-gradient(circle at 50% 45%, transparent 20%, #000000cc 80%);
+  transition: background 0.2s;
+}
+.battle-screen--special.battle-screen--attack .monster-panel--player .monster-card-motion {
+  filter: drop-shadow(0 0 50px #fff) brightness(1.25);
+}
+.battle-screen--special .impact-effect { scale: 2.2; }
+.battle-screen--special .damage-burst { scale: 1.8; }
+.battlefield--shake-special { animation: shakeSpecial 0.7s linear 0.05s; }
+@keyframes shakeSpecial {
+  10% { transform: translate(-34px, 18px) rotate(-1deg); }
+  20% { transform: translate(34px, -18px) rotate(1deg); }
+  30% { transform: translate(-28px, 14px) rotate(-0.8deg); }
+  40% { transform: translate(28px, -12px) rotate(0.8deg); }
+  55% { transform: translate(-18px, 8px); }
+  70% { transform: translate(12px, -6px); }
+  85% { transform: translate(-6px, 3px); }
+}
+/* 命中で、タイプの色で画面ぜんたいが2回光る */
+.special-impact-flash {
+  --sp-a: #ffd23f;
+  position: absolute;
+  z-index: 17;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 73% 45%, #ffffff, var(--sp-a) 35%, transparent 80%);
+  mix-blend-mode: screen;
+  animation: specialImpactFlash 0.6s ease-out both;
+}
+.special-impact-flash--fire    { --sp-a: #ff7a1f; }
+.special-impact-flash--water   { --sp-a: #3fa9ff; }
+.special-impact-flash--nature  { --sp-a: #5fe06a; }
+.special-impact-flash--light   { --sp-a: #ffe45c; }
+.special-impact-flash--dark    { --sp-a: #b05cff; }
+.special-impact-flash--wind    { --sp-a: #6ff0c8; }
+.special-impact-flash--earth   { --sp-a: #d9903f; }
+.special-impact-flash--neutral { --sp-a: #ffffff; }
+@keyframes specialImpactFlash {
+  0%   { opacity: 1; }
+  30%  { opacity: 0.1; }
+  45%  { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+/* ------------------------------------------------------------------ */
+/* あいこの連打勝負:あなた と CPU の2本のゲージ                         */
+/* ------------------------------------------------------------------ */
+.mash-duel {
   position: absolute;
   z-index: 26;
   left: 50%;
-  top: 170px;
+  top: 140px;
+  width: 1100px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
+  padding: 18px 40px 26px;
   transform: translateX(-50%);
+  border: 6px solid var(--ink);
+  border-radius: 36px;
+  background: #102a1fee;
+  box-shadow: 0 0 0 4px var(--sun), 0 12px 0 4px #061510;
   animation: bannerIn 0.3s cubic-bezier(.2, 1.4, .4, 1) both;
 }
-.power-up strong {
+.mash-duel__title {
   font-family: var(--font-title);
-  font-size: 84px;
+  font-size: 88px;
   font-weight: 400;
+  line-height: 1.1;
   color: var(--sun);
   text-shadow: var(--ink-outline);
   white-space: nowrap;
-  animation: mashCall 0.25s ease-in-out infinite alternate;
 }
+.mash-duel:not(.mash-duel--done) .mash-duel__title { animation: mashCall 0.25s ease-in-out infinite alternate; }
 @keyframes mashCall { to { transform: scale(1.08); } }
-.power-up__gauge {
+.mash-duel__row { display: grid; grid-template-columns: 170px 1fr 110px; align-items: center; gap: 18px; width: 100%; }
+.mash-duel__label { font-family: var(--font-title); font-size: 48px; color: var(--white); text-shadow: var(--ink-outline); text-align: right; }
+.mash-duel__gauge {
   position: relative;
-  width: 760px;
+  display: block;
   height: 64px;
   padding: 0;
   overflow: hidden;
   border: 6px solid var(--ink);
   border-radius: 999px;
   background: #1c2b24;
-  box-shadow: 0 0 0 4px var(--sun), 0 8px 0 4px #061510;
   cursor: pointer;
 }
-.power-up__fill {
+.mash-duel__row--cpu .mash-duel__gauge { cursor: default; }
+.mash-duel__fill {
   position: absolute;
   inset: 0 auto 0 0;
   background: linear-gradient(90deg, #ffd23f, #ff8a1f, #ff3b1f);
   transition: width 0.08s ease-out;
 }
-.power-up__keys { font-size: 40px; font-weight: 900; color: var(--white); text-shadow: var(--ink-outline); letter-spacing: 0.3em; }
-.power-up--full strong { color: #fff; text-shadow: var(--ink-outline), 0 0 40px #ffd23f; }
-.power-up--full .power-up__gauge { box-shadow: 0 0 0 4px #fff, 0 8px 0 4px #061510, 0 0 60px 16px #ffd23fcc; }
-.power-up--full .power-up__fill { animation: gaugeFull 0.3s ease-in-out infinite alternate; }
-@keyframes gaugeFull { to { filter: brightness(1.4); } }
+/* CPU は青。幅は連打の時間をかけて 0 から一定の速さで伸ばす(時間は App.tsx が style で渡す。終わったら止める) */
+.mash-duel__fill--cpu { background: linear-gradient(90deg, #9ff3ff, #3fa9ff, #1f5bff); transition: none; animation: cpuFill linear both; }
+.mash-duel--done .mash-duel__fill--cpu { animation: none; }
+@keyframes cpuFill { from { width: 0; } }
+.mash-duel__count { font-family: var(--font-title); font-size: 64px; font-weight: 400; color: var(--white); text-shadow: var(--ink-outline); }
+.mash-duel__keys { font-size: 38px; font-weight: 900; color: var(--white); text-shadow: var(--ink-outline); letter-spacing: 0.1em; }
+/* 終わったら、勝った方のゲージを光らせる */
+.mash-duel--winner-player .mash-duel__row--player .mash-duel__gauge,
+.mash-duel--winner-cpu .mash-duel__row--cpu .mash-duel__gauge { box-shadow: 0 0 0 4px #fff, 0 0 60px 16px #ffd23fcc; }
+.mash-duel--winner-player .mash-duel__row--cpu,
+.mash-duel--winner-cpu .mash-duel__row--player { filter: grayscale(0.8) brightness(0.7); }
+.mash-duel--done .mash-duel__title { animation: finalSlam 0.4s cubic-bezier(.2, 1.4, .4, 1) both; }

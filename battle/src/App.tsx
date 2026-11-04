@@ -21,16 +21,15 @@ import { Deck } from './Deck';
 import { DevMenu, type DevJump, type FxDirection } from './DevMenu';
 import { readAutoplay, writeAutoplay, type Autoplay } from './devTools';
 import {
-  applyPlayerBonus,
+  CPU_MASH_MAX,
   cpuHandFor,
+  decideMashDuel,
+  decideWinner,
   getGameOutcome,
   isPinch,
-  MASH_FULL,
-  mashBonus,
   pickCpuHand,
+  pickCpuMash,
   resolveRound,
-  shuffleStars,
-  withStarAt,
   type ForcedResult,
 } from './game/logic';
 import {
@@ -44,7 +43,7 @@ import {
   type PadButton,
 } from './integration';
 import { Stage } from './stage';
-import { HANDS, type Hand, type Monster, type RoundResult, type StarMap, type Winner } from './types';
+import { HANDS, type Hand, type Monster, type RoundResult, type Winner } from './types';
 
 type Screen = 'title' | 'battle' | 'practice-clear' | 'victory' | 'defeat' | 'draw' | 'thanks';
 // 立て札のルール説明は、「📖 ルール」の見直しだけ。最初は本物のバトル画面で練習ラウンド(practice)をする
@@ -52,17 +51,17 @@ type TutorialMode = 'review';
 const TITLE_LOGO_PATH = assetUrl('/assets/monjan-title-logo.png');
 export type BattlePhase =
   | 'summon'
-  | 'rarity'
   | 'choosing'
   | 'selected'
   | 'janken-jan'
   | 'janken-ken'
   | 'janken-pon'
   | 'reveal'
-  | 'star-showdown'
-  // プレイヤーが勝ったときだけ:ピンチなら必殺技のカットイン(special)→ 連打(power-up)→ 攻撃
+  // 同じ手(あいこ)のとき:CPU と連打勝負(mash-duel)→ どちらが勝ったか(mash-result)
+  | 'mash-duel'
+  | 'mash-result'
+  // ピンチ(自分の♡が1)で勝ったとき:必殺技のカットイン → 攻撃
   | 'special'
-  | 'power-up'
   | 'attack'
   | 'impact'
   | 'result'
@@ -72,19 +71,23 @@ export const SUMMON_DISPLAY_MS = 1200;
 // 最後の一撃のときは、この間に 倒れたカードが沈む演出を見せる
 export const RESULT_DISPLAY_MS = 2000;
 export const NEXT_ROUND_DISPLAY_MS = 700;
-export const RARITY_ROLL_MS = 650;
 export const SELECTED_DISPLAY_MS = 400;
 export const JANKEN_BEAT_MS = 700;
 export const REVEAL_DISPLAY_MS = 1000;
-export const STAR_SHOWDOWN_MS = 1200;
+// あいこの連打勝負の時間と、そのあと どちらが勝ったかを見せる時間
+export const MASH_DUEL_MS = 2500;
+export const MASH_RESULT_MS = 900;
 // 攻撃:ためる → 飛ぶ → 当たる を見せる(2026年11月2日 480 → 700ms)
 export const ATTACK_DISPLAY_MS = 700;
 // 命中:一瞬止まって(ヒットストップ)から ゆれる(2026年11月2日 420 → 600ms)
 export const IMPACT_DISPLAY_MS = 600;
 // 必殺技のカットイン(自分の♡が1のときに勝つと、⚔×2)
-export const SPECIAL_DISPLAY_MS = 1400;
-// 勝ったあとの連打の時間(ゲージが満タンになると +1ダメージ。満タンの回数は logic.ts の MASH_FULL)
-export const POWER_UP_MS = 2000;
+export const SPECIAL_DISPLAY_MS = 1800;
+// 必殺技の攻撃は、ためを長く見せる
+export const SPECIAL_ATTACK_MS = 1000;
+// カットインで名前をたたきつける音 / 必殺技の命中で2つめの音を鳴らすまで
+const SPECIAL_CUTIN_SLAM_MS = 350;
+const SPECIAL_SECOND_IMPACT_MS = 220;
 // 練習の はじまりで、スタートの音のあとに召喚の音を鳴らすまで
 const PRACTICE_SUMMON_SOUND_MS = 350;
 // あいこの攻撃で、2つめのタイプの音を遅らせる
@@ -330,17 +333,6 @@ function NextRoundNotice({ round }: { round: number }) {
       <div className="banner next-round-notice">
         <small>ラウンド {round}</small>
         <strong>次のラウンド！</strong>
-        <span>あたらしい★になったよ</span>
-      </div>
-    </div>
-  );
-}
-
-function RarityNotice() {
-  return (
-    <div className="banner-layer banner-layer--low" role="status" aria-live="polite">
-      <div className="banner banner--small rarity-notice">
-        <strong>★ レア度抽選！</strong>
       </div>
     </div>
   );
@@ -383,12 +375,12 @@ function Tutorial({ onClose }: { onClose: () => void }) {
 
         {step === 1 && (
           <div className="tutorial-page">
-            <h2 id="tutorial-title">同じ手なら 星で勝負！</h2>
-            <p>同じ手が出たら、<br /><strong>★が多い方の かち！</strong></p>
-            <div className="tutorial-example tutorial-stars" aria-label="星の強さは3、2、1の順">
-              <strong>★★★</strong><b>＞</b><strong>★★</strong><b>＞</b><strong>★</strong>
+            <h2 id="tutorial-title">あいこなら れんだ しょうぶ！</h2>
+            <p>同じ手が出たら、<br /><strong>ボタンを たくさん おした方の かち！</strong></p>
+            <div className="tutorial-example tutorial-mash" aria-label="ボタンをれんだ">
+              <strong>◀ ● ▶</strong><b>どれでも</b><strong>れんだ！</strong>
             </div>
-            <p className="tutorial-note">★も同じなら <strong>あいこ！</strong><br />おたがいの♡が 1つへるよ！</p>
+            <p className="tutorial-note">おなじ かずなら <strong>あいこ！</strong><br />おたがいの♡が 1つへるよ！</p>
           </div>
         )}
 
@@ -420,17 +412,50 @@ function Tutorial({ onClose }: { onClose: () => void }) {
   );
 }
 
-// 勝ったあとの連打のゲージ。会場の3つのボタンのどれでも1回(画面を押しても数える)
-function PowerUpGauge({ count, onMash }: { count: number; onMash: () => void }) {
-  const full = count >= MASH_FULL;
-  const ratio = Math.min(1, count / MASH_FULL);
+// ゲージの長さの目安(これだけ押すと いっぱい。CPU の多いときの回数より少し多い)
+const MASH_GAUGE_MAX = CPU_MASH_MAX + 4;
+
+// あいこの連打勝負。会場の3つのボタンのどれでも1回(画面のゲージを押しても数える)。
+// CPU のゲージは、連打の時間をかけて目標の回数まで CSS のアニメーションで伸ばす(回数は終わってから出す)
+function MashDuel({
+  phase,
+  playerCount,
+  cpuCount,
+  winner,
+  onMash,
+}: {
+  phase: 'mash-duel' | 'mash-result';
+  playerCount: number;
+  cpuCount: number;
+  winner: Winner | null;
+  onMash: () => void;
+}) {
+  const width = (count: number) => `${Math.min(1, count / MASH_GAUGE_MAX) * 100}%`;
+  const done = phase === 'mash-result';
+  const title = !done
+    ? 'れんだ しょうぶ！'
+    : winner === 'player' ? 'あなたの かち！' : winner === 'cpu' ? 'CPUの かち！' : 'おなじ かず！ あいこ！';
   return (
-    <div className={['power-up', full ? 'power-up--full' : ''].filter(Boolean).join(' ')} role="status" aria-live="polite">
-      <strong>{full ? 'パワー MAX！ ダメージ +1' : 'ボタンを れんだ！'}</strong>
-      <button type="button" className="power-up__gauge" onClick={onMash} aria-label={`れんだ ${count}かい`}>
-        <span className="power-up__fill" style={{ width: `${ratio * 100}%` }} />
-      </button>
-      <span className="power-up__keys" aria-hidden="true">◀ ● ▶</span>
+    <div className={['mash-duel', done ? `mash-duel--done mash-duel--winner-${winner ?? 'none'}` : ''].filter(Boolean).join(' ')} role="status" aria-live="polite">
+      <strong className="mash-duel__title">{title}</strong>
+      <div className="mash-duel__row mash-duel__row--player">
+        <span className="mash-duel__label">あなた</span>
+        <button type="button" className="mash-duel__gauge" onClick={onMash} aria-label={`あなたの れんだ ${playerCount}かい`}>
+          <span className="mash-duel__fill" style={{ width: width(playerCount) }} />
+        </button>
+        <b className="mash-duel__count">{playerCount}</b>
+      </div>
+      <div className="mash-duel__row mash-duel__row--cpu">
+        <span className="mash-duel__label">CPU</span>
+        <span className="mash-duel__gauge" aria-label={done ? `CPUの れんだ ${cpuCount}かい` : 'CPUも れんだ中'}>
+          <span
+            className="mash-duel__fill mash-duel__fill--cpu"
+            style={{ width: width(cpuCount), animationDuration: `${MASH_DUEL_MS}ms` }}
+          />
+        </span>
+        <b className="mash-duel__count">{done ? cpuCount : '？'}</b>
+      </div>
+      {!done && <span className="mash-duel__keys" aria-hidden="true">◀ ● ▶ どれでも れんだ！</span>}
     </div>
   );
 }
@@ -444,13 +469,12 @@ function PracticeCoach({ step }: { step: 'choose' | 'result' }) {
           <p className="coach-title">れんしゅうだよ！</p>
           <p>グー・チョキ・パーから <strong>1つ えらぼう！</strong></p>
           <p className="coach-sub">◀ ● ▶ の ボタンでも えらべるよ</p>
-          <p className="coach-stars"><strong>★</strong> は つよさ。同じ手のときは <strong>★が多い方の かち！</strong></p>
+          <p className="coach-stars">同じ手(あいこ)のときは <strong>ボタン れんだ しょうぶ！</strong></p>
         </>
       ) : (
         <>
           <p className="coach-title">かったね！</p>
           <p>かつと <strong>⚔の数だけ</strong> 相手の♡が へるよ！</p>
-          <p>かったら <strong>ボタンを れんだ！</strong> 満タンで ダメージ +1</p>
           <p><strong>相手の♡を ぜんぶなくしたら かち！</strong></p>
           <p className="coach-sub">れんしゅうは これで おしまい！</p>
         </>
@@ -460,25 +484,21 @@ function PracticeCoach({ step }: { step: 'choose' | 'result' }) {
 }
 
 // 練習の対戦:相手は練習用の見本(本番の相手は、本番の召喚まで見せない)。
-// 相手の♡は 自分の⚔ + 連打の1 より多くする(♡が0になって、勝負が終わらないように)
+// 相手の♡は 自分の⚔より多くする(♡が0になって、勝負が終わらないように)
 function practiceData(data: GameData): Pick<GameData, 'player' | 'cpu'> {
   const cpu = data.practiceCpu;
-  const hp = Math.min(5000, Math.max(cpu.hp, data.player.attack + 2000)) as Monster['hp'];
+  const hp = Math.max(cpu.hp, data.player.attack + 1000) as Monster['hp'];
   return { player: data.player, cpu: hp === cpu.hp ? cpu : { ...cpu, hp } };
 }
 
 function ChoiceButtons({
-  stars,
   disabled,
   selected,
-  rolling,
   coach = false,
   onSelect,
 }: {
-  stars: StarMap;
   disabled: boolean;
   selected: Hand | null;
-  rolling: boolean;
   coach?: boolean;
   onSelect: (hand: Hand) => void;
 }) {
@@ -493,13 +513,11 @@ function ChoiceButtons({
               'hand-button',
               `hand-button--${hand}`,
               selected === hand ? 'hand-button--selected' : '',
-              rolling ? 'hand-button--rolling' : '',
             ].filter(Boolean).join(' ')}
             disabled={disabled}
             onClick={() => onSelect(hand)}
-            aria-label={`${HAND_META[hand].label} 星${stars[hand]}`}
+            aria-label={HAND_META[hand].label}
           >
-            <span className="star-badge" aria-hidden="true">{'★'.repeat(stars[hand])}</span>
             <span className="hand-emoji" aria-hidden="true">{HAND_META[hand].emoji}</span>
             <span className="hand-label">{HAND_META[hand].label}</span>
             <span className="hand-key" aria-hidden="true">{HAND_KEYS[hand]}</span>
@@ -510,38 +528,35 @@ function ChoiceButtons({
   );
 }
 
+// 手を見せる帯。handWinner はじゃんけんだけの勝ち負け(同じ手は tie)。
+// result は勝者が決まってから(あいこは連打勝負のあと)
 function RoundFeedback({
+  handWinner,
   result,
   phase,
   playerHand,
   cpuHand,
-  playerStar,
-  cpuStar,
 }: {
-  result: RoundResult;
+  handWinner: 'player' | 'cpu' | 'tie';
+  result: RoundResult | null;
   phase: BattlePhase;
   playerHand: Hand;
   cpuHand: Hand;
-  playerStar: number;
-  cpuStar: number;
 }) {
-  const cpuVisible = ['reveal', 'star-showdown', 'special', 'power-up', 'attack', 'impact', 'result'].includes(phase);
-  const sameHand = result.reason === 'star' || result.reason === 'perfect-tie';
-  const starShowdown = phase === 'star-showdown';
-  // 手のぶつかりで、勝った手を大きく、負けた手を灰色にする(ぽん!のあと、手を見せてから)
-  const decided = cpuVisible && (phase !== 'reveal' || !sameHand);
+  const cpuVisible = ['reveal', 'mash-duel', 'mash-result', 'special', 'attack', 'impact', 'result'].includes(phase);
+  const sameHand = handWinner === 'tie';
+  const winner: Winner | null = result?.winner ?? (sameHand ? null : handWinner);
+  // 手のぶつかりで、勝った手を大きく、負けた手を灰色にする(ぽん!のあと。あいこは連打勝負が終わってから)
+  const decided = cpuVisible && winner !== null && (!sameHand || ['mash-result', 'special', 'attack', 'impact', 'result'].includes(phase));
   const message =
-    result.winner === 'player'
+    winner === 'player'
       ? 'あなたの かち！'
-      : result.winner === 'cpu'
+      : winner === 'cpu'
         ? 'CPUの かち！'
         : 'あいこ！';
-  const sub =
-    result.reason === 'star'
-      ? '★のかずで しょうぶがついた！'
-      : result.reason === 'perfect-tie'
-        ? 'おたがいの HPが 1へるよ'
-        : 'じゃんけんで しょうぶがついた！';
+  const sub = sameHand
+    ? (winner === 'none' ? 'おたがいの HPが 1へるよ' : 'れんだで しょうぶがついた！')
+    : 'じゃんけんで しょうぶがついた！';
   let phaseMessage = message;
   let phaseSub = sub;
   if (phase === 'selected') {
@@ -557,47 +572,38 @@ function RoundFeedback({
     phaseMessage = 'ぽん！';
     phaseSub = 'CPUの手は…';
   } else if (phase === 'reveal') {
-    phaseMessage = 'CPUの手を こうかい！';
-    phaseSub = sameHand ? 'おなじ手だ！ ★をくらべよう！' : 'じゃんけんの しょうぶ！';
-  } else if (starShowdown) {
-    phaseMessage = result.reason === 'perfect-tie' ? 'あいこ！' : '星の強さで勝負！';
-    phaseSub = result.reason === 'perfect-tie' ? '手も★も おなじ！' : '★が多い方が かち！';
+    phaseMessage = sameHand ? 'あいこ！' : 'CPUの手を こうかい！';
+    phaseSub = sameHand ? 'おなじ手だ！ れんだで しょうぶ！' : 'じゃんけんの しょうぶ！';
+  } else if (phase === 'mash-duel') {
+    phaseMessage = 'れんだ！';
+    phaseSub = 'ボタンを たくさん おそう！';
   } else if (phase === 'special') {
     phaseMessage = 'ひっさつわざ！';
     phaseSub = 'ピンチで こうげき 2ばい！';
-  } else if (phase === 'power-up') {
-    phaseMessage = 'れんだ！';
-    phaseSub = 'ボタンを たくさん おそう！';
   } else if (phase === 'attack') {
-    phaseMessage = result.winner === 'none' ? 'あいこ！' : 'こうげき！';
-    phaseSub = result.winner === 'none' ? 'おたがいに ダメージ！' : 'モンスターが とびだした！';
+    phaseMessage = winner === 'none' ? 'あいこ！' : result?.special ? 'ひっさつわざ！' : 'こうげき！';
+    phaseSub = winner === 'none' ? 'おたがいに ダメージ！' : 'モンスターが とびだした！';
   } else if (phase === 'impact') {
     phaseMessage = 'ドカーン！';
-    phaseSub = result.winner === 'none' ? 'おたがいに 1ダメージ！' : 'こうげきが めいちゅう！';
+    phaseSub = winner === 'none' ? 'おたがいに 1ダメージ！' : 'こうげきが めいちゅう！';
   }
 
   const handClass = (side: 'player' | 'cpu') => [
     'revealed-hand',
     `revealed-hand--${side}`,
     sameHand ? 'revealed-hand--same-hand' : '',
-    starShowdown && result.winner === side ? 'revealed-hand--winner' : '',
-    starShowdown && result.winner === 'none' ? 'revealed-hand--perfect-tie' : '',
-    decided && result.winner === side ? 'revealed-hand--won' : '',
-    decided && result.winner !== side && result.winner !== 'none' ? 'revealed-hand--lost' : '',
+    decided && winner === side ? 'revealed-hand--won' : '',
+    decided && winner !== side && winner !== 'none' ? 'revealed-hand--lost' : '',
     side === 'cpu' && !cpuVisible ? 'revealed-hand--concealed' : '',
   ].filter(Boolean).join(' ');
-  // 同じ手のときは、2つの手のあいだに ★ の くらべ(> < =)を出す
-  const starCompare = sameHand && ['star-showdown', 'special', 'power-up', 'attack', 'impact', 'result'].includes(phase)
-    ? (result.winner === 'player' ? '＞' : result.winner === 'cpu' ? '＜' : '＝')
-    : null;
 
   return (
     <div
       className={[
         'round-feedback',
         `round-feedback--${phase}`,
-        `round-feedback--reason-${result.reason}`,
-        `round-feedback--winner-${result.winner}`,
+        `round-feedback--reason-${sameHand ? 'mash' : 'hand'}`,
+        `round-feedback--winner-${winner ?? 'pending'}`,
       ].join(' ')}
       role="status"
       aria-live="assertive"
@@ -606,21 +612,13 @@ function RoundFeedback({
         <div className={handClass('player')}>
           <span>あなた</span>
           <b>{HAND_META[playerHand].emoji}</b>
-          <em className="star-strength">{'★'.repeat(playerStar)}</em>
         </div>
-        {starCompare && <span className="star-compare" aria-hidden="true">{starCompare}</span>}
         <div className={handClass('cpu')}>
           <span>CPU</span>
           {cpuVisible ? (
-            <>
-              <b>{HAND_META[cpuHand].emoji}</b>
-              <em className="star-strength">{'★'.repeat(cpuStar)}</em>
-            </>
+            <b>{HAND_META[cpuHand].emoji}</b>
           ) : (
-            <>
-              <b aria-label="CPUの手はまだひみつ">？</b>
-              <em className="star-strength" aria-hidden="true">？？？</em>
-            </>
+            <b aria-label="CPUの手はまだひみつ">？</b>
           )}
         </div>
         {phase === 'reveal' && <span className="clash-spark" aria-hidden="true" />}
@@ -637,8 +635,6 @@ function BattleScreen({
   data,
   playerHp,
   cpuHp,
-  playerStars,
-  cpuStars,
   round,
   tutorialMode,
   phase,
@@ -650,15 +646,15 @@ function BattleScreen({
   onOpenRules,
   onEndPractice,
   onSelect,
+  handWinner,
   mash,
+  cpuMash,
   onMash,
   fxLabel,
 }: {
   data: Pick<GameData, 'player' | 'cpu'>;
   playerHp: number;
   cpuHp: number;
-  playerStars: StarMap;
-  cpuStars: StarMap;
   round: number;
   tutorialMode: TutorialMode | null;
   phase: BattlePhase;
@@ -670,14 +666,18 @@ function BattleScreen({
   onOpenRules: () => void;
   onEndPractice: () => void;
   onSelect: (hand: Hand) => void;
+  handWinner: 'player' | 'cpu' | 'tie' | null;
   mash: number;
+  cpuMash: number;
   onMash: () => void;
   fxLabel?: string;
 }) {
   const tutorialOpen = tutorialMode !== null;
-  // ピンチ(自分の♡が1):手を選ぶあいだと必殺技のあいだ、自分のカードを光らせる
+  // ピンチ(自分の♡が1):手を選んでから攻撃までのあいだ、自分のカードを光らせる
   const pinch = !practice && isPinch(playerHp)
-    && ['rarity', 'choosing', 'selected', 'janken-jan', 'janken-ken', 'janken-pon', 'reveal', 'star-showdown', 'special'].includes(phase);
+    && ['choosing', 'selected', 'janken-jan', 'janken-ken', 'janken-pon', 'reveal', 'mash-duel', 'mash-result', 'special'].includes(phase);
+  // 必殺技の攻撃(ピンチで勝った):ためを長く、飛び道具も命中も特大にする
+  const special = Boolean(result?.special) && ['special', 'attack', 'impact'].includes(phase);
   const playerTheme = getAttributeTheme(data.player.attribute);
   const cpuTheme = getAttributeTheme(data.cpu.attribute);
   const attackerTheme =
@@ -688,8 +688,8 @@ function BattleScreen({
     && ['attack', 'impact', 'result'].includes(phase),
   );
   const outcome = result ? getGameOutcome(result.playerHp, result.cpuHp) : 'ongoing';
-  // 画面のゆれは、大きいほうのダメージで強くする(1〜3)
-  const shake = result ? Math.min(3, Math.max(result.playerDamage, result.cpuDamage)) : 0;
+  // 画面のゆれは、大きいほうのダメージで強くする(1〜3。必殺技はいちばん強い special)
+  const shake = result?.special ? 'special' : result ? Math.min(3, Math.max(result.playerDamage, result.cpuDamage)) : 0;
 
   // タイプの粒(attackParticles.ts):攻撃のはじめに攻撃する側でためて、命中で当たったカードの上にはじける
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -710,6 +710,8 @@ function BattleScreen({
         chargeAt(fire, 'cpu', cpuTheme);
       } else {
         chargeAt(fire, result.winner, attackerTheme);
+        // 必殺技は、ためを2回重ねる
+        if (result.special) chargeAt(fire, result.winner, attackerTheme);
       }
     } else if (phase === 'impact') {
       if (result.winner === 'none') {
@@ -718,7 +720,15 @@ function BattleScreen({
       } else {
         const at = result.winner === 'player' ? 'cpu' : 'player';
         const damage = result.winner === 'player' ? result.cpuDamage : result.playerDamage;
-        burstAt(fire, at, attackerTheme, { dir: result.winner === 'player' ? 1 : -1, power: damage, final: isFinalBlow });
+        const dir = result.winner === 'player' ? 1 : -1;
+        if (result.special) {
+          // 必殺技:当たったところで最大の粒を2回、真ん中にも はじけさせる
+          burstAt(fire, at, attackerTheme, { dir, power: 3, final: true });
+          burstAt(fire, 'center', attackerTheme, { power: 3, final: true });
+          const timer = window.setTimeout(() => burstAt(fireRef.current, at, attackerTheme, { dir, power: 3, final: true }), 220);
+          return () => window.clearTimeout(timer);
+        }
+        burstAt(fire, at, attackerTheme, { dir, power: damage, final: isFinalBlow });
       }
     }
   }, [phase, result]);
@@ -731,6 +741,8 @@ function BattleScreen({
     practice && phase === 'result' ? 'battle-screen--practice-result' : '',
     phase === 'attack' ? `battle-screen--attack-${attackerTheme}` : '',
     isFinalBlow ? 'battle-screen--final-blow' : '',
+    special ? 'battle-screen--special' : '',
+    special ? `battle-screen--special-${playerTheme}` : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -761,7 +773,15 @@ function BattleScreen({
           <span aria-hidden="true">📖</span> ルール
         </button>
       </div>
-      <div className={`battlefield battlefield--${phase} ${phase === 'impact' ? `battlefield--shake-${shake}` : ''}`.trim()}>
+      <div
+        className={[
+          'battlefield',
+          `battlefield--${phase}`,
+          phase === 'impact' ? `battlefield--shake-${shake}` : '',
+          // 必殺技のカットインの はじめにも 強くゆらす
+          phase === 'special' ? 'battlefield--shake-special' : '',
+        ].filter(Boolean).join(' ')}
+      >
         <MonsterPanel
           monster={data.player}
           hp={playerHp}
@@ -804,23 +824,20 @@ function BattleScreen({
           )
         )}
       </div>
-      {(phase === 'rarity' || phase === 'choosing' || phase === 'selected') ? (
+      {(phase === 'choosing' || phase === 'selected') ? (
         <ChoiceButtons
-          stars={playerStars}
           disabled={phase !== 'choosing' || tutorialOpen}
           selected={playerHand}
-          rolling={phase === 'rarity'}
           coach={practice && phase === 'choosing'}
           onSelect={onSelect}
         />
-      ) : result && playerHand && cpuHand ? (
+      ) : handWinner && playerHand && cpuHand ? (
         <RoundFeedback
+          handWinner={handWinner}
           result={result}
           phase={phase}
           playerHand={playerHand}
           cpuHand={cpuHand}
-          playerStar={playerStars[playerHand]}
-          cpuStar={cpuStars[cpuHand]}
         />
       ) : (
         <div className="choice-area choice-area--waiting">
@@ -836,18 +853,30 @@ function BattleScreen({
           </div>
         </div>
       )}
-      {phase === 'rarity' && <RarityNotice />}
       {pinch && phase === 'choosing' && !tutorialOpen && (
         <p className="pinch-notice" role="status">ピンチ！ かてば <strong>ひっさつわざ！</strong></p>
       )}
+      {(phase === 'mash-duel' || phase === 'mash-result') && (
+        <MashDuel phase={phase} playerCount={mash} cpuCount={cpuMash} winner={result?.winner ?? null} onMash={onMash} />
+      )}
       {phase === 'special' && (
-        <div className="special-cutin" role="status" aria-live="assertive">
-          <small>ひっさつわざ！</small>
-          <strong>{specialMoveName(data.player)}</strong>
-          <span>こうげき 2ばい！</span>
+        <div className={`special-cutin special-cutin--${playerTheme}`} role="status" aria-live="assertive">
+          <span className="special-cutin__lines" aria-hidden="true" />
+          <span className="special-cutin__band" aria-hidden="true" />
+          <div className="special-cutin__monster" aria-hidden="true">
+            <MonsterImage monster={data.player} />
+          </div>
+          <div className="special-cutin__copy">
+            <small>ひっさつわざ！</small>
+            <strong>{specialMoveName(data.player)}</strong>
+            <span>こうげき 2ばい！</span>
+          </div>
+          <span className="special-cutin__flash" aria-hidden="true" />
         </div>
       )}
-      {phase === 'power-up' && <PowerUpGauge count={mash} onMash={onMash} />}
+      {phase === 'impact' && result?.special && (
+        <div className={`special-impact-flash special-impact-flash--${playerTheme}`} aria-hidden="true" />
+      )}
       {phase === 'next-round' && <NextRoundNotice round={round} />}
       {phase === 'result' && isFinalBlow && outcome !== 'ongoing' && (
         <div className={`final-banner final-banner--${outcome}`} aria-hidden="true">
@@ -976,16 +1005,17 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [practice, setPractice] = useState(false);
   const [playerHp, setPlayerHp] = useState(0);
   const [cpuHp, setCpuHp] = useState(0);
-  const [playerStars, setPlayerStars] = useState<StarMap>(() => shuffleStars());
-  const [cpuStars, setCpuStars] = useState<StarMap>(() => shuffleStars());
   const [round, setRound] = useState(1);
   const [playerHand, setPlayerHand] = useState<Hand | null>(null);
   const [cpuHand, setCpuHand] = useState<Hand | null>(null);
+  // じゃんけんだけの勝ち負け(同じ手は tie)。result は勝者が決まってから(あいこは連打勝負のあと)
+  const [handWinner, setHandWinner] = useState<'player' | 'cpu' | 'tie' | null>(null);
   const [result, setResult] = useState<RoundResult | null>(null);
   const [phase, setPhase] = useState<BattlePhase>('summon');
-  // 勝ったあとの連打の回数(数えるのは ref。表示のために state にも入れる)
+  // あいこの連打勝負:自分の回数(数えるのは ref。表示のために state にも入れる)と CPU の回数
   const [mash, setMash] = useState(0);
   const mashRef = useRef(0);
+  const [cpuMash, setCpuMash] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [bgmVolume, setBgmVolume] = useState(0.55);
   const [sfxVolume, setSfxVolumeState] = useState(0.9);
@@ -1080,32 +1110,30 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setRound(1);
   };
 
-  const resetRound = () => {
+  const clearHands = () => {
     setPlayerHand(null);
     setCpuHand(null);
+    setHandWinner(null);
     setResult(null);
+  };
+
+  const resetRound = () => {
+    clearHands();
     setPhase('summon');
     lockRef.current = true;
   };
 
-  const startRarityRoll = () => {
-    setPlayerStars(shuffleStars());
-    setCpuStars(shuffleStars());
-    setPlayerHand(null);
-    setCpuHand(null);
-    setResult(null);
-    setPhase('rarity');
-    playSound('rarity');
-    schedule(() => {
-      setPhase('choosing');
-      lockRef.current = false;
-    }, RARITY_ROLL_MS);
+  // 手を選べるようにする(召喚・次のラウンドのあと)
+  const startChoosing = () => {
+    clearHands();
+    setPhase('choosing');
+    lockRef.current = false;
   };
 
   const prepareNextRound = () => {
     setRound((current) => current + 1);
     setPhase('next-round');
-    schedule(startRarityRoll, NEXT_ROUND_DISPLAY_MS);
+    schedule(startChoosing, NEXT_ROUND_DISPLAY_MS);
   };
 
   const toggleSound = () => {
@@ -1148,7 +1176,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       void startGameBgm();
     }
     schedule(() => playSound('summon'), PRACTICE_SUMMON_SOUND_MS);
-    schedule(startRarityRoll, SUMMON_DISPLAY_MS);
+    schedule(startChoosing, SUMMON_DISPLAY_MS);
   };
 
   // 最初のスタート:練習ラウンドから
@@ -1200,27 +1228,25 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     if (!data || lockRef.current || tutorialOpen || phase !== 'choosing') return;
     lockRef.current = true;
     const { player: playerMonster, cpu: cpuMonster } = practice ? practiceData(data) : data;
-    // 練習は必ず勝つ。開発者メニューで勝ち負けを決めているときは、その結果になる手にする(あいこは星もそろえて完全なあいこ)
+    // 練習は必ず勝つ。開発者メニューで勝ち負けを決めているときは、その結果になる手にする(あいこは連打勝負になる)
     const mode: ForcedResult = practice ? 'win' : forced;
     const chosenCpuHand = mode === 'normal' ? pickCpuHand() : cpuHandFor(hand, mode);
-    const roundCpuStars = mode === 'tie' ? withStarAt(cpuStars, chosenCpuHand, playerStars[hand]) : cpuStars;
-    if (roundCpuStars !== cpuStars) setCpuStars(roundCpuStars);
-    // ピンチ(ラウンドの前に自分の♡が1)で勝つと必殺技。CPU の♡は、連打の分を足すときに使う
+    const roundHandWinner = decideWinner(hand, chosenCpuHand);
+    // ピンチ(ラウンドの前に自分の♡が1)で勝つと必殺技(⚔×2)
     const pinch = !practice && isPinch(playerHp);
-    const cpuHpBefore = cpuHp;
-    const nextResult = resolveRound({
-      playerHand: hand,
-      cpuHand: chosenCpuHand,
-      playerStar: playerStars[hand],
-      cpuStar: roundCpuStars[chosenCpuHand],
+    const resolve = (winner: Winner, reason: RoundResult['reason']) => resolveRound({
+      winner,
+      reason,
       playerAttack: statCount(playerMonster.attack),
       cpuAttack: statCount(cpuMonster.attack),
       playerHp,
       cpuHp,
+      pinch,
     });
     setPlayerHand(hand);
     setCpuHand(chosenCpuHand);
-    setResult(nextResult);
+    setHandWinner(roundHandWinner);
+    setResult(null);
     setPhase('selected');
     playSound('select');
 
@@ -1234,6 +1260,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         setPhase('impact');
         playSound('impact');
         playSound('hp-loss');
+        // 必殺技は、命中の音を重ねる
+        if (finalResult.special) schedule(() => playSound('impact'), SPECIAL_SECOND_IMPACT_MS);
 
         schedule(() => {
           setPhase('result');
@@ -1249,32 +1277,38 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
             }
           }, RESULT_DISPLAY_MS);
         }, IMPACT_DISPLAY_MS);
-      }, ATTACK_DISPLAY_MS);
+      }, finalResult.special ? SPECIAL_ATTACK_MS : ATTACK_DISPLAY_MS);
     };
 
-    // 連打:POWER_UP_MS のあいだ数えて、必殺技と連打の分を足した結果で攻撃する
-    const beginPowerUp = () => {
+    // 勝者が決まったあと:ピンチで勝ったなら必殺技のカットインをはさむ
+    const decide = (finalResult: RoundResult) => {
+      setResult(finalResult);
+      if (!finalResult.special) {
+        beginAttack(finalResult);
+        return;
+      }
+      setPhase('special');
+      playSound('star-showdown');
+      schedule(() => playSound('impact'), SPECIAL_CUTIN_SLAM_MS);
+      schedule(() => beginAttack(finalResult), SPECIAL_DISPLAY_MS);
+    };
+
+    // あいこ:CPU と連打勝負。時間が来たら回数をくらべて、勝った方が攻撃(同じ数なら双方1)
+    const beginMashDuel = () => {
+      const cpuPresses = pickCpuMash();
       mashRef.current = 0;
       setMash(0);
-      setPhase('power-up');
+      // CPU のゲージは、連打の時間をかけて 0 から目標の回数まで CSS のアニメーションで伸びる
+      setCpuMash(cpuPresses);
+      setPhase('mash-duel');
+      playSound('tie');
       schedule(() => {
-        const finalResult = applyPlayerBonus(nextResult, { pinch, mash: mashBonus(mashRef.current), cpuHpBefore });
+        const finalResult = resolve(decideMashDuel(mashRef.current, cpuPresses), 'mash');
         setResult(finalResult);
-        beginAttack(finalResult);
-      }, POWER_UP_MS);
-    };
-
-    // 手を見せたあと:プレイヤーの勝ちなら(ピンチなら必殺技 →)連打、ほかは そのまま攻撃
-    const afterReveal = () => {
-      if (nextResult.winner !== 'player') {
-        beginAttack(nextResult);
-      } else if (pinch) {
-        setPhase('special');
-        playSound('star-showdown');
-        schedule(beginPowerUp, SPECIAL_DISPLAY_MS);
-      } else {
-        beginPowerUp();
-      }
+        setPhase('mash-result');
+        playSound(finalResult.winner === 'player' ? 'victory' : finalResult.winner === 'cpu' ? 'reveal' : 'tie');
+        schedule(() => decide(finalResult), MASH_RESULT_MS);
+      }, MASH_DUEL_MS);
     };
 
     schedule(() => {
@@ -1294,13 +1328,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
             playSound('reveal');
 
             schedule(() => {
-              if (nextResult.reason !== 'hand') {
-                setPhase('star-showdown');
-                playSound(nextResult.reason === 'perfect-tie' ? 'tie' : 'star-showdown');
-                schedule(afterReveal, STAR_SHOWDOWN_MS);
-              } else {
-                afterReveal();
-              }
+              if (roundHandWinner === 'tie') beginMashDuel();
+              else decide(resolve(roundHandWinner, 'hand'));
             }, REVEAL_DISPLAY_MS);
           }, JANKEN_BEAT_MS);
         }, JANKEN_BEAT_MS);
@@ -1308,12 +1337,12 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     }, SELECTED_DISPLAY_MS);
   };
 
-  // 連打を1回数える(満タンになった瞬間だけ音を変える)
+  // あいこの連打勝負で、1回数える
   const pressMash = () => {
-    if (phase !== 'power-up') return;
+    if (phase !== 'mash-duel') return;
     mashRef.current += 1;
     setMash(mashRef.current);
-    playSound(mashRef.current === MASH_FULL ? 'star-showdown' : 'select');
+    playSound('select');
   };
 
   const returnToTitle = () => {
@@ -1340,7 +1369,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     if (screen === 'title') {
       if (button === 'center') pressStart();
     } else if (screen === 'battle') {
-      if (phase === 'power-up') {
+      if (phase === 'mash-duel') {
         pressMash();
       } else if (practice && phase === 'result') {
         if (button === 'center') finishPractice();
@@ -1383,7 +1412,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     if (target === 'battle') {
       fillHp(data);
       setScreen('battle');
-      startRarityRoll();
+      startChoosing();
       return;
     }
     setScreen(target);
@@ -1397,9 +1426,11 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setFxPreview({ attribute, direction });
     setPlayerHand('rock');
     setCpuHand(winner === 'player' ? 'scissors' : winner === 'cpu' ? 'paper' : 'rock');
+    setHandWinner(winner === 'none' ? 'tie' : winner);
     setResult({
       winner,
-      reason: 'hand',
+      reason: winner === 'none' ? 'mash' : 'hand',
+      special: false,
       playerDamage: winner === 'player' ? 0 : 1,
       cpuDamage: winner === 'cpu' ? 0 : 1,
       playerHp: statCount(data.player.hp),
@@ -1412,9 +1443,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       playSound('impact');
       schedule(() => {
         setPhase('choosing');
-        setResult(null);
-        setPlayerHand(null);
-        setCpuHand(null);
+        clearHands();
         setFxPreview(null);
         if (isLast) lockRef.current = false;
       }, IMPACT_DISPLAY_MS);
@@ -1449,10 +1478,10 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       if (practice && phase === 'result') {
         action = finishPractice;
         delay = AUTOPLAY_RULES_MS;
-      } else if (phase === 'power-up') {
-        // 連打:満タンになったり ならなかったりする回数を、まとめて押したことにする
+      } else if (phase === 'mash-duel') {
+        // あいこの連打勝負:勝ったり負けたりする回数を、まとめて押したことにする
         action = () => {
-          mashRef.current += Math.floor(Math.random() * MASH_FULL * 1.5);
+          mashRef.current += Math.floor(Math.random() * (CPU_MASH_MAX + 4));
           setMash(mashRef.current);
         };
         delay = AUTOPLAY_MASH_MS;
@@ -1518,8 +1547,6 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         fxLabel={fxPreview ? `${fxPreview.attribute}タイプ(${fxTheme})` : undefined}
         playerHp={playerHp}
         cpuHp={cpuHp}
-        playerStars={playerStars}
-        cpuStars={cpuStars}
         round={round}
         tutorialMode={tutorialMode}
         phase={phase}
@@ -1531,7 +1558,9 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         onOpenRules={openRules}
         onEndPractice={finishPractice}
         onSelect={chooseHand}
+        handWinner={handWinner}
         mash={mash}
+        cpuMash={cpuMash}
         onMash={pressMash}
       />
     );

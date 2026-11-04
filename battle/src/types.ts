@@ -1,7 +1,6 @@
 export const HANDS = ['rock', 'scissors', 'paper'] as const;
 
 export type Hand = (typeof HANDS)[number];
-export type Star = 1 | 2 | 3;
 export type Winner = 'player' | 'cpu' | 'none';
 export type GameOutcome = 'ongoing' | 'victory' | 'defeat' | 'draw';
 
@@ -16,11 +15,12 @@ export interface Monster {
   image: string;
 }
 
-export type StarMap = Record<Hand, Star>;
-
 export interface RoundResult {
   winner: Winner;
-  reason: 'hand' | 'star' | 'perfect-tie';
+  // hand:じゃんけんで決まった / mash:あいこの連打勝負で決まった(同じ数なら winner は none)
+  reason: 'hand' | 'mash';
+  // ピンチで勝った必殺技(⚔×2。演出を特別にする)
+  special: boolean;
   playerDamage: number;
   cpuDamage: number;
   playerHp: number;
