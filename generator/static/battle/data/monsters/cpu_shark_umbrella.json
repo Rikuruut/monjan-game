@@ -1,0 +1,13 @@
+{
+  "id": "MON-0005",
+  "name": "サメラソル",
+  "source": {
+    "animal": "サメ",
+    "object": "かさ"
+  },
+  "attribute": "水",
+  "attack": 3000,
+  "hp": 2000,
+  "description": "あたまのかさをひらいて、しずくをうけとめるのがだいすき。",
+  "image": "/monsters/cpu_shark_umbrella.png"
+}

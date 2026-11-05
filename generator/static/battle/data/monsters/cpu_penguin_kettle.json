@@ -1,0 +1,13 @@
+{
+  "id": "MON-0006",
+  "name": "ペンケトル",
+  "source": {
+    "animal": "ペンギン",
+    "object": "やかん"
+  },
+  "attribute": "土",
+  "attack": 2000,
+  "hp": 2000,
+  "description": "おゆがわくと、せなかのやかんをかたむけて、なかまにおちゃをいれる。",
+  "image": "/monsters/cpu_penguin_kettle.png"
+}

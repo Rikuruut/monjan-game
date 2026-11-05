@@ -1,0 +1,13 @@
+{
+  "id": "MON-0004",
+  "name": "ドライオン",
+  "source": {
+    "animal": "ライオン",
+    "object": "ドライヤー"
+  },
+  "attribute": "光",
+  "attack": 1000,
+  "hp": 2000,
+  "description": "ぬれたたてがみをかわかすのがすきで、ブーンとうなるとみんながならびにくる。",
+  "image": "/monsters/cpu_lion_dryer.png"
+}
