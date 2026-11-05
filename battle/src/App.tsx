@@ -102,11 +102,18 @@ export const AUTOPLAY_HAND_MS = 1000;
 export const AUTOPLAY_WAIT_MS = 3000;
 export const AUTOPLAY_MASH_MS = 300;
 
-const HAND_META: Record<Hand, { emoji: string; label: string }> = {
-  rock: { emoji: '✊', label: 'グー' },
-  scissors: { emoji: '✌️', label: 'チョキ' },
-  paper: { emoji: '✋', label: 'パー' },
+// 手の絵(public/assets/janken/ の 256×256 の PNG。2026年11月5日に絵文字から置きかえ)
+const HAND_META: Record<Hand, { image: string; label: string }> = {
+  rock: { image: assetUrl('/assets/janken/janken_gu_256.png'), label: 'グー' },
+  scissors: { image: assetUrl('/assets/janken/janken_choki_256.png'), label: 'チョキ' },
+  paper: { image: assetUrl('/assets/janken/janken_pa_256.png'), label: 'パー' },
 };
+
+// 手の絵。大きさは親の文字の大きさ(font-size)に合わせる(battle.css の .hand-icon)。
+// alt を空にすると読み上げない(ボタンの名前などで、もう伝わっているとき)
+function HandIcon({ hand, alt = HAND_META[hand].label }: { hand: Hand; alt?: string }) {
+  return <img className="hand-icon" src={HAND_META[hand].image} alt={alt} width={256} height={256} draggable={false} />;
+}
 
 // 手のカードの下に出す、会場のボタンの案内(左からグー・チョキ・パー)
 const HAND_KEYS: Record<Hand, string> = { rock: '◀', scissors: '●', paper: '▶' };
@@ -366,9 +373,9 @@ function Tutorial({ onClose }: { onClose: () => void }) {
             <h2 id="tutorial-title">じゃんけんで 勝負！</h2>
             <p>グー・チョキ・パーから<br /><strong>1つ えらぼう！</strong></p>
             <div className="tutorial-example tutorial-rps" aria-label="じゃんけんの勝ち方">
-              <div><b aria-hidden="true">✊</b><span>は</span><b aria-hidden="true">✌️</b><strong>に かつ！</strong></div>
-              <div><b aria-hidden="true">✌️</b><span>は</span><b aria-hidden="true">✋</b><strong>に かつ！</strong></div>
-              <div><b aria-hidden="true">✋</b><span>は</span><b aria-hidden="true">✊</b><strong>に かつ！</strong></div>
+              <div><b aria-hidden="true"><HandIcon hand="rock" alt="" /></b><span>は</span><b aria-hidden="true"><HandIcon hand="scissors" alt="" /></b><strong>に かつ！</strong></div>
+              <div><b aria-hidden="true"><HandIcon hand="scissors" alt="" /></b><span>は</span><b aria-hidden="true"><HandIcon hand="paper" alt="" /></b><strong>に かつ！</strong></div>
+              <div><b aria-hidden="true"><HandIcon hand="paper" alt="" /></b><span>は</span><b aria-hidden="true"><HandIcon hand="rock" alt="" /></b><strong>に かつ！</strong></div>
             </div>
           </div>
         )}
@@ -533,7 +540,7 @@ function ChoiceButtons({
             onClick={() => onSelect(hand)}
             aria-label={HAND_META[hand].label}
           >
-            <span className="hand-emoji" aria-hidden="true">{HAND_META[hand].emoji}</span>
+            <span className="hand-emoji" aria-hidden="true"><HandIcon hand={hand} alt="" /></span>
             <span className="hand-label">{HAND_META[hand].label}</span>
             <span className="hand-key" aria-hidden="true">{HAND_KEYS[hand]}</span>
           </button>
@@ -626,12 +633,12 @@ function RoundFeedback({
       <div className="clash">
         <div className={handClass('player')}>
           <span>あなた</span>
-          <b>{HAND_META[playerHand].emoji}</b>
+          <b><HandIcon hand={playerHand} /></b>
         </div>
         <div className={handClass('cpu')}>
           <span>CPU</span>
           {cpuVisible ? (
-            <b>{HAND_META[cpuHand].emoji}</b>
+            <b><HandIcon hand={cpuHand} /></b>
           ) : (
             <b aria-label="CPUの手はまだひみつ">？</b>
           )}
@@ -969,7 +976,7 @@ function ResultScreen({
           {kind === 'draw' ? (
             <div className="real-janken">
               <div className="real-janken__hands">
-                <span aria-hidden="true">✊</span><span aria-hidden="true">✌️</span><span aria-hidden="true">✋</span>
+                {HANDS.map((hand) => <span key={hand} aria-hidden="true"><HandIcon hand={hand} alt="" /></span>)}
               </div>
               <p>かいじょうの おとなと<br />じゃんけんしてね！</p>
             </div>
