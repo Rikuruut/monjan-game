@@ -438,12 +438,19 @@ function MashDuel({
   return (
     <div className={['mash-duel', done ? `mash-duel--done mash-duel--winner-${winner ?? 'none'}` : ''].filter(Boolean).join(' ')} role="status" aria-live="polite">
       <strong className="mash-duel__title">{title}</strong>
+      {/* のこり時間:連打の時間をかけて 右から縮む(終わったら消す) */}
+      {!done && (
+        <span className="mash-duel__timer" aria-hidden="true">
+          <span className="mash-duel__timer-fill" style={{ animationDuration: `${MASH_DUEL_MS}ms` }} />
+        </span>
+      )}
       <div className="mash-duel__row mash-duel__row--player">
         <span className="mash-duel__label">あなた</span>
         <button type="button" className="mash-duel__gauge" onClick={onMash} aria-label={`あなたの れんだ ${playerCount}かい`}>
           <span className="mash-duel__fill" style={{ width: width(playerCount) }} />
         </button>
-        <b className="mash-duel__count">{playerCount}</b>
+        {/* 押すたびに数字がぽんと弾む(key を変えてアニメーションをやり直す) */}
+        <b className="mash-duel__count" key={playerCount}>{playerCount}</b>
       </div>
       <div className="mash-duel__row mash-duel__row--cpu">
         <span className="mash-duel__label">CPU</span>
@@ -455,7 +462,15 @@ function MashDuel({
         </span>
         <b className="mash-duel__count">{done ? cpuCount : '？'}</b>
       </div>
-      {!done && <span className="mash-duel__keys" aria-hidden="true">◀ ● ▶ どれでも れんだ！</span>}
+      {/* 会場の3つのボタンをかたどる。押すたびに3つとも光る(key で光り直す) */}
+      {!done && (
+        <div className="mash-duel__keys" aria-hidden="true">
+          <span className="mash-duel__buttons" key={playerCount}>
+            <i>◀</i><i>●</i><i>▶</i>
+          </span>
+          <span className="mash-duel__keys-text">どれでも れんだ！</span>
+        </div>
+      )}
     </div>
   );
 }
