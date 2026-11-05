@@ -158,7 +158,11 @@ def main() -> None:
 
     config_path = BATTLE_PUBLIC / "data" / "game-config.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    number = len(config["monsters"]) + 1
+    # id は、いまある見本のいちばん大きい番号の次から(見本を消しても番号がかぶらないように)
+    number = 1 + max(
+        int(json.loads((BATTLE_PUBLIC / p.lstrip("/")).read_text(encoding="utf-8"))["id"].split("-")[-1])
+        for p in config["monsters"]
+    )
     print(f"CPU 用モンスターを {len(COMBOS)} 体つくります({'からうち' if is_dry_run() else 'API を使う'})")
 
     added = []

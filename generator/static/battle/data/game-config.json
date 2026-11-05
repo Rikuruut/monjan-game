@@ -5,7 +5,6 @@
   "monsters": [
     "/data/monsters/monster_bottle_ray.json",
     "/data/monsters/monster_punch_eagle.json",
-    "/data/monsters/monster_bottle_grasshopper.json",
     "/data/monsters/cpu_lion_dryer.json",
     "/data/monsters/cpu_shark_umbrella.json",
     "/data/monsters/cpu_penguin_kettle.json"

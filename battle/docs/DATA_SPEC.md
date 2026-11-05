@@ -29,11 +29,15 @@ export interface Monster {
 - ATKは攻撃が当たったときのダメージ数を表す。属性で倍率をかけない。
 
 ## サンプル
-- `MON-0001`: ボトルマンタ（エイ＋水筒、⚔2 / ♡4）→ `/monsters/monster_bottle_ray.png`
-- `MON-0002`: パンチイーグル（ワシ＋穴あけパンチ、⚔3 / ♡5）→ `/monsters/monster_punch_eagle.png`
-- `MON-0003`: ボトルキリギリス（キリギリス＋水筒、⚔1 / ♡3）→ `/monsters/monster_bottle_grasshopper.png`
+一覧は `public/data/game-config.json` の `monsters`。本番では CPU の相手がここからランダムに選ばれる。
+- `MON-0001`: ミツキング（ゴリラ＋みつき、⚔1 / ♡1）→ `/monsters/monster_mitsuki.png`（JSON は `monster_bottle_ray.json`）
+- `MON-0002`: チョキチョキザウルス（ティラノサウルス＋ハサミ、⚔2 / ♡3）→ `/monsters/monster_saurus.png`（JSON は `monster_punch_eagle.json`）
+- `MON-0004`: ドライオン（ライオン＋ドライヤー、⚔1 / ♡2）→ `/monsters/cpu_lion_dryer.png`
+- `MON-0005`: サメラソル（サメ＋かさ、⚔3 / ♡2）→ `/monsters/cpu_shark_umbrella.png`
+- `MON-0006`: ペンケトル（ペンギン＋やかん、⚔2 / ♡2）→ `/monsters/cpu_penguin_kettle.png`
 
-※ 上記の名前・ステータス・説明は開発用に作ったサンプル。実際のAI出力ではない。
+※ MON-0004〜0006 は 2026年11月5日に API で作った（`generator/tools/make_cpu_monsters.py`）。
+※ `MON-0003` ボトルキリギリスは絵がなかったので、2026年11月5日に削除した（依頼者の指示）。
 
 ## データ読み込みと安全性
 - 起動時にJSONを検証する。欠損や数値範囲外の場合は画面上のエラー表示で停止し、白画面や無限ローディングを避ける。
