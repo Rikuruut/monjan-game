@@ -149,10 +149,12 @@ async function advanceRevealToAttack(mashDuel: boolean) {
   }
 }
 
-async function completeDifferentHandRound() {
+// special:相手の♡が1で じゃんけんに勝つラウンド(必殺技のカットインと、長い ため が入る)
+async function completeDifferentHandRound(special = false) {
   await advanceSelectedToReveal();
   await advanceRevealToAttack(false);
-  await advance(ATTACK_DISPLAY_MS);
+  if (special) await advance(SPECIAL_DISPLAY_MS);
+  await advance(special ? SPECIAL_ATTACK_MS : ATTACK_DISPLAY_MS);
   await advance(IMPACT_DISPLAY_MS);
   await advance(RESULT_DISPLAY_MS);
 }
@@ -562,9 +564,10 @@ describe('画面上のゲーム進行と演出', () => {
   it('バトル終了後にプレイヤーの獲得カードを表示し、タイトル復帰で初期化する', async () => {
     await openBattle();
 
+    // CPU の♡ 5 → 3 → 1。3ラウンド目は とどめのチャンスなので必殺技になる
     for (let round = 0; round < 3; round += 1) {
       fireEvent.click(screen.getByRole('button', { name: 'パー' }));
-      await completeDifferentHandRound();
+      await completeDifferentHandRound(round === 2);
       if (round < 2) {
         expect(screen.getByText('次のラウンド！')).toBeInTheDocument();
         await advance(NEXT_ROUND_DISPLAY_MS);
@@ -607,17 +610,16 @@ describe('画面上のゲーム進行と演出', () => {
     expect(screen.getByText('れんしゅう')).toBeInTheDocument();
   });
 
-  // 自分の♡が1のモンスターで、練習を終えて本番の手えらびまで進める
-  async function openPinchBattle() {
-    const weakPlayer = { ...player, hp: 1000 };
+  // 相手(CPU)の♡が1のモンスターで、練習を終えて本番の手えらびまで進める(weak = 'player' なら自分の♡が1)
+  async function openFinishBattle(weak: 'player' | 'cpu' = 'cpu') {
     const byPath: Record<string, unknown> = {
       '/data/game-config.json': {
         samplePlayerMonsterId: 'MON-0001',
         sampleCpuMonsterId: 'MON-0002',
         monsters: ['/player.json', '/cpu.json'],
       },
-      '/player.json': weakPlayer,
-      '/cpu.json': cpu,
+      '/player.json': weak === 'player' ? { ...player, hp: 1000 } : player,
+      '/cpu.json': weak === 'cpu' ? { ...cpu, hp: 1000 } : cpu,
     };
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
       ok: true,
@@ -626,8 +628,8 @@ describe('画面上のゲーム進行と演出', () => {
 
     await startToPractice();
     await advance(SUMMON_DISPLAY_MS);
-    // 練習ではピンチにしない
-    expect(document.querySelector('.pinch-notice')).toBeNull();
+    // 練習では とどめのチャンスにしない
+    expect(document.querySelector('.finish-notice')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'グー' }));
     await advanceSelectedToReveal();
     await advance(REVEAL_DISPLAY_MS);
@@ -637,10 +639,13 @@ describe('画面上のゲーム進行と演出', () => {
     await endPracticeToChoosing();
   }
 
-  it('ピンチ(自分の♡が1)で勝つと、必殺技のカットインのあと 特大の攻撃で ⚔×2', async () => {
-    await openPinchBattle();
-    expect(screen.getByText(/ピンチ！/)).toBeInTheDocument();
-    expect(document.querySelector('.monster-panel--player')).toHaveClass('monster-panel--pinch');
+  it('相手の♡が1のとき じゃんけんで勝つと、必殺技のカットインのあと 特大の攻撃で ⚔×2', async () => {
+    await openFinishBattle();
+    // 予告:相手のカードが光る
+    expect(screen.getByText(/あと1！/)).toBeInTheDocument();
+    expect(document.querySelector('.monster-panel--cpu')).toHaveClass('monster-panel--finish');
+    expect(document.querySelector('.monster-panel--player')).not.toHaveClass('monster-panel--finish');
+    // CPU はグー(Math.random = 0)。パーで勝つ
     fireEvent.click(screen.getByRole('button', { name: 'パー' }));
     await advanceSelectedToReveal();
     await advance(REVEAL_DISPLAY_MS);
@@ -658,37 +663,49 @@ describe('画面上のゲーム進行と演出', () => {
     expect(screen.getByRole('status')).toHaveTextContent('ひっさつわざ');
     // 必殺技は ためが長い
     await advance(ATTACK_DISPLAY_MS);
-    expect(screen.getByLabelText('HP 5 / 5')).toBeInTheDocument();
+    expect(screen.getByLabelText('HP 1 / 1')).toBeInTheDocument();
     await advance(SPECIAL_ATTACK_MS - ATTACK_DISPLAY_MS);
     // ⚔2 × 2 = 4
-    expect(screen.getByLabelText('HP 1 / 5')).toBeInTheDocument();
+    expect(screen.getByLabelText('HP 0 / 1')).toBeInTheDocument();
     expect(screen.getByLabelText('4ダメージ')).toBeInTheDocument();
     expect(document.querySelector('.special-impact-flash')).not.toBeNull();
     expect(document.querySelector('.battlefield')).toHaveClass('battlefield--shake-special');
   });
 
-  it('ピンチで あいこの連打勝負に勝っても 必殺技', async () => {
-    await openPinchBattle();
+  it('相手の♡が1でも、あいこの連打勝負で勝ったときは ふつうの攻撃', async () => {
+    await openFinishBattle();
     fireEvent.click(screen.getByRole('button', { name: 'グー' }));
     await advanceSelectedToReveal();
     await advance(REVEAL_DISPLAY_MS);
     for (let index = 0; index < CPU_MASH_MIN + 1; index += 1) fireEvent.keyDown(window, { key: 'Enter' });
     await advance(MASH_DUEL_MS);
     await advance(MASH_RESULT_MS);
-    expect(screen.getByText('水筒 スプラッシュ!')).toBeInTheDocument();
-    await advance(SPECIAL_DISPLAY_MS);
-    await advance(SPECIAL_ATTACK_MS);
-    expect(screen.getByLabelText('4ダメージ')).toBeInTheDocument();
+    expect(document.querySelector('.special-cutin')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('こうげき');
+    await advance(ATTACK_DISPLAY_MS);
+    expect(screen.getByLabelText('2ダメージ')).toBeInTheDocument();
   });
 
-  it('ピンチでも、負けたら必殺技は出ない', async () => {
-    await openPinchBattle();
+  it('相手の♡が1でも、負けたら必殺技は出ない', async () => {
+    await openFinishBattle();
     // CPU はグー(Math.random = 0)。チョキは負け
     fireEvent.click(screen.getByRole('button', { name: 'チョキ' }));
     await advanceSelectedToReveal();
     await advance(REVEAL_DISPLAY_MS);
     expect(document.querySelector('.special-cutin')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('こうげき');
+  });
+
+  it('自分の♡が1のときは、予告も必殺技もない', async () => {
+    await openFinishBattle('player');
+    expect(document.querySelector('.finish-notice')).toBeNull();
+    expect(document.querySelector('.monster-panel--finish')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'パー' }));
+    await advanceSelectedToReveal();
+    await advance(REVEAL_DISPLAY_MS);
+    expect(document.querySelector('.special-cutin')).toBeNull();
+    await advance(ATTACK_DISPLAY_MS);
+    expect(screen.getByLabelText('2ダメージ')).toBeInTheDocument();
   });
 });
 

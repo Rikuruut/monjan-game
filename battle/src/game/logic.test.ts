@@ -6,7 +6,7 @@ import {
   decideMashDuel,
   decideWinner,
   getGameOutcome,
-  isPinch,
+  isFinishChance,
   pickCpuHand,
   pickCpuMash,
   resolveRound,
@@ -63,23 +63,30 @@ describe('ダメージとHP', () => {
       .toMatchObject({ reason: 'mash', playerDamage: 1, cpuDamage: 1, playerHp: 3, cpuHp: 4 });
   });
 
-  it('ピンチで勝つと必殺技で⚔×2', () => {
-    expect(resolveRound({ ...base, winner: 'player', pinch: true })).toMatchObject({ special: true, cpuDamage: 4, cpuHp: 1 });
+  it('とどめのチャンスに じゃんけんで勝つと必殺技で⚔×2', () => {
+    expect(resolveRound({ ...base, winner: 'player', finishChance: true, cpuHp: 1 }))
+      .toMatchObject({ special: true, cpuDamage: 4, cpuHp: 0 });
   });
 
-  it('ピンチでも、負けとあいこは必殺技にならない', () => {
-    expect(resolveRound({ ...base, winner: 'cpu', pinch: true })).toMatchObject({ special: false, cpuDamage: 0 });
-    expect(resolveRound({ ...base, winner: 'none', pinch: true })).toMatchObject({ special: false, cpuDamage: 1 });
+  it('とどめのチャンスでも、連打勝負の勝ちは ふつうの攻撃', () => {
+    expect(resolveRound({ ...base, reason: 'mash', winner: 'player', finishChance: true, cpuHp: 1 }))
+      .toMatchObject({ special: false, cpuDamage: 2, cpuHp: 0 });
+  });
+
+  it('とどめのチャンスでも、負けと勝者なしは必殺技にならない', () => {
+    expect(resolveRound({ ...base, winner: 'cpu', finishChance: true, cpuHp: 1 })).toMatchObject({ special: false, cpuDamage: 0 });
+    expect(resolveRound({ ...base, reason: 'mash', winner: 'none', finishChance: true, cpuHp: 1 }))
+      .toMatchObject({ special: false, cpuDamage: 1 });
   });
 
   it('HPは0未満にならない', () => {
-    expect(resolveRound({ ...base, winner: 'player', pinch: true, cpuHp: 1 }).cpuHp).toBe(0);
+    expect(resolveRound({ ...base, winner: 'player', cpuHp: 1 }).cpuHp).toBe(0);
   });
 
-  it('ピンチは♡が1のときだけ', () => {
-    expect(isPinch(1)).toBe(true);
-    expect(isPinch(0)).toBe(false);
-    expect(isPinch(2)).toBe(false);
+  it('とどめのチャンスは相手の♡が1のときだけ', () => {
+    expect(isFinishChance(1)).toBe(true);
+    expect(isFinishChance(0)).toBe(false);
+    expect(isFinishChance(2)).toBe(false);
   });
 });
 

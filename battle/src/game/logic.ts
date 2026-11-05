@@ -30,14 +30,17 @@ export function pickCpuMash(random: RandomSource = Math.random): number {
   return CPU_MASH_MIN + normalizedIndex(random, CPU_MASH_MAX - CPU_MASH_MIN + 1);
 }
 
-/** ピンチ:ラウンドが始まったときに自分の♡が1。勝てば必殺技(⚔×2) */
-export function isPinch(hp: number): boolean {
-  return hp === 1;
+/**
+ * とどめのチャンス:ラウンドが始まったときに相手(CPU)の♡が1。
+ * じゃんけんで勝てば必殺技(⚔×2)。連打勝負の勝ちはふつうの攻撃(2026年11月5日。それまでは自分の♡が1のピンチ)
+ */
+export function isFinishChance(cpuHp: number): boolean {
+  return cpuHp === 1;
 }
 
 /**
  * 勝者が決まったあとのダメージと HP。
- * 勝った側は⚔の数だけ(プレイヤーがピンチで勝つと必殺技で ×2)。勝者なしは双方1。
+ * 勝った側は⚔の数だけ(とどめのチャンスにプレイヤーがじゃんけんで勝つと必殺技で ×2)。勝者なしは双方1。
  */
 export function resolveRound(input: {
   winner: Winner;
@@ -46,9 +49,9 @@ export function resolveRound(input: {
   cpuAttack: number;
   playerHp: number;
   cpuHp: number;
-  pinch?: boolean;
+  finishChance?: boolean;
 }): RoundResult {
-  const special = input.winner === 'player' && Boolean(input.pinch);
+  const special = input.winner === 'player' && input.reason === 'hand' && Boolean(input.finishChance);
   const playerDamage = input.winner === 'cpu' ? input.cpuAttack : input.winner === 'none' ? 1 : 0;
   const cpuDamage = input.winner === 'player'
     ? input.playerAttack * (special ? 2 : 1)

@@ -19,7 +19,7 @@ export interface RoundResult {
   winner: Winner;
   // hand:じゃんけんで決まった / mash:あいこの連打勝負で決まった(同じ数なら winner は none)
   reason: 'hand' | 'mash';
-  // ピンチで勝った必殺技(⚔×2。演出を特別にする)
+  // とどめのチャンス(相手の♡が1)に じゃんけんで勝った必殺技(⚔×2。演出を特別にする)
   special: boolean;
   playerDamage: number;
   cpuDamage: number;

@@ -27,7 +27,7 @@ export const ELEMENTS: { attribute: string; theme: AttributeTheme }[] = [
   { attribute: '無', theme: 'neutral' },
 ];
 
-// ピンチの必殺技の名前に使う、タイプの言葉
+// とどめの必殺技の名前に使う、タイプの言葉
 const SPECIAL_WORDS: Record<AttributeTheme, string> = {
   fire: 'ファイヤー',
   water: 'スプラッシュ',

@@ -26,7 +26,7 @@ import {
   decideMashDuel,
   decideWinner,
   getGameOutcome,
-  isPinch,
+  isFinishChance,
   pickCpuHand,
   pickCpuMash,
   resolveRound,
@@ -60,7 +60,7 @@ export type BattlePhase =
   // 同じ手(あいこ)のとき:CPU と連打勝負(mash-duel)→ どちらが勝ったか(mash-result)
   | 'mash-duel'
   | 'mash-result'
-  // ピンチ(自分の♡が1)で勝ったとき:必殺技のカットイン → 攻撃
+  // とどめのチャンス(相手の♡が1)に じゃんけんで勝ったとき:必殺技のカットイン → 攻撃
   | 'special'
   | 'attack'
   | 'impact'
@@ -81,7 +81,7 @@ export const MASH_RESULT_MS = 900;
 export const ATTACK_DISPLAY_MS = 700;
 // 命中:一瞬止まって(ヒットストップ)から ゆれる(2026年11月2日 420 → 600ms)
 export const IMPACT_DISPLAY_MS = 600;
-// 必殺技のカットイン(自分の♡が1のときに勝つと、⚔×2)
+// 必殺技のカットイン(相手の♡が1のときに じゃんけんで勝つと、⚔×2)
 export const SPECIAL_DISPLAY_MS = 1800;
 // 必殺技の攻撃は、ためを長く見せる
 export const SPECIAL_ATTACK_MS = 1000;
@@ -269,7 +269,7 @@ function MonsterPanel({
   phase,
   result,
   isHit,
-  pinch = false,
+  finishChance = false,
 }: {
   monster: Monster;
   hp: number;
@@ -277,7 +277,7 @@ function MonsterPanel({
   phase: BattlePhase;
   result: RoundResult | null;
   isHit: boolean;
-  pinch?: boolean;
+  finishChance?: boolean;
 }) {
   const theme = getAttributeTheme(monster.attribute);
   const damage = side === 'player' ? result?.playerDamage ?? 0 : result?.cpuDamage ?? 0;
@@ -303,7 +303,7 @@ function MonsterPanel({
         isRoundWinner ? 'monster-panel--round-winner' : '',
         isRoundLoser ? 'monster-panel--round-loser' : '',
         isDefeated ? 'monster-panel--defeated' : '',
-        pinch ? 'monster-panel--pinch' : '',
+        finishChance ? 'monster-panel--finish' : '',
       ].filter(Boolean).join(' ')}
     >
       <div className="monster-tag">
@@ -579,7 +579,7 @@ function RoundFeedback({
     phaseSub = 'ボタンを たくさん おそう！';
   } else if (phase === 'special') {
     phaseMessage = 'ひっさつわざ！';
-    phaseSub = 'ピンチで こうげき 2ばい！';
+    phaseSub = 'とどめの いちげき！ こうげき 2ばい！';
   } else if (phase === 'attack') {
     phaseMessage = winner === 'none' ? 'あいこ！' : result?.special ? 'ひっさつわざ！' : 'こうげき！';
     phaseSub = winner === 'none' ? 'おたがいに ダメージ！' : 'モンスターが とびだした！';
@@ -673,10 +673,10 @@ function BattleScreen({
   fxLabel?: string;
 }) {
   const tutorialOpen = tutorialMode !== null;
-  // ピンチ(自分の♡が1):手を選んでから攻撃までのあいだ、自分のカードを光らせる
-  const pinch = !practice && isPinch(playerHp)
+  // とどめのチャンス(相手の♡が1):手を選んでから攻撃までのあいだ、相手のカードを光らせる
+  const finishChance = !practice && isFinishChance(cpuHp)
     && ['choosing', 'selected', 'janken-jan', 'janken-ken', 'janken-pon', 'reveal', 'mash-duel', 'mash-result', 'special'].includes(phase);
-  // 必殺技の攻撃(ピンチで勝った):ためを長く、飛び道具も命中も特大にする
+  // 必殺技の攻撃(とどめのチャンスに じゃんけんで勝った):ためを長く、飛び道具も命中も特大にする
   const special = Boolean(result?.special) && ['special', 'attack', 'impact'].includes(phase);
   const playerTheme = getAttributeTheme(data.player.attribute);
   const cpuTheme = getAttributeTheme(data.cpu.attribute);
@@ -789,7 +789,6 @@ function BattleScreen({
           phase={phase}
           result={result}
           isHit={phase === 'impact' && Boolean(result?.playerDamage)}
-          pinch={pinch}
         />
         <div className="versus" aria-label="バーサス">
           <span>V</span><span>S</span>
@@ -801,6 +800,7 @@ function BattleScreen({
           phase={phase}
           result={result}
           isHit={phase === 'impact' && Boolean(result?.cpuDamage)}
+          finishChance={finishChance}
         />
         {phase === 'attack' && result && (
           result.winner === 'none' ? (
@@ -853,8 +853,8 @@ function BattleScreen({
           </div>
         </div>
       )}
-      {pinch && phase === 'choosing' && !tutorialOpen && (
-        <p className="pinch-notice" role="status">ピンチ！ かてば <strong>ひっさつわざ！</strong></p>
+      {finishChance && phase === 'choosing' && !tutorialOpen && (
+        <p className="finish-notice" role="status">あと1！ じゃんけんで かてば <strong>ひっさつわざ！</strong></p>
       )}
       {(phase === 'mash-duel' || phase === 'mash-result') && (
         <MashDuel phase={phase} playerCount={mash} cpuCount={cpuMash} winner={result?.winner ?? null} onMash={onMash} />
@@ -1232,8 +1232,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     const mode: ForcedResult = practice ? 'win' : forced;
     const chosenCpuHand = mode === 'normal' ? pickCpuHand() : cpuHandFor(hand, mode);
     const roundHandWinner = decideWinner(hand, chosenCpuHand);
-    // ピンチ(ラウンドの前に自分の♡が1)で勝つと必殺技(⚔×2)
-    const pinch = !practice && isPinch(playerHp);
+    // とどめのチャンス(ラウンドの前に相手の♡が1)に じゃんけんで勝つと必殺技(⚔×2)
+    const finishChance = !practice && isFinishChance(cpuHp);
     const resolve = (winner: Winner, reason: RoundResult['reason']) => resolveRound({
       winner,
       reason,
@@ -1241,7 +1241,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       cpuAttack: statCount(cpuMonster.attack),
       playerHp,
       cpuHp,
-      pinch,
+      finishChance,
     });
     setPlayerHand(hand);
     setCpuHand(chosenCpuHand);
@@ -1280,7 +1280,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       }, finalResult.special ? SPECIAL_ATTACK_MS : ATTACK_DISPLAY_MS);
     };
 
-    // 勝者が決まったあと:ピンチで勝ったなら必殺技のカットインをはさむ
+    // 勝者が決まったあと:とどめのチャンスに じゃんけんで勝ったなら必殺技のカットインをはさむ
     const decide = (finalResult: RoundResult) => {
       setResult(finalResult);
       if (!finalResult.special) {

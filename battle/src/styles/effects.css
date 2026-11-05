@@ -428,17 +428,17 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* ピンチ(自分の♡が1)                                                 */
+/* とどめのチャンス(相手の♡が1)                                        */
 /* ------------------------------------------------------------------ */
-/* 自分のカードが赤く脈打つ */
-.monster-panel--pinch .monster-card-motion {
-  animation: pinchPulse 0.7s ease-in-out infinite alternate;
+/* とどめのチャンス:相手のカードが赤く脈打つ */
+.monster-panel--finish .monster-card-motion {
+  animation: finishPulse 0.7s ease-in-out infinite alternate;
 }
-@keyframes pinchPulse {
+@keyframes finishPulse {
   from { filter: drop-shadow(0 0 6px #ff5a5a); }
   to   { filter: drop-shadow(0 0 34px #ff2d2d) brightness(1.08); }
 }
-.pinch-notice {
+.finish-notice {
   position: absolute;
   z-index: 24;
   top: 150px;
@@ -453,14 +453,14 @@
   font-weight: 900;
   color: var(--white);
   white-space: nowrap;
-  animation: pinchNotice 0.6s ease-in-out infinite alternate;
+  animation: finishNotice 0.6s ease-in-out infinite alternate;
   pointer-events: none;
 }
-.pinch-notice strong { color: var(--sun); }
-@keyframes pinchNotice { to { transform: translateX(-50%) scale(1.06); } }
+.finish-notice strong { color: var(--sun); }
+@keyframes finishNotice { to { transform: translateX(-50%) scale(1.06); } }
 
 /* ------------------------------------------------------------------ */
-/* 必殺技のカットイン(ピンチで勝ったとき)                              */
+/* 必殺技のカットイン(とどめのチャンスに じゃんけんで勝ったとき)        */
 /* 暗い画面 → 白いフラッシュ → 集中線と斜めの帯 → 自分のモンスターがすべりこむ → 名前をたたきつける */
 /* ------------------------------------------------------------------ */
 .special-cutin {
