@@ -1,5 +1,5 @@
 // 開発者メニュー(D キー・⚙)で使う決まりごと。
-// 撮影・合体の画面(generator/static/common/app.js の開発者メニュー)と同じ中身にそろえている。
+// 撮影・合体の画面(generator/static/common/dev.js の開発者メニュー)と同じ中身にそろえている。
 
 import { BASE_URL, GENERATOR_URL } from './integration';
 

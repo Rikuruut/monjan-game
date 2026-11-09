@@ -1,4 +1,4 @@
-// 効果音(Howler.js)。どのテーマでも使う。app.js より前に読む
+// 効果音(Howler.js)。どのテーマでも使う。core.js より前に読む
 //
 //   window.sfx.play("press") のように鳴らす。音の名前とファイルは下の SOUNDS。
 //   音のファイルは static/sounds/ にある(今は仮の音。素材が決まったら、同じ名前のファイルを置きかえる)。
@@ -10,7 +10,7 @@
 //
 // BGM(BGM の定数)は、ページを開いたらくり返し流す。止められたときは、最初の操作のあとに鳴らす。
 //
-// がったい中の BGM(FUSION_BGMS)は、window.sfx.fusionBgm(true) から false までくり返し流す(app.js が場面 s3 で呼ぶ)。
+// がったい中の BGM(FUSION_BGMS)は、window.sfx.fusionBgm(true) から false までくり返し流す(core.js が場面 s3 で呼ぶ)。
 //   そのあいだ、いつもの BGM は BGM_DUCK_VOLUME まで小さくする。
 //   どれを流すかは開発者メニューで選ぶ(window.sfx.setFusionBgm(番号)。0 は流さない)。選んだ番号はこのブラウザに残す。
 

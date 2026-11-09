@@ -95,7 +95,7 @@ def test_themes_and_pc_page(client, monkeypatch):
 
 def test_cache_header_only_on_pages(client):
     assert client.get("/phone").headers["cache-control"] == "no-cache"
-    assert client.get("/static/common/app.js").headers["cache-control"] == "no-cache"
+    assert client.get("/static/common/core.js").headers["cache-control"] == "no-cache"
     assert "cache-control" not in client.get("/api/animals").headers
 
 

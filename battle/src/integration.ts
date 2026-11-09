@@ -75,7 +75,7 @@ export function readLaunch(search: string = window.location.search, integrated: 
 }
 
 // 会場の3つのボタン(← / Enter・Space / →)。USB の大きなボタンはキーとして届く。
-// 撮影・合体の画面(generator/static/common/app.js)と同じキー。
+// 撮影・合体の画面(generator/static/common/dev.js)と同じキー。
 export type PadButton = 'left' | 'center' | 'right';
 
 export function padButtonOf(key: string): PadButton | null {

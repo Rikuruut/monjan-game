@@ -10,7 +10,7 @@ const embed = params.get("embed") === "1";
 document.documentElement.classList.toggle("embed", embed);
 const cardEl = document.getElementById("card");
 
-// タイプのバッジ:アイコン(撮影の画面 static/common/app.js の ELEMENT_STYLES と同じ)と、子供向けのひらがな
+// タイプのバッジ:アイコン(撮影の画面 static/common/core.js の ELEMENT_STYLES と同じ)と、子供向けのひらがな
 const ELEMENT_LABELS = {
   "火": { icon: "🔥", label: "ほのお" },
   "水": { icon: "💧", label: "みず" },
@@ -121,7 +121,7 @@ async function main() {
   }
 }
 
-// 撮影の画面に重ねて見せているときは、カードの中でキーを押しても閉じられるように知らせる(app.js の showCardPreview)
+// 撮影の画面に重ねて見せているときは、カードの中でキーを押しても閉じられるように知らせる(static/common/core.js の showCardPreview)
 if (window.parent !== window && params.get("print") !== "1" && !embed) {
   document.addEventListener("keydown", () => window.parent.postMessage("monjan-card-close", location.origin));
 }

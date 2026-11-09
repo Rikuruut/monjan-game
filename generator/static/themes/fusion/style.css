@@ -4,7 +4,7 @@
    - 同じ日に 宇宙のうず → しぜんのうず → いまの形 と作りかえた(元は archive/ の 20261102_before_fusion_nature と 20261102_before_fusion_forest)
    - 舞台(#stage)の拡大縮小と開発者メニューは static/common/common.css にある。ここは見た目だけ
    - 1920×1080 の舞台に、すべてを px で配置する。場面は #stage の data-scene(s1〜s4)で切りかえる
-   - 進み具合は、app.js が付ける data-level(0〜5)で うずの帯・風の筋の明るさ に、
+   - 進み具合は、core.js が付ける data-level(0〜5)で うずの帯・風の筋の明るさ に、
      --progress(0〜1)で 中心の光の大きさ・まわりの光・玉が回る輪の大きさ に変える
        level 2 絵をかき始めた … 速く回る白い風の筋があらわれる
        level 3 半分すぎ       … 金の光の帯が強くなる
@@ -30,7 +30,7 @@
   --white:  #FFFFFF;
   --font-title: "Dela Gothic One", "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
   --font-body:  "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
-  /* 場面転換:木もれ日の光が画面をおおうまでの時間と、晴れるまでの時間(app.js が読む) */
+  /* 場面転換:木もれ日の光が画面をおおうまでの時間と、晴れるまでの時間(core.js が読む) */
   --scene-close-ms: 400;
   --scene-open-ms: 120;
 }

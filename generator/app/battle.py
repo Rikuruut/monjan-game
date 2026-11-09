@@ -76,7 +76,7 @@ def recent_monster_entry(out_name: str, result: dict[str, Any]) -> dict[str, Any
 
 
 # 撮影・合体の画面のテストプレイ・確認用の見本(ゴリラ × はさみ)。
-# 名前・タイプ・説明・絵は static/common/app.js の demoSample と同じにしている
+# 名前・タイプ・説明・絵は static/common/dev.js の demoSample と同じにしている
 DEMO_ID = "demo"
 DEMO_NAME = "ゴリザミ"
 DEMO_NAME_MAX = 20   # URL から来る名前なので、長すぎるものは切る

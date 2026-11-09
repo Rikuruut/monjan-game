@@ -1,6 +1,4 @@
-// スマホ用ページの処理
-
-const el = (id) => document.getElementById(id);
+// スマホ用ページの処理(common/shared.js のあとに読む)
 
 const VIEWS = ["view-wait", "view-ready", "view-sending", "view-done", "view-progress", "view-error"];
 
@@ -13,14 +11,9 @@ function showView(id) {
 // 動物のプルダウンを作る
 // ----------------------------------------------------------------------
 async function loadAnimals() {
-  const data = await fetch("/api/animals").then((r) => r.json());
+  const data = await fetchJson("/api/animals");
   const select = el("animal");
-  data.animals.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    select.appendChild(opt);
-  });
+  addOptions(select, data.animals.map((name) => ({ value: name, text: name })));
   // 最初から1つ選ばれている状態にする
   select.selectedIndex = 0;
 }
@@ -28,11 +21,9 @@ async function loadAnimals() {
 // ----------------------------------------------------------------------
 // WebSocket(PCからの撮影の合図を受け取る)
 // ----------------------------------------------------------------------
-function connectWebSocket() {
-  const ws = new WebSocket("ws://" + location.host + "/ws?role=phone");
-
-  ws.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
+// 切れたら少し待って入り直す(shared.js の connectWebSocket)
+function connectPhone() {
+  connectWebSocket("phone", (msg) => {
     if (msg.type === "capture_request") {
       // 待機中に戻る予定があれば取り消す(撮影の画面が、あとから待機中に戻されないように)
       cancelBackToWait();
@@ -45,10 +36,7 @@ function connectWebSocket() {
       // 生成の進み具合(ローディングと名前えらび。下の showProgress を参照)
       showProgress(msg);
     }
-  };
-
-  // 切れたら少し待って入り直す
-  ws.onclose = () => setTimeout(connectWebSocket, 2000);
+  });
 }
 
 // ----------------------------------------------------------------------
@@ -68,7 +56,7 @@ el("camera").addEventListener("change", async (ev) => {
   try {
     const blob = await toJpeg(file, 1024);
     const body = new FormData();
-    body.append("photo", blob, "photo.jpg");
+    body.append("photo", blob, "photo.jpg");   // ファイル名を付けるので postForm は使わない
     body.append("animal", animal);
 
     const res = await fetch("/api/upload", { method: "POST", body });
@@ -141,7 +129,7 @@ loadAnimals().catch((e) => {
   el("phone-error").textContent = "どうぶつの一覧を読めませんでした: " + e.message;
   showView("view-error");
 });
-connectWebSocket();
+connectPhone();
 
 // ----------------------------------------------------------------------
 // 生成中のローディングと、名前えらび
@@ -224,7 +212,7 @@ function showProgress(msg) {
     stopBarTimer();
     setBar(100);
     // 絵はまだ見せない。PC の大画面で誕生の演出が終わってから(revealed が届いてから)見せる
-    // ※ 2026年11月2日:たまごのテーマで、たまごが割れる前にスマホにモンスターが出てしまったため
+    // ※ 2026年11月2日:(当時の)たまごのテーマで、たまごが割れる前にスマホにモンスターが出てしまったため
     setStage("できたよ!<br>おおきい がめんを みてね");
     if (msg.image_url) {
       pendingResult = { photoId: msg.photo_id || namePhotoId, imageUrl: msg.image_url, monsterName: msg.monster_name };
@@ -258,7 +246,7 @@ function showProgress(msg) {
 }
 
 function startNameChooser(msg) {
-  nameChoices = msg.name_choices || (msg.monster_name ? [msg.monster_name] : []);
+  nameChoices = nameChoicesOf(msg);
   namePhotoId = msg.photo_id || "";
   nameIndex = 0;
   if (nameChoices.length) {
@@ -269,9 +257,7 @@ function startNameChooser(msg) {
 
 function showName() {
   el("ph-name").textContent = nameChoices[nameIndex];
-  el("ph-name").classList.remove("ph-name-pop");
-  void el("ph-name").offsetWidth;
-  el("ph-name").classList.add("ph-name-pop");
+  replayAnimation(el("ph-name"), "ph-name-pop");
   el("ph-name-count").textContent = nameChoices.length > 1
     ? "(" + (nameIndex + 1) + " / " + nameChoices.length + ")" : "";
   // 候補が1つしかないときは「ほかに さがす」を出さない
@@ -310,11 +296,8 @@ async function decideName() {
   el("btn-name-next").disabled = true;
 
   const name = nameChoices[nameIndex];
-  const body = new FormData();
-  body.append("photo_id", namePhotoId);
-  body.append("name", name);
   try {
-    await fetch("/api/choose-name", { method: "POST", body });
+    await postForm("/api/choose-name", { photo_id: namePhotoId, name });
   } catch (e) {
     // 送れなくても、ゲームは止めない(最初の名前のまま進む)
   }
