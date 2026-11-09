@@ -168,7 +168,7 @@ function getCpuHandPanel(): HTMLElement {
 function expectCpuHandToBeConcealed() {
   const panel = getCpuHandPanel();
   expect(within(panel).getByLabelText('CPUの手はまだひみつ')).toBeInTheDocument();
-  expect(panel).not.toHaveTextContent('✊');
+  expect(within(panel).queryByRole('img', { name: 'グー' })).not.toBeInTheDocument();
 }
 
 function setRandomSequence(...values: number[]) {
@@ -380,7 +380,7 @@ describe('画面上のゲーム進行と演出', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('CPUの手を こうかい');
     const cpuHand = getCpuHandPanel();
-    expect(within(cpuHand).getByText('✊')).toBeInTheDocument();
+    expect(within(cpuHand).getByAltText('グー')).toHaveAttribute('src', '/assets/janken/janken_gu_256.png');
     expect(cpuHand.querySelector('.star-strength')).toBeNull();
 
     // 違う手は、連打勝負なしで すぐ攻撃

@@ -608,117 +608,175 @@ function setPhoneStatus(connected) {
 // ----------------------------------------------------------------------
 document.body.insertAdjacentHTML("beforeend", `
 <button id="dev-toggle" class="dev-toggle" title="開発者メニュー(D キー)" aria-label="開発者メニュー">⚙</button>
-<aside id="dev" class="dev" hidden>
-  <header class="dev-head">
-    <strong>開発者メニュー</strong>
-    <button id="dev-close" class="dev-close" aria-label="とじる">×</button>
-  </header>
-  <section>
-    <h4>ページ</h4>
-    <p class="dev-row">
-      <button data-dev-page="/battle/">タイトル</button>
-      <button data-dev-page="/">撮影</button>
-      <button data-dev-page="/?autotest=1">テストプレイ</button>
-      <button data-dev-page="/battle/?play=demo">見本でバトル</button>
-    </p>
-  </section>
-  <section>
-    <h4>通しの自動プレイ</h4>
-    <p class="dev-muted">タイトル → テストプレイ → バトル → 結果 → タイトル を、自動でくり返します(API は使いません)。</p>
-    <p class="dev-row">
-      <button id="dev-autoplay"></button>
-      <span id="dev-autoplay-state"></span>
-    </p>
-  </section>
-  <section>
-    <h4>作ったモンスターで戦う</h4>
-    <ul id="dev-monsters" class="dev-monsters"></ul>
-    <p id="dev-monsters-msg" class="dev-muted"></p>
-  </section>
-  <section>
-    <h4>テーマ</h4>
-    <p><select id="theme-select"></select></p>
-  </section>
-  <section>
-    <h4>確認用(APIなし)</h4>
-    <p class="dev-muted">見本のデータ(ゴリラ × はさみ)で、場面や演出を動かします。料金はかかりません。</p>
-    <p class="dev-row">
-      <button id="demo-testplay"><strong>▶ テストプレイ</strong></button>
-      <span class="dev-muted">「がったい!」から誕生後まで通しで(がったい中 約25秒)</span>
-    </p>
-    <p class="dev-row">場面
-      <button data-demo-scene="s1">s1 とる</button>
-      <button data-demo-scene="s2">s2 あわせる</button>
-      <button data-demo-scene="s3">s3 がったい</button>
-      <button data-demo-scene="s4">s4 たんじょう</button>
-    </p>
-    <p class="dev-row">進み具合
-      <input id="demo-progress" type="range" min="0" max="1" step="0.05" value="0.55">
-      <span id="demo-progress-value">0.55</span>
-    </p>
-    <p class="dev-row">
-      <button id="demo-birth">誕生の演出</button>
-      <button id="demo-partial">途中の絵</button>
-      <button id="demo-name">名前が選ばれた</button>
-      <button id="demo-retake">撮り直しの表示</button>
-      <button id="demo-reset">はじめに もどす</button>
-    </p>
-    <p class="dev-row">カード
-      <button id="dev-card-open">カードを見る</button>
-      <button id="dev-card-print">いんさつ</button>
-      <span class="dev-muted">(いまのモンスター。テストプレイ・見本は ゴリラ × はさみ)</span>
-    </p>
-    <p class="dev-row">効果音
-      <button data-demo-sfx="press">press</button>
-      <button data-demo-sfx="tick">tick</button>
-      <button data-demo-sfx="crack">crack</button>
-      <button data-demo-sfx="fanfare">fanfare</button>
-    </p>
-    <p class="dev-row">がったい中の BGM
-      <span id="fusion-bgm-choices" class="dev-row"></span>
-      <span class="dev-muted">(s3 で試せます)</span>
-    </p>
-  </section>
-  <section>
-    <h4>スマホ</h4>
-    <p>接続:<span id="phone-status" class="status status-off">未接続</span></p>
-    <p><code id="phone-url">読み込み中...</code></p>
-    <img id="qr" src="/api/qr" alt="QRコード" width="140" height="140">
-  </section>
-  <section>
-    <h4>かかった時間</h4>
-    <ul id="timings"></ul>
-    <h4>使った設定</h4>
-    <ul id="settings"></ul>
-    <h4>APIの使用量と料金(試算)</h4>
-    <ul id="usage"></ul>
-    <p id="output-dir" class="dev-muted"></p>
+<aside id="dev" class="dev" aria-label="開発者メニュー" hidden>
+  <div class="dev-top">
+    <header class="dev-head">
+      <strong>開発者メニュー <small>撮影・合体</small></strong>
+      <button id="dev-close" class="dev-close" aria-label="とじる" title="とじる(D キー)">×</button>
+    </header>
+    <nav class="dev-tabs" role="tablist" aria-label="開発者メニューのタブ">
+      <button role="tab" data-dev-tab="common">よく使う</button>
+      <button role="tab" data-dev-tab="fx">演出を見る</button>
+      <button role="tab" data-dev-tab="result" id="dev-tab-result">前回の結果</button>
+      <button role="tab" data-dev-tab="phone">スマホ</button>
+      <button role="tab" data-dev-tab="names">名前のテスト</button>
+    </nav>
+  </div>
+
+  <div class="dev-panel" role="tabpanel" data-dev-panel="common">
+    <section>
+      <h4>ページを開く <span class="dev-badge dev-free">無料</span></h4>
+      <p class="dev-desc">そのページへ移ります。</p>
+      <p class="dev-row">
+        <button class="dev-link" data-dev-page="/battle/" title="バトルのタイトル画面(会場で最初に出る画面)">タイトル</button>
+        <button class="dev-link" data-dev-page="/" title="撮影・合体の画面を最初から">撮影</button>
+        <button class="dev-link" data-dev-page="/?autotest=1" title="見本のゴリラ × はさみで、がったいから誕生まで自動で流す">テストプレイ</button>
+        <button class="dev-link" data-dev-page="/battle/?play=demo" title="見本のゴリラ × はさみで、バトルのルール説明から">見本でバトル</button>
+      </p>
+    </section>
+    <section>
+      <h4>通しの自動プレイ <span class="dev-badge dev-free">無料</span></h4>
+      <p class="dev-desc">タイトル → テストプレイ → バトル(手はランダム)→ 結果 → タイトル を、止めるまでくり返します。展示前の耐久テスト用。メニューを開いているあいだは止まります。</p>
+      <p class="dev-row">
+        <button id="dev-autoplay" class="dev-primary"></button>
+        <span id="dev-autoplay-state" class="dev-state"></span>
+      </p>
+    </section>
+    <section>
+      <h4>作ったモンスターで戦う</h4>
+      <p class="dev-desc">outputs/ の新しい順に30件。行を押すとそのモンスターでバトルへ。「カード」はカードを重ねて見る、「PDF」は outputs/ に card.pdf を残します(約8秒)。</p>
+      <ul id="dev-monsters" class="dev-monsters"></ul>
+      <p id="dev-monsters-msg" class="dev-muted"></p>
+    </section>
+  </div>
+
+  <div class="dev-panel" role="tabpanel" data-dev-panel="fx" hidden>
+    <p class="dev-note">ここの操作はすべて <b>API を使いません(無料)</b>。見本のデータ(ゴリラ × はさみ)で場面や演出を動かします。</p>
+    <section>
+      <h4>テストプレイ</h4>
+      <p class="dev-desc">「がったい!」から誕生後まで通しで流します(がったい中 約25秒)。メニューは閉じます。</p>
+      <p class="dev-row">
+        <button id="demo-testplay" class="dev-primary">▶ テストプレイ</button>
+        <button id="demo-reset" title="撮影まちの最初の状態に戻す">はじめに もどす</button>
+      </p>
+    </section>
+    <section>
+      <h4>場面へとぶ</h4>
+      <p class="dev-row">
+        <button data-demo-scene="s1" title="しゃしんを とろう">s1 撮影まち</button>
+        <button data-demo-scene="s2" title="しゃしん × どうぶつ = ?">s2 写真がとどいた</button>
+        <button data-demo-scene="s3" title="うずの中で合体中(下の「進み具合」で止める位置を決める)">s3 がったい中</button>
+        <button data-demo-scene="s4" title="モンスターのカードが出たところ">s4 たんじょう</button>
+      </p>
+      <p class="dev-row dev-field"><span class="dev-label">s3 の進み具合</span>
+        <input id="demo-progress" type="range" min="0" max="1" step="0.05" value="0.55" title="動かすと s3 になり、その進み具合で止まる">
+        <span id="demo-progress-value" class="dev-state">0.55</span>
+      </p>
+    </section>
+    <section>
+      <h4>演出を流す</h4>
+      <p class="dev-row">
+        <button id="demo-birth" title="割れる直前から、誕生の演出を最後まで">誕生の演出</button>
+        <button id="demo-partial" title="がったい中のうずの中心に出る、途中の絵(押すたびに 1枚目 → 2枚目)">途中の絵(がったい中)</button>
+        <button id="demo-name" title="スマホで名前が選ばれたときの動き(押すたびに次の候補)">名前が選ばれた</button>
+        <button id="demo-retake" title="人が写っていたときの「もういちど とってね」">撮り直しの表示</button>
+      </p>
+    </section>
+    <section>
+      <h4>カード</h4>
+      <p class="dev-desc">いまのモンスターのカード(テストプレイ・見本なら ゴリラ × はさみ)。</p>
+      <p class="dev-row">
+        <button id="dev-card-open" title="カードを画面に重ねて見る">カードを見る</button>
+        <button id="dev-card-print" title="誕生の「いんさつ」と同じ。プリンターに送る">いんさつ</button>
+      </p>
+    </section>
+    <section>
+      <h4>音</h4>
+      <p class="dev-row dev-field"><span class="dev-label">効果音</span>
+        <button data-demo-sfx="press" title="press">ボタン</button>
+        <button data-demo-sfx="tick" title="tick">段が上がる</button>
+        <button data-demo-sfx="crack" title="crack">割れる</button>
+        <button data-demo-sfx="fanfare" title="fanfare">誕生</button>
+      </p>
+      <p class="dev-row dev-field"><span class="dev-label">がったい中の BGM</span>
+        <span id="fusion-bgm-choices" class="dev-row"></span>
+      </p>
+      <p class="dev-desc">BGM は s3(がったい中)で流れます。選んだものは次のがったいから使います。</p>
+    </section>
+    <section>
+      <h4>テーマ</h4>
+      <p class="dev-desc">画面の見た目。変えるとページを読み直します。</p>
+      <p><select id="theme-select"></select></p>
+    </section>
+  </div>
+
+  <div class="dev-panel" role="tabpanel" data-dev-panel="result" hidden>
+    <p class="dev-note">いちばん最近の「がったい!」の記録です(このページを開いてから)。</p>
     <p id="error-msg" class="dev-error"></p>
-  </section>
-  <section>
-    <h4>判定結果</h4>
-    <pre id="result-json"></pre>
-    <div id="notes-area" hidden>
-      <h4>補正したところ</h4>
-      <ul id="notes"></ul>
-    </div>
-  </section>
-  <section>
-    <h4>名前のテスト</h4>
-    <p class="dev-muted">動物と物の名前だけから、モンスター名を作ります(写真・画像生成なし。1回 0.1円以下)。</p>
-    <p class="nt-form">
-      <select id="nt-animal"></select>
-      <input id="nt-object" type="text" value="はさみ" maxlength="30">
-      <input id="nt-count" type="number" value="5" min="1" max="10">
-      <button id="btn-name-test">名前を作る</button>
-    </p>
-    <p id="nt-msg" class="dev-muted"></p>
-    <table id="nt-table" hidden>
-      <thead><tr><th>回</th><th>採用</th><th>候補(× は使わなかったもの)</th><th>場所</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
+    <section>
+      <h4>かかった時間</h4>
+      <ul id="timings"></ul>
+    </section>
+    <section>
+      <h4>使った設定</h4>
+      <ul id="settings"></ul>
+    </section>
+    <section>
+      <h4>API の使用量と料金(試算)</h4>
+      <ul id="usage"></ul>
+      <p id="output-dir" class="dev-muted"></p>
+    </section>
+    <section>
+      <h4>判定結果(JSON)</h4>
+      <pre id="result-json"></pre>
+      <div id="notes-area" hidden>
+        <h4>チェックで直したところ</h4>
+        <ul id="notes"></ul>
+      </div>
+    </section>
+  </div>
+
+  <div class="dev-panel" role="tabpanel" data-dev-panel="phone" hidden>
+    <section>
+      <h4>スマホとの接続</h4>
+      <p class="dev-desc">スマホで下の URL を開くか、QR コードを読みます(同じ Wi-Fi)。</p>
+      <p>接続:<span id="phone-status" class="status status-off">未接続</span></p>
+      <p><code id="phone-url">読み込み中...</code></p>
+      <img id="qr" src="/api/qr" alt="QRコード" width="160" height="160">
+    </section>
+  </div>
+
+  <div class="dev-panel" role="tabpanel" data-dev-panel="names" hidden>
+    <section>
+      <h4>名前のテスト <span class="dev-badge dev-paid">API 有料・1回 0.1円以下</span></h4>
+      <p class="dev-desc">動物と物の名前だけから、モンスター名を何回か作ります(写真・画像生成なし)。結果は outputs/name_tests.jsonl にも残ります。</p>
+      <p class="nt-form">
+        <label>動物 <select id="nt-animal"></select></label>
+        <label>物 <input id="nt-object" type="text" value="はさみ" maxlength="30"></label>
+        <label>回数 <input id="nt-count" type="number" value="5" min="1" max="10"></label>
+        <button id="btn-name-test" class="dev-primary">名前を作る</button>
+      </p>
+      <p id="nt-msg" class="dev-muted"></p>
+      <table id="nt-table" hidden>
+        <thead><tr><th>回</th><th>採用</th><th>候補(× は使わなかったもの)</th><th>場所</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </div>
 </aside>`);
+
+// 開発者メニューのタブ。最後に開いたタブを覚えておく(読めなければ「よく使う」)
+const DEV_TAB_KEY = "monjan-dev-tab-generator";
+function showDevTab(name) {
+  const tabs = [...document.querySelectorAll("[data-dev-tab]")];
+  if (!tabs.some((t) => t.dataset.devTab === name)) name = "common";
+  tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.devTab === name)));
+  document.querySelectorAll("[data-dev-panel]").forEach((p) => { p.hidden = p.dataset.devPanel !== name; });
+  if (name === "result") el("dev-tab-result").classList.remove("dev-tab-alert");
+  try { localStorage.setItem(DEV_TAB_KEY, name); } catch (e) { /* 覚えられなくても動く */ }
+}
+document.querySelectorAll("[data-dev-tab]").forEach((t) => t.addEventListener("click", () => showDevTab(t.dataset.devTab)));
+showDevTab((() => { try { return localStorage.getItem(DEV_TAB_KEY); } catch (e) { return null; } })());
 
 // テーマの切りかえ(開発者メニューから)
 async function loadThemes() {
@@ -750,6 +808,10 @@ el("dev-close").addEventListener("click", () => toggleDev(false));
 
 function showDevError(message) {
   el("error-msg").textContent = message || "";
+  // エラーは「前回の結果」タブにある。ほかのタブを見ていても気づけるよう、タブに赤い点を付ける
+  const tab = el("dev-tab-result");
+  const showing = tab.getAttribute("aria-selected") === "true" && !el("dev").hidden;
+  tab.classList.toggle("dev-tab-alert", Boolean(message) && !showing);
 }
 
 function showDevResult(data) {
@@ -1068,8 +1130,8 @@ function renderFusionBgmChoices() {
   const current = window.sfx.getFusionBgm();
   [...window.sfx.fusionBgmNumbers, 0].forEach((number) => {
     const btn = document.createElement("button");
-    btn.textContent = number ? String(number) : "なし";
-    btn.style.fontWeight = number === current ? "bold" : "";
+    btn.textContent = number ? "曲" + number : "なし";
+    btn.title = number ? "sounds/fusion" + number + ".mp3" : "がったい中も いつもの BGM";
     btn.setAttribute("aria-pressed", String(number === current));
     btn.addEventListener("click", () => {
       window.sfx.setFusionBgm(number);
@@ -1161,16 +1223,19 @@ async function loadRecentMonsters() {
       sub.textContent = m.animal + " × " + m.object + "・" + String(m.created_at).replace("T", " ");
       text.append(name, sub);
       btn.append(img, text);
+      btn.title = "このモンスターでバトルへ";
       btn.addEventListener("click", () => { location.href = "/battle/?photo=" + encodeURIComponent(m.id); });
       li.appendChild(btn);
       // カード(撮影側だけ。バトルの開発者メニューにはない)
       const cardBtn = document.createElement("button");
       cardBtn.className = "dev-monster-sub";
       cardBtn.textContent = "カード";
+      cardBtn.title = "このモンスターのカードを重ねて見る";
       cardBtn.addEventListener("click", () => showCardPreview(m.id));
       const pdfBtn = document.createElement("button");
       pdfBtn.className = "dev-monster-sub";
       pdfBtn.textContent = "PDF を作る";
+      pdfBtn.title = "outputs/ のフォルダに card.pdf を残す(約8秒)";
       pdfBtn.addEventListener("click", async () => {
         pdfBtn.disabled = true;
         pdfBtn.textContent = "作っています…";

@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ELEMENTS } from './attributes';
 import { battleUrlFor, DEV_PAGES, loadRecentMonsters, type Autoplay, type RecentMonster } from './devTools';
 import type { GameData } from './data/loadGameData';
 import type { ForcedResult } from './game/logic';
 import { navigateTo } from './integration';
 
-// 開発者メニュー(D キー・⚙)。見た目と上の3つの項目は、撮影・合体の画面のメニューと同じ
+// 開発者メニュー(D キー・⚙)。タブで分ける。見た目と「よく使う」のタブは、撮影・合体の画面のメニューと同じ
 
 // 攻撃エフェクトを見るときの向き(自分→相手 / 相手→自分 / あいこ)
 export type FxDirection = 'player' | 'cpu' | 'tie';
@@ -13,28 +13,70 @@ export type FxDirection = 'player' | 'cpu' | 'tie';
 const FX_DIRECTIONS: { direction: FxDirection; label: string }[] = [
   { direction: 'player', label: '自分→相手' },
   { direction: 'cpu', label: '相手→自分' },
-  { direction: 'tie', label: 'あいこ' },
+  { direction: 'tie', label: 'あいこ(双方)' },
 ];
 
 export type DevJump = 'title' | 'rules' | 'practice-clear' | 'battle' | 'victory' | 'defeat' | 'draw' | 'thanks';
 
-const JUMPS: { target: DevJump; label: string }[] = [
-  { target: 'title', label: 'タイトル' },
-  { target: 'rules', label: 'れんしゅう' },
-  { target: 'practice-clear', label: 'れんしゅうクリア' },
-  { target: 'battle', label: 'バトル' },
-  { target: 'victory', label: 'かち' },
-  { target: 'defeat', label: 'まけ' },
-  { target: 'draw', label: 'ひきわけ' },
-  { target: 'thanks', label: 'ありがとう' },
+const JUMPS: { target: DevJump; label: string; title: string }[] = [
+  { target: 'title', label: 'タイトル', title: 'スタート! の画面' },
+  { target: 'rules', label: 'れんしゅう', title: '練習ラウンド(必ず勝つ)' },
+  { target: 'practice-clear', label: 'れんしゅうクリア', title: '練習のあと、本番の前の画面' },
+  { target: 'battle', label: 'バトル', title: '本番のじゃんけん(召喚から)' },
+  { target: 'victory', label: 'かち', title: '勝ちの結果' },
+  { target: 'defeat', label: 'まけ', title: '負けの結果' },
+  { target: 'draw', label: 'ひきわけ', title: '引き分けの結果' },
+  { target: 'thanks', label: 'ありがとう', title: '最後のカードを渡す画面' },
 ];
 
 const FORCED: { mode: ForcedResult; label: string }[] = [
-  { mode: 'normal', label: 'ふつう' },
+  { mode: 'normal', label: 'ふつう(ランダム)' },
   { mode: 'win', label: 'かつ' },
   { mode: 'lose', label: 'まける' },
-  { mode: 'tie', label: 'あいこ' },
+  { mode: 'tie', label: 'あいこ(連打勝負)' },
 ];
+
+type DevTab = 'common' | 'screens' | 'fx' | 'data';
+
+const TABS: { tab: DevTab; label: string }[] = [
+  { tab: 'common', label: 'よく使う' },
+  { tab: 'screens', label: '画面・勝ち負け' },
+  { tab: 'fx', label: '攻撃エフェクト' },
+  { tab: 'data', label: 'データ' },
+];
+
+// 最後に開いたタブを覚えておく(読めなければ「よく使う」)
+const TAB_KEY = 'monjan-dev-tab-battle';
+
+function readTab(): DevTab {
+  try {
+    const saved = window.localStorage.getItem(TAB_KEY);
+    return TABS.some((item) => item.tab === saved) ? (saved as DevTab) : 'common';
+  } catch {
+    return 'common';
+  }
+}
+
+function writeTab(tab: DevTab) {
+  try {
+    window.localStorage.setItem(TAB_KEY, tab);
+  } catch {
+    // 覚えられなくても動く
+  }
+}
+
+function Section({ title, free, desc, children }: { title: string; free?: boolean; desc?: string; children: ReactNode }) {
+  return (
+    <section>
+      <h4>
+        {title}
+        {free && <span className="dev-badge dev-free">無料</span>}
+      </h4>
+      {desc && <p className="dev-desc">{desc}</p>}
+      {children}
+    </section>
+  );
+}
 
 function RecentMonsters() {
   const [monsters, setMonsters] = useState<RecentMonster[] | null>(null);
@@ -55,7 +97,7 @@ function RecentMonsters() {
     <ul className="dev-monsters">
       {monsters.map((monster) => (
         <li key={monster.id}>
-          <button type="button" onClick={() => navigateTo(battleUrlFor(monster.id))}>
+          <button type="button" title="このモンスターでバトルへ" onClick={() => navigateTo(battleUrlFor(monster.id))}>
             <img src={monster.image} alt="" width={56} height={56} loading="lazy" />
             <span>
               <strong>{monster.name}</strong>
@@ -94,100 +136,132 @@ export function DevMenu({
   onPreviewFx: (attributes: string[], direction: FxDirection) => void;
 }) {
   const [fxDirection, setFxDirection] = useState<FxDirection>('player');
+  const [tab, setTab] = useState<DevTab>(readTab);
+  const selectTab = (next: DevTab) => {
+    setTab(next);
+    writeTab(next);
+  };
+
   return (
     <>
       {autoplay.on && <p className="dev-autoplay-badge">自動プレイ中 {autoplay.loops}周(D でメニュー → 停止)</p>}
       <button type="button" className="dev-toggle" title="開発者メニュー(D キー)" aria-label="開発者メニュー" onClick={onToggle}>⚙</button>
       {open && (
         <aside className="dev" aria-label="開発者メニュー">
-          <header className="dev-head">
-            <strong>開発者メニュー</strong>
-            <button type="button" className="dev-close" aria-label="とじる" onClick={onClose}>×</button>
-          </header>
-
-          <section>
-            <h4>ページ</h4>
-            <p className="dev-row">
-              {DEV_PAGES.map((page) => (
-                <button type="button" key={page.label} onClick={() => navigateTo(page.url)}>{page.label}</button>
-              ))}
-            </p>
-          </section>
-
-          <section>
-            <h4>通しの自動プレイ</h4>
-            <p className="dev-muted">タイトル → テストプレイ → バトル → 結果 → タイトル を、自動でくり返します(API は使いません)。</p>
-            <p className="dev-row">
-              {autoplay.on
-                ? <button type="button" onClick={() => onAutoplay(false)}>■ 停止</button>
-                : <button type="button" onClick={() => onAutoplay(true)}><strong>▶ 開始</strong></button>}
-              <span>{autoplay.on ? `動いています(${autoplay.loops}周)` : '止まっています'}</span>
-            </p>
-          </section>
-
-          <section>
-            <h4>作ったモンスターで戦う</h4>
-            <RecentMonsters />
-          </section>
-
-          <section>
-            <h4>画面へとぶ</h4>
-            <p className="dev-row">
-              {JUMPS.map((jump) => (
-                <button type="button" key={jump.target} onClick={() => onJump(jump.target)}>{jump.label}</button>
-              ))}
-            </p>
-          </section>
-
-          <section>
-            <h4>勝ち負けを決める</h4>
-            <p className="dev-row" role="radiogroup" aria-label="これからの勝負">
-              {FORCED.map((item) => (
-                <label key={item.mode}>
-                  <input type="radio" name="dev-forced" checked={forced === item.mode} onChange={() => onForced(item.mode)} />
-                  {item.label}
-                </label>
-              ))}
-            </p>
-            <p className="dev-row">
-              <button type="button" onClick={() => onLowHp('player')}>自分の♡を1に</button>
-              <button type="button" onClick={() => onLowHp('cpu')}>相手の♡を1に</button>
-            </p>
-          </section>
-
-          <section>
-            <h4>攻撃エフェクトを見る</h4>
-            <p className="dev-muted">タイプごとの 攻撃 → 命中(飛び道具・光の輪・粒・音)を流します。HP は変わりません。</p>
-            <p className="dev-row" role="radiogroup" aria-label="攻撃の向き">
-              {FX_DIRECTIONS.map((item) => (
-                <label key={item.direction}>
-                  <input type="radio" name="dev-fx-direction" checked={fxDirection === item.direction} onChange={() => setFxDirection(item.direction)} />
-                  {item.label}
-                </label>
-              ))}
-            </p>
-            <p className="dev-row">
-              {ELEMENTS.map((element) => (
+          <div className="dev-top">
+            <header className="dev-head">
+              <strong>開発者メニュー <small>バトル</small></strong>
+              <button type="button" className="dev-close" aria-label="とじる" title="とじる(D キー)" onClick={onClose}>×</button>
+            </header>
+            <nav className="dev-tabs" role="tablist" aria-label="開発者メニューのタブ">
+              {TABS.map((item) => (
                 <button
                   type="button"
-                  key={element.attribute}
-                  className={`dev-fx el-${element.theme}`}
-                  onClick={() => onPreviewFx([element.attribute], fxDirection)}
+                  role="tab"
+                  key={item.tab}
+                  aria-selected={tab === item.tab}
+                  onClick={() => selectTab(item.tab)}
                 >
-                  {element.attribute}
+                  {item.label}
                 </button>
               ))}
-              <button type="button" onClick={() => onPreviewFx(ELEMENTS.map((element) => element.attribute), fxDirection)}>8つ順番に</button>
-            </p>
-          </section>
+            </nav>
+          </div>
 
-          <section>
-            <h4>モンスターの中身</h4>
-            <p className="dev-muted">自分</p>
-            <pre>{JSON.stringify(data.player, null, 2)}</pre>
-            <p className="dev-muted">相手</p>
-            <pre>{JSON.stringify(data.cpu, null, 2)}</pre>
-          </section>
+          <div className="dev-panel" role="tabpanel" aria-label={TABS.find((item) => item.tab === tab)?.label}>
+            {tab === 'common' && (
+              <>
+                <Section title="ページを開く" free desc="そのページへ移ります。">
+                  <p className="dev-row">
+                    {DEV_PAGES.map((page) => (
+                      <button type="button" className="dev-link" key={page.label} onClick={() => navigateTo(page.url)}>{page.label}</button>
+                    ))}
+                  </p>
+                </Section>
+                <Section
+                  title="通しの自動プレイ"
+                  free
+                  desc="タイトル → テストプレイ → バトル(手はランダム)→ 結果 → タイトル を、止めるまでくり返します。展示前の耐久テスト用。メニューを開いているあいだは止まります。"
+                >
+                  <p className="dev-row">
+                    {autoplay.on
+                      ? <button type="button" onClick={() => onAutoplay(false)}>■ 停止</button>
+                      : <button type="button" className="dev-primary" onClick={() => onAutoplay(true)}>▶ 開始</button>}
+                    <span className="dev-state">{autoplay.on ? `動いています(${autoplay.loops}周)` : '止まっています'}</span>
+                  </p>
+                </Section>
+                <Section title="作ったモンスターで戦う" desc="outputs/ の新しい順に30件。押すとそのモンスターでバトルへ。">
+                  <RecentMonsters />
+                </Section>
+              </>
+            )}
+
+            {tab === 'screens' && (
+              <>
+                <Section title="画面へとぶ" desc="いまのモンスターのまま、その画面を出します。">
+                  <p className="dev-row">
+                    {JUMPS.map((jump) => (
+                      <button type="button" key={jump.target} title={jump.title} onClick={() => onJump(jump.target)}>{jump.label}</button>
+                    ))}
+                  </p>
+                </Section>
+                <Section title="勝ち負けを決める" desc="これからのじゃんけんで、CPU が出す手を決めます。「あいこ」にすると連打勝負になります。">
+                  <p className="dev-row" role="radiogroup" aria-label="これからの勝負">
+                    {FORCED.map((item) => (
+                      <label key={item.mode}>
+                        <input type="radio" name="dev-forced" checked={forced === item.mode} onChange={() => onForced(item.mode)} />
+                        {item.label}
+                      </label>
+                    ))}
+                  </p>
+                </Section>
+                <Section title="♡を1にする" desc="相手を1にすると、じゃんけんで勝ったときに必殺技が出ます。">
+                  <p className="dev-row">
+                    <button type="button" onClick={() => onLowHp('player')}>自分の♡を1に</button>
+                    <button type="button" onClick={() => onLowHp('cpu')}>相手の♡を1に</button>
+                  </p>
+                </Section>
+              </>
+            )}
+
+            {tab === 'fx' && (
+              <Section title="攻撃エフェクトを見る" desc="タイプごとの 攻撃 → 命中(飛び道具・光の輪・粒・音)を流します。HP は変わりません。">
+                <p className="dev-row" role="radiogroup" aria-label="攻撃の向き">
+                  {FX_DIRECTIONS.map((item) => (
+                    <label key={item.direction}>
+                      <input type="radio" name="dev-fx-direction" checked={fxDirection === item.direction} onChange={() => setFxDirection(item.direction)} />
+                      {item.label}
+                    </label>
+                  ))}
+                </p>
+                <p className="dev-row">
+                  {ELEMENTS.map((element) => (
+                    <button
+                      type="button"
+                      key={element.attribute}
+                      className={`dev-fx el-${element.theme}`}
+                      title={`${element.attribute}タイプの攻撃`}
+                      onClick={() => onPreviewFx([element.attribute], fxDirection)}
+                    >
+                      {element.attribute}
+                    </button>
+                  ))}
+                </p>
+                <p className="dev-row">
+                  <button type="button" onClick={() => onPreviewFx(ELEMENTS.map((element) => element.attribute), fxDirection)}>8つ順番に</button>
+                </p>
+              </Section>
+            )}
+
+            {tab === 'data' && (
+              <Section title="モンスターの中身" desc="バトルが読みこんだ JSON(battle/docs/DATA_SPEC.md の形)。">
+                <p className="dev-json-title">自分:{data.player.name}</p>
+                <pre>{JSON.stringify(data.player, null, 2)}</pre>
+                <p className="dev-json-title">相手:{data.cpu.name}</p>
+                <pre>{JSON.stringify(data.cpu, null, 2)}</pre>
+              </Section>
+            )}
+          </div>
         </aside>
       )}
     </>
