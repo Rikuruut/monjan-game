@@ -438,13 +438,29 @@
 /* ------------------------------------------------------------------ */
 /* とどめのチャンス(相手の♡が1)                                        */
 /* ------------------------------------------------------------------ */
-/* とどめのチャンス:相手のカードが赤く脈打つ */
-.monster-panel--finish .monster-card-motion {
+/* とどめのチャンス:相手のカードが赤く脈打つ。
+   ※ 2026年11月9日:カード全体に filter(drop-shadow)をかけて動かしていた(子供が手を選ぶあいだ、ずっと毎フレーム
+     カードを描き直し)のを、カードのうしろに赤い光の層を2枚置き、強い光の opacity を動かす形にした。
+     光はカードのいちばん外のふち(battle.css の .monster-panel .monster-card の 13px の枠)から出す */
+.monster-panel--finish .monster-card-motion { isolation: isolate; }
+.monster-panel--finish .monster-card-motion::before,
+.monster-panel--finish .monster-card-motion::after {
+  position: absolute;
+  z-index: -1;
+  inset: -13px;
+  border-radius: 35px;
+  content: '';
+  pointer-events: none;
+}
+.monster-panel--finish .monster-card-motion::before { box-shadow: 0 0 6px #ff5a5a; }
+.monster-panel--finish .monster-card-motion::after {
+  box-shadow: 0 0 34px #ff2d2d;
+  opacity: 0;
   animation: finishPulse 0.7s ease-in-out infinite alternate;
 }
 @keyframes finishPulse {
-  from { filter: drop-shadow(0 0 6px #ff5a5a); }
-  to   { filter: drop-shadow(0 0 34px #ff2d2d) brightness(1.08); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 .finish-notice {
   position: absolute;
@@ -768,12 +784,16 @@
   position: absolute;
   inset: 0 auto 0 0;
   background: linear-gradient(90deg, #ffd23f, #ff8a1f, #ff3b1f);
-  transition: width 0.08s ease-out;
+  /* 伸びは幅でなく横の拡大(scaleX。MashDuel.tsx が style で渡す)。左はしを軸にする。
+     色の帯もいっしょに縮むので、幅を変えていたころと同じ見た目のまま、描き直しなしで動く(2026年11月9日) */
+  width: 100%;
+  transform-origin: left center;
+  transition: transform 0.08s ease-out;
 }
-/* CPU は青。幅は連打の時間をかけて 0 から一定の速さで伸ばす(時間は App.tsx が style で渡す。終わったら止める) */
+/* CPU は青。連打の時間をかけて 0 から一定の速さで伸ばす(時間は MashDuel.tsx が style で渡す。終わったら止める) */
 .mash-duel__fill--cpu { background: linear-gradient(90deg, #9ff3ff, #3fa9ff, #1f5bff); transition: none; animation: cpuFill linear both; }
 .mash-duel--done .mash-duel__fill--cpu { animation: none; }
-@keyframes cpuFill { from { width: 0; } }
+@keyframes cpuFill { from { transform: scaleX(0); } }
 /* 回数:白い丸のバッジ。押すたびに弾む */
 .mash-duel__count {
   display: grid;

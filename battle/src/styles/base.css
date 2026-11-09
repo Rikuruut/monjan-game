@@ -283,11 +283,22 @@ button { font: inherit; }
 .knob:disabled .knob-face { --c: #9aaba0; background: radial-gradient(circle at 40% 34%, #7c8f84, #4c5e54); }
 .knob:disabled .knob-label { color: #7f9a8a; }
 .knob:focus-visible .knob-face { outline: 4px dashed var(--white); outline-offset: 16px; }
-/* 押してほしいボタンは光って呼びかける */
-.knob--call .knob-face { animation: knobCall 1.4s ease-in-out infinite; }
+/* 押してほしいボタンは光って呼びかける(ふちが花の色から金に変わり、まわりがぼうっと光る)。
+   ※ 2026年11月9日:box-shadow を動かしていた(タイトルなどで、ずっと毎フレーム描き直し)のを、
+     光ったときの影をのせた層の opacity を動かす形にした(撮影・合体の画面の fusion と同じ) */
+.knob--call .knob-face::before {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--sun), 0 7px 0 9px #061510, 0 0 50px 18px #ffe9a8cc;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  animation: knobCall 1.4s ease-in-out infinite;
+}
 @keyframes knobCall {
-  0%, 100% { box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--petal), 0 7px 0 9px #061510, 0 0 0 0 #ffe9a800; }
-  50%      { box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--sun), 0 7px 0 9px #061510, 0 0 50px 18px #ffe9a8cc; }
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
 }
 
 /* ------------------------------------------------------------------ */

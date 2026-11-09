@@ -139,22 +139,26 @@
 .acquired-card { animation: victoryCard 0.9s cubic-bezier(.2, 1.4, .4, 1) 0.1s both; }
 .acquired-card__card { box-shadow: 0 0 0 4px var(--ink), 0 0 60px #fff2c0, 0 0 120px #c8f0c099; }
 /* 絵の上を、光沢の帯がときどき流れる(撮影・合体の画面の誕生カードと同じ) */
+/* ※ 2026年11月9日:background-position を動かしていたのを、3倍の幅の帯を transform で動かす形にした
+     (毎フレームの描き直しがなくなる。帯の大きさは元の背景と同じなので、斜めの角度も見た目も同じ) */
 .acquired-card .monster-frame::after {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 300%;
   background: linear-gradient(115deg,
     transparent 45%, #ffffff80 48.5%, #ffffffd9 50%, #ffffff80 51.5%, transparent 55%,
     transparent 56.5%, #ffffff8c 57.3%, transparent 58.1%);
-  background-size: 300% 100%;
-  background-position: 100% 0;
   content: '';
   mix-blend-mode: screen;
   pointer-events: none;
+  transform: translateX(-66.6667%);
   animation: glossSweep 3.6s ease-in-out 1.2s infinite;
 }
 @keyframes glossSweep {
-  0%        { background-position: 100% 0; }
-  40%, 100% { background-position: 0% 0; }
+  0%        { transform: translateX(-66.6667%); }
+  40%, 100% { transform: translateX(0); }
 }
 /* 実際に刷ったカード(縦 63×88mm。generator の /card?embed=1 を iframe で)。左の枠の中央に大きく */
 .thanks-card__visual--printed { display: flex; justify-content: center; }

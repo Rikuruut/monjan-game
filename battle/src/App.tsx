@@ -32,6 +32,7 @@ import {
   type Launch,
   type PadButton,
 } from './integration';
+import { preloadBattleImages } from './preload';
 import { ResultScreen } from './screens/ResultScreen';
 import { ThanksScreen } from './screens/ThanksScreen';
 import { TitleScreen } from './screens/TitleScreen';
@@ -134,6 +135,11 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       });
     return () => { alive = false; };
   }, []);
+
+  // バトルで使う大きな絵を、先に読んでおく(待たない)
+  useEffect(() => {
+    if (data) preloadBattleImages(data);
+  }, [data]);
 
   // 撮影・合体の画面の「たたかう!」から来たときは、タイトルを飛ばしてバトル(ルール説明)から始める
   useEffect(() => {

@@ -12,9 +12,9 @@ export function winnerMessage(winner: Winner | null, tie: string): string {
   return winner === 'player' ? 'あなたの かち！' : winner === 'cpu' ? 'CPUの かち！' : tie;
 }
 
-// ゲージの伸び(回数 → 幅)
+// ゲージの伸び(0〜1)。幅ではなく横の拡大で見せる(effects.css の .mash-duel__fill。描き直しなしで動く)
 const fillStyle = (count: number, extra?: CSSProperties): CSSProperties => ({
-  width: `${Math.min(1, count / MASH_GAUGE_MAX) * 100}%`,
+  transform: `scaleX(${Math.min(1, count / MASH_GAUGE_MAX)})`,
   ...extra,
 });
 
