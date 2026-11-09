@@ -566,6 +566,7 @@ async def _generate_split(run: _Run) -> JSONResponse:
     try:
         details = await run_in_threadpool(
             describe, run.photo_bytes, run.animal, object_name, plan, has_person and allow_person(),
+            parts.get("object_part", ""),
         )
         run.record("describe", details.elapsed_seconds, details.usage)
     except Exception as e:

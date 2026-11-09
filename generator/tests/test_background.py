@@ -82,7 +82,28 @@ def test_describe_prompt_does_not_pass_pose():
     text = build_describe_prompt("ゴリラ", "はさみ", "前足・腕の先")
     for key in ("pose", "view", "expression"):
         assert plan.staging[key] not in text
-    assert "図鑑" in text
+    assert "たたかいかた" in text
+
+
+def test_describe_prompt_tells_weapon_part():
+    # 説明文の戦い方が絵とつながるよう、絵と同じ「どのパーツを・武器にしたか」を伝える(2026年11月9日)
+    text = build_describe_prompt("ゴリラ", "はさみ", "腕の先", "刃", "weapon")
+    assert "はさみの「刃」が「腕の先」の武器になっています" in text
+    text = build_describe_prompt("ゴリラ", "はさみ", "頭・角・とさか", "刃", "body")
+    assert "はさみの「刃」が「頭・角・とさか」になっています" in text and "武器になって" not in text
+
+
+def test_describe_instructions_use_easy_kanji():
+    # 説明文は、小学3年までの漢字を使う(ひらがなだけだと読みにくかった。2026年11月9日)
+    from app.prompts import build_describe_instructions
+    text = build_describe_instructions()
+    assert "小学3年生までに習う漢字" in text and "ひらがな中心" not in text
+
+
+def test_describe_prompt_without_part_keeps_old_line():
+    # パーツが分からないときは、今までどおり場所だけを伝える
+    text = build_describe_prompt("ゴリラ", "はさみ", "腕の先")
+    assert "主に「腕の先」に取り込まれます" in text and "50文字" in text
 
 
 def test_fusion_line_says_body_part_turns_into_object():

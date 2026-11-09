@@ -7,7 +7,7 @@ CLAUDE.md のチェックのルールに従って、不正な値をデフォル�
 | element | タイプ8種類(火・水・草・光・闇・風・土・無)のどれか | 「無」にする |
 | monster_name | 10文字以内 | 10文字で切る。候補がすべて不合格で、これもチェックに不合格なら「なぞのモンスター」 |
 | name_candidates | カタカナだけ・2〜10文字・NGの言葉なし・言いやすい・単語を並べただけでない | 合格した候補からランダムに1つを monster_name にする |
-| description | 40文字以内 | 40文字で切る |
+| description | 50文字以内 | 50文字までの区切りで切る |
 | object_name | 空でない | 「なにかのもの」にする |
 | design_plan | 6項目が空でなく120文字以内 | 既定値にする / 切り詰める |
 | JSON全体 | 形式が正しい | すべてデフォルト値にする |
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # 文字数の上限
 MAX_MONSTER_NAME = 10
-MAX_DESCRIPTION = 40
+MAX_DESCRIPTION = 50   # 2026年11月9日に40から(説明文を「たたかいかた」にしたため)
 MAX_RETAKE_REASON = 60
 MAX_OBJECT_PART = 12
 # 融合デザインの各項目の上限(画像プロンプトが長くなりすぎないように)
@@ -127,7 +127,7 @@ def choose_monster_name(
 # 不正なときに使う値
 DEFAULT_OBJECT_NAME = "なにかのもの"
 DEFAULT_MONSTER_NAME = "なぞのモンスター"
-DEFAULT_DESCRIPTION = "なぞに つつまれた モンスター"
+DEFAULT_DESCRIPTION = "なぞの わざで あいてを まどわせる モンスター"
 DEFAULT_RETAKE_REASON = "もういちど とってみてね"
 
 # 形式がまったく読めなかったときに返す内容

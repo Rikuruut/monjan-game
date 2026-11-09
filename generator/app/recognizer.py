@@ -403,17 +403,22 @@ def quick_check(photo_bytes: bytes) -> StepResult:
     return StepResult(raw, elapsed, model, usage)
 
 
-def describe(photo_bytes: bytes, animal: str, object_name: str, plan: Plan, person: bool = False) -> StepResult:
+def describe(
+    photo_bytes: bytes, animal: str, object_name: str, plan: Plan, person: bool = False,
+    object_part: str = "",
+) -> StepResult:
     """名前・説明:タイプ・モンスター名の候補・説明文。画像生成と同時に呼ぶ。
 
     `person` は、人モードで写真の主役が人のとき(名前や説明で本人をからかわないよう伝える)。
+    `object_part` は、すぐ要る判定で分かった物のパーツ(絵で武器・体にしたもの。説明文の戦い方に使う)。
     """
     model = _text_model()
     if is_dry_run():
         return StepResult(dict(_DRY_DETAILS), 0.0, f"{model}(からうち)")
     raw, elapsed, usage = _ask(
         model, "名前・説明", build_describe_instructions(person),
-        build_describe_prompt(animal, object_name, fusion_part_place(animal, plan.fusion_part)),
+        build_describe_prompt(animal, object_name, fusion_part_place(animal, plan.fusion_part),
+                              object_part, plan.fusion_style),
         MonsterDetails, photo_bytes,
     )
     return StepResult(raw, elapsed, model, usage)
