@@ -368,7 +368,7 @@ function endWithMessage(headline, detail) {
   endTimer = setTimeout(restart, 5000);
 }
 
-// たんじょう:カードを用意し、画像を読みこんでから、ガラスが割れる演出で見せる
+// たんじょう:カードを用意し、画像を読みこんでから、誕生の演出で見せる
 function birth(data) {
   stopTimers();
   setProgress(1);
@@ -376,7 +376,12 @@ function birth(data) {
   state.generating = false;
   return new Promise((resolve) => {
     const img = el("card-img");
-    const show = () => playBirth().then(resolve);
+    const show = () => {
+      // 1回きり。残しておくと、あとで絵だけ入れかえたとき(開発者メニューの「s4 たんじょう」など)に、
+      // 前の誕生の演出と音がもう一度流れた(2026年11月9日)
+      img.onload = img.onerror = null;
+      playBirth().then(resolve);
+    };
     if (!img.getAttribute("src") || (img.complete && img.naturalWidth)) show();
     else { img.onload = show; img.onerror = show; }
   });
