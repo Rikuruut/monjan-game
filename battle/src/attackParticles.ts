@@ -130,8 +130,32 @@ export function burstAt(fire: ParticleFire | null, at: BurstAt, theme: Attribute
   IMPACT[theme].forEach((shot) => fireShot(fire, shot, at, dir, multiplier));
   // 最後の一撃は、少しおいて もう1回(大きく)
   if (final) {
-    window.setTimeout(() => IMPACT[theme].forEach((shot) => fireShot(fire, { ...shot, velocity: shot.velocity * 1.3 }, at, dir, multiplier)), 220);
+    later(fire, () => IMPACT[theme].forEach((shot) => fireShot(fire, { ...shot, velocity: shot.velocity * 1.3 }, at, dir, multiplier)), 220);
   }
+}
+
+// 少しおいて出す粒の予約(発射台ごと)。stopParticleFire でまとめて取り消す
+const pending = new WeakMap<ParticleFire, Set<number>>();
+
+function later(fire: ParticleFire, fn: () => void, ms: number) {
+  const timers = pending.get(fire) ?? new Set<number>();
+  pending.set(fire, timers);
+  const timer = window.setTimeout(() => {
+    timers.delete(timer);
+    fn();
+  }, ms);
+  timers.add(timer);
+}
+
+/**
+ * 粒を止める(バトル画面を閉じたとき)。描いている粒を消し、少しおいて出す予定の粒も取り消す。
+ * ※ 2026年11月9日:それまでは予約を取り消せず、画面を離れたあとに、見えない canvas へ粒を出していた
+ */
+export function stopParticleFire(fire: ParticleFire | null) {
+  if (!fire) return;
+  pending.get(fire)?.forEach((timer) => window.clearTimeout(timer));
+  pending.delete(fire);
+  fire.reset();
 }
 
 /** 攻撃のはじめ(ためる):攻撃する側のカードのまわりに、小さく粒を出す */

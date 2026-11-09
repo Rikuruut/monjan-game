@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { burstAt, chargeAt, createParticleFire, type ParticleFire } from '../attackParticles';
+import { burstAt, chargeAt, createParticleFire, stopParticleFire, type ParticleFire } from '../attackParticles';
 import { getAttributeTheme, specialMoveFontSize, specialMoveName, specialMoveParts, type AttributeTheme } from '../attributes';
 import { AttackProjectile, ImpactBurst, ParticleLayer } from '../BattleEffects';
 import { MonsterImage } from '../components/MonsterCard';
@@ -105,7 +105,7 @@ function useParticleFx(
   useEffect(() => {
     if (canvasRef.current) fireRef.current = createParticleFire(canvasRef.current);
     return () => {
-      fireRef.current?.reset();
+      stopParticleFire(fireRef.current);
       fireRef.current = null;
     };
   }, []);
