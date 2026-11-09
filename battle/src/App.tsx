@@ -1,23 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import {
-  closeGameAudio,
-  playGameSound,
-  setSfxMuted,
-  setSfxVolume,
-  unlockGameAudio,
-} from './audio/gameAudio';
-import {
-  disposeGameBgm,
-  pauseGameBgm,
-  setGameBgmMuted,
-  setGameBgmVolume,
-  startGameBgm,
-} from './audio/gameBgm';
-import { burstAt, chargeAt, createParticleFire, type ParticleFire } from './attackParticles';
-import { getAttributeTheme, specialMoveFontSize, specialMoveName, specialMoveParts } from './attributes';
-import { AttackProjectile, Drift, ImpactBurst, ParticleLayer } from './BattleEffects';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { getAttributeTheme } from './attributes';
+import { BattleScreen } from './battle/BattleScreen';
+import type { BattlePhase, HandWinner, Screen, TutorialMode } from './battle/phases';
+import { practiceData, type BattleData } from './battle/practice';
+import { statCount } from './components/MonsterCard';
+import { SoundControls } from './components/SoundControls';
 import { loadGameData, type GameData } from './data/loadGameData';
-import { Deck } from './Deck';
 import { DevMenu, type DevJump, type FxDirection } from './DevMenu';
 import { readAutoplay, writeAutoplay, type Autoplay } from './devTools';
 import {
@@ -32,8 +20,9 @@ import {
   resolveRound,
   type ForcedResult,
 } from './game/logic';
+import { useGameSound } from './hooks/useGameSound';
+import { useTimers } from './hooks/useTimers';
 import {
-  assetUrl,
   BASE_URL,
   GENERATOR_URL,
   navigateTo,
@@ -43,1026 +32,64 @@ import {
   type Launch,
   type PadButton,
 } from './integration';
+import { ResultScreen } from './screens/ResultScreen';
+import { ThanksScreen } from './screens/ThanksScreen';
+import { TitleScreen } from './screens/TitleScreen';
 import { Stage } from './stage';
-import { HANDS, type Hand, type Monster, type RoundResult, type Winner } from './types';
+import {
+  ATTACK_DISPLAY_MS,
+  AUTOPLAY_HAND_MS,
+  AUTOPLAY_MASH_MS,
+  AUTOPLAY_RULES_MS,
+  AUTOPLAY_TITLE_MS,
+  AUTOPLAY_WAIT_MS,
+  FX_PREVIEW_LEAD_MS,
+  FX_PREVIEW_STEP_MS,
+  IMPACT_DISPLAY_MS,
+  JANKEN_BEAT_MS,
+  MASH_DUEL_MS,
+  MASH_RESULT_MS,
+  NEXT_ROUND_DISPLAY_MS,
+  PRACTICE_SUMMON_SOUND_MS,
+  RESULT_DISPLAY_MS,
+  REVEAL_DISPLAY_MS,
+  SELECTED_DISPLAY_MS,
+  SPECIAL_ATTACK_MS,
+  SPECIAL_CUTIN_SLAM_MS,
+  SPECIAL_DISPLAY_MS,
+  SPECIAL_SECOND_IMPACT_MS,
+  SUMMON_DISPLAY_MS,
+  TIE_SECOND_SOUND_MS,
+} from './timings';
+import { HANDS, type Hand, type RoundResult, type Winner } from './types';
 
-type Screen = 'title' | 'battle' | 'practice-clear' | 'victory' | 'defeat' | 'draw' | 'thanks';
-// 立て札のルール説明は、「📖 ルール」の見直しだけ。最初は本物のバトル画面で練習ラウンド(practice)をする
-type TutorialMode = 'review';
-const TITLE_LOGO_PATH = assetUrl('/assets/monjan-title-logo.png');
-export type BattlePhase =
-  | 'summon'
-  | 'choosing'
-  | 'selected'
-  | 'janken-jan'
-  | 'janken-ken'
-  | 'janken-pon'
-  | 'reveal'
-  // 同じ手(あいこ)のとき:CPU と連打勝負(mash-duel)→ どちらが勝ったか(mash-result)
-  | 'mash-duel'
-  | 'mash-result'
-  // とどめのチャンス(相手の♡が1)に じゃんけんで勝ったとき:必殺技のカットイン → 攻撃
-  | 'special'
-  | 'attack'
-  | 'impact'
-  | 'result'
-  | 'next-round';
-
-export const SUMMON_DISPLAY_MS = 1200;
-// 最後の一撃のときは、この間に 倒れたカードが沈む演出を見せる
-export const RESULT_DISPLAY_MS = 2000;
-export const NEXT_ROUND_DISPLAY_MS = 700;
-export const SELECTED_DISPLAY_MS = 400;
-export const JANKEN_BEAT_MS = 700;
-export const REVEAL_DISPLAY_MS = 1000;
-// あいこの連打勝負の時間と、そのあと どちらが勝ったかを見せる時間
-export const MASH_DUEL_MS = 2500;
-export const MASH_RESULT_MS = 900;
-// 攻撃:ためる → 飛ぶ → 当たる を見せる(2026年11月2日 480 → 700ms)
-export const ATTACK_DISPLAY_MS = 700;
-// 命中:一瞬止まって(ヒットストップ)から ゆれる(2026年11月2日 420 → 600ms)
-export const IMPACT_DISPLAY_MS = 600;
-// 必殺技のカットイン(相手の♡が1のときに じゃんけんで勝つと出る、とどめの演出)
-export const SPECIAL_DISPLAY_MS = 1800;
-// 必殺技の攻撃は、ためを長く見せる
-export const SPECIAL_ATTACK_MS = 1000;
-// カットインで名前をたたきつける音 / 必殺技の命中で2つめの音を鳴らすまで
-const SPECIAL_CUTIN_SLAM_MS = 350;
-const SPECIAL_SECOND_IMPACT_MS = 220;
-// 練習の はじまりで、スタートの音のあとに召喚の音を鳴らすまで
-const PRACTICE_SUMMON_SOUND_MS = 350;
-// あいこの攻撃で、2つめのタイプの音を遅らせる
-const TIE_SECOND_SOUND_MS = 60;
-// 開発者メニューの「攻撃エフェクトを見る」:バトル画面へ移ってから始めるまで / 「8つ順番に」の間かく
-export const FX_PREVIEW_LEAD_MS = 300;
-export const FX_PREVIEW_STEP_MS = 1600;
-// 通しの自動プレイ(開発者メニュー)で、ボタンを押すまでに待つ時間
-export const AUTOPLAY_TITLE_MS = 2000;
-export const AUTOPLAY_RULES_MS = 800;
-export const AUTOPLAY_HAND_MS = 1000;
-export const AUTOPLAY_WAIT_MS = 3000;
-export const AUTOPLAY_MASH_MS = 300;
-
-// 手の絵(public/assets/janken/ の 256×256 の PNG。2026年11月5日に絵文字から置きかえ)
-const HAND_META: Record<Hand, { image: string; label: string }> = {
-  rock: { image: assetUrl('/assets/janken/janken_gu_256.png'), label: 'グー' },
-  scissors: { image: assetUrl('/assets/janken/janken_choki_256.png'), label: 'チョキ' },
-  paper: { image: assetUrl('/assets/janken/janken_pa_256.png'), label: 'パー' },
+// バトルの画面の部品は battle/・screens/・components/、時間は timings.ts、タイマーと音は hooks/。
+// このファイルは、場面の切りかえと1ラウンドの進み方(状態)を受け持つ
+export type { BattlePhase };
+export {
+  ATTACK_DISPLAY_MS,
+  AUTOPLAY_HAND_MS,
+  AUTOPLAY_MASH_MS,
+  AUTOPLAY_RULES_MS,
+  AUTOPLAY_TITLE_MS,
+  AUTOPLAY_WAIT_MS,
+  FX_PREVIEW_LEAD_MS,
+  FX_PREVIEW_STEP_MS,
+  IMPACT_DISPLAY_MS,
+  JANKEN_BEAT_MS,
+  MASH_DUEL_MS,
+  MASH_RESULT_MS,
+  NEXT_ROUND_DISPLAY_MS,
+  RESULT_DISPLAY_MS,
+  REVEAL_DISPLAY_MS,
+  SELECTED_DISPLAY_MS,
+  SPECIAL_ATTACK_MS,
+  SPECIAL_DISPLAY_MS,
+  SUMMON_DISPLAY_MS,
 };
 
-// 手の絵。大きさは親の文字の大きさ(font-size)に合わせる(battle.css の .hand-icon)。
-// alt を空にすると読み上げない(ボタンの名前などで、もう伝わっているとき)
-function HandIcon({ hand, alt = HAND_META[hand].label }: { hand: Hand; alt?: string }) {
-  return <img className="hand-icon" src={HAND_META[hand].image} alt={alt} width={256} height={256} draggable={false} />;
-}
-
-// 手のカードの下に出す、会場のボタンの案内(左からグー・チョキ・パー)
-const HAND_KEYS: Record<Hand, string> = { rock: '◀', scissors: '●', paper: '▶' };
-
-const RESULT_COPY = {
-  victory: {
-    eyebrow: 'やったね！',
-    title: 'しょうり！',
-    message: 'キミとモンスターの ちからで かったよ！',
-  },
-  defeat: {
-    eyebrow: 'ナイスバトル！',
-    title: 'おしかった！',
-    message: 'さいごまで かっこよく たたかったね！',
-  },
-  draw: {
-    eyebrow: 'まさかの',
-    title: '引き分け！',
-    message: '最後は本物のじゃんけん！！',
-  },
-  // 練習ラウンドのおわり(本番とは別の、練習だけで完結する画面)
-  practice: {
-    eyebrow: 'ルールは ばっちり！',
-    title: 'れんしゅう クリア！',
-    message: 'つぎは いよいよ ほんばん！ あいては だれかな…？',
-  },
-} as const;
-
-// 最後の一撃のあと、結果の画面へ移るまでに大きく出す ひとこと
-const FINAL_BLOW_COPY = {
-  victory: 'やったー！',
-  defeat: 'まけちゃった…',
-  draw: 'あいうち！',
-} as const;
-
-function statCount(value: number): number {
-  return value / 1000;
-}
-
-function Hearts({ current, max, damage = 0 }: { current: number; max: number; damage?: number }) {
-  return (
-    <span className="hearts" aria-label={`HP ${current} / ${max}`}>
-      {Array.from({ length: max }, (_, index) => {
-        const isLost = damage > 0 && index >= current && index < current + damage;
-        const stateClass = index < current ? 'heart--full' : 'heart--empty';
-        return (
-          <span key={index} className={`heart ${stateClass} ${isLost ? 'heart--lost' : ''}`} aria-hidden="true">
-            ♥
-          </span>
-        );
-      })}
-    </span>
-  );
-}
-
-// glow:攻撃のときに光らせる ⚔ の数(相手に与えたダメージと同じ数)
-function Swords({ count, glow = 0 }: { count: number; glow?: number }) {
-  return (
-    <span className="swords" aria-label={`こうげき力 ${count}`}>
-      {Array.from({ length: count }, (_, index) => (
-        <span key={index} className={`sword ${index < glow ? 'sword--glow' : ''}`} aria-hidden="true">⚔</span>
-      ))}
-    </span>
-  );
-}
-
-function SoundControls({
-  enabled,
-  bgmVolume,
-  sfxVolume,
-  onToggle,
-  onBgmVolumeChange,
-  onSfxVolumeChange,
-}: {
-  enabled: boolean;
-  bgmVolume: number;
-  sfxVolume: number;
-  onToggle: () => void;
-  onBgmVolumeChange: (value: number) => void;
-  onSfxVolumeChange: (value: number) => void;
-}) {
-  return (
-    <div className="sound-controls" aria-label="サウンド設定">
-      <button
-        className="sound-toggle"
-        type="button"
-        aria-pressed={enabled}
-        aria-label={`サウンドを${enabled ? 'オフ' : 'オン'}にする`}
-        onClick={onToggle}
-      >
-        <span aria-hidden="true">{enabled && (bgmVolume > 0 || sfxVolume > 0) ? '🔊' : '🔇'}</span>
-      </button>
-      <div className="sound-mixer">
-        <label className="volume-control">
-          <span>BGM</span>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={Math.round(bgmVolume * 100)}
-            aria-label="BGM音量"
-            onChange={(event) => onBgmVolumeChange(Number(event.currentTarget.value) / 100)}
-          />
-        </label>
-        <label className="volume-control">
-          <span>SE</span>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={Math.round(sfxVolume * 100)}
-            aria-label="効果音音量"
-            onChange={(event) => onSfxVolumeChange(Number(event.currentTarget.value) / 100)}
-          />
-        </label>
-      </div>
-    </div>
-  );
-}
-
-function MonsterImage({ monster }: { monster: Monster }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return <div className="monster-image monster-image--fallback" role="img" aria-label={monster.name}>？</div>;
-  }
-  return (
-    <img
-      className="monster-image"
-      src={monster.image}
-      alt={monster.name}
-      width={1024}
-      height={768}
-      onError={() => setFailed(true)}
-      draggable={false}
-    />
-  );
-}
-
-/** 撮影・合体の画面の誕生カード(fusion の .card)と同じ作りのカード:名前とタイプの帯・絵 */
-// footer:絵の下にのせる段(バトルの こうげき ⚔ / HP ♥)。ほかの画面では使わない
-function MonsterCard({
-  monster,
-  className = '',
-  imageClassName = '',
-  footer,
-}: { monster: Monster; className?: string; imageClassName?: string; footer?: ReactNode }) {
-  const theme = getAttributeTheme(monster.attribute);
-  return (
-    <div className={`monster-card ${className}`.trim()}>
-      <header className="monster-card__head">
-        <h2>{monster.name}</h2>
-        <span className={`attribute-badge el-${theme}`}>{monster.attribute}タイプ</span>
-      </header>
-      <div className={`monster-frame monster-image-container ${imageClassName}`.trim()}>
-        <MonsterImage monster={monster} />
-      </div>
-      {footer}
-    </div>
-  );
-}
-
-function MonsterPanel({
-  monster,
-  hp,
-  side,
-  phase,
-  result,
-  isHit,
-  finishChance = false,
-}: {
-  monster: Monster;
-  hp: number;
-  side: 'player' | 'cpu';
-  phase: BattlePhase;
-  result: RoundResult | null;
-  isHit: boolean;
-  finishChance?: boolean;
-}) {
-  const theme = getAttributeTheme(monster.attribute);
-  const damage = side === 'player' ? result?.playerDamage ?? 0 : result?.cpuDamage ?? 0;
-  const isAttacking = phase === 'attack' && (result?.winner === side || result?.winner === 'none');
-  const isSummoning = phase === 'summon';
-  const showDamage = phase === 'impact' && damage > 0;
-  // そのラウンドで勝った側は金に光り、負けた側は少し暗くなる
-  const roundDecided = result && result.winner !== 'none' && ['attack', 'impact', 'result'].includes(phase);
-  const isRoundWinner = Boolean(roundDecided && result?.winner === side);
-  const isRoundLoser = Boolean(roundDecided && result?.winner !== side && phase === 'result');
-  const isDefeated = hp === 0 && (phase === 'impact' || phase === 'result');
-  // 攻撃のとき、相手に与えるダメージの数だけ ⚔ を光らせる(⚔ の数だけ ♥ が減ることを見せる)
-  const dealt = side === 'player' ? result?.cpuDamage ?? 0 : result?.playerDamage ?? 0;
-  const swordGlow = isAttacking ? dealt : 0;
-
-  return (
-    <article
-      data-attribute-theme={theme}
-      className={[
-        'monster-panel',
-        `monster-panel--${side}`,
-        `monster-panel--element-${theme}`,
-        isHit ? 'monster-panel--hit' : '',
-        isAttacking ? 'monster-panel--attacking' : '',
-        isSummoning ? 'monster-panel--summoning' : '',
-        isRoundWinner ? 'monster-panel--round-winner' : '',
-        isRoundLoser ? 'monster-panel--round-loser' : '',
-        isDefeated ? 'monster-panel--defeated' : '',
-        finishChance ? 'monster-panel--finish' : '',
-      ].filter(Boolean).join(' ')}
-    >
-      <div className="monster-tag">
-        <span className="side-label">{side === 'player' ? 'あなた' : 'CPU'}</span>
-      </div>
-      <div className="monster-card-motion">
-        {isSummoning && (
-          <div className="summon-fx" aria-hidden="true">
-            <i /><i /><b>✦</b>
-          </div>
-        )}
-        {/* カードの下の段に、こうげき ⚔ と HP ♥(カードといっしょに動く) */}
-        <MonsterCard
-          monster={monster}
-          imageClassName="monster-image-container--battle"
-          footer={
-            <div className="monster-stats">
-              <span className="stat stat--attack">
-                <span className="stat__label">こうげき</span>
-                <Swords count={statCount(monster.attack)} glow={swordGlow} />
-              </span>
-              <span className="stat__divider" aria-hidden="true" />
-              <span className="stat stat--hp">
-                <span className="stat__label">HP</span>
-                <Hearts current={hp} max={statCount(monster.hp)} damage={phase === 'impact' ? damage : 0} />
-              </span>
-            </div>
-          }
-        />
-      </div>
-      {showDamage && <span className="damage-burst" aria-label={`${damage}ダメージ`}>−{damage}</span>}
-    </article>
-  );
-}
-
-// 必殺技のカットインの名前。撮った物とタイプの言葉を2行に分け、長いほど字を小さくして枠に収める
-function SpecialMoveTitle({ monster }: { monster: Monster }) {
-  const parts = specialMoveParts(monster);
-  return (
-    <strong title={specialMoveName(monster)} style={{ fontSize: `${specialMoveFontSize(parts)}px` }}>
-      {parts.object && <span className="special-cutin__object">{parts.object}</span>}
-      <span className="special-cutin__word">{parts.word}</span>
-    </strong>
-  );
-}
-
-function NextRoundNotice({ round }: { round: number }) {
-  return (
-    <div className="banner-layer" role="status" aria-live="assertive">
-      <div className="banner next-round-notice">
-        <small>ラウンド {round}</small>
-        <strong>次のラウンド！</strong>
-      </div>
-    </div>
-  );
-}
-
-function Tutorial({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState(0);
-  const isLastStep = step === 2;
-  const next = () => { if (isLastStep) onClose(); else setStep((current) => current + 1); };
-  const back = () => setStep((current) => Math.max(0, current - 1));
-
-  // 左「もどる」・中「つぎへ」
-  usePadButtons((button) => {
-    if (button === 'center') next();
-    else if (button === 'left' && step > 0) back();
-  });
-
-  return (
-    <div className="modal-layer" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
-      <section className="tutorial-card">
-        <div className="tutorial-progress" aria-label={`ルール ${step + 1} / 3`}>
-          {[0, 1, 2].map((index) => (
-            <span key={index} className={index === step ? 'is-current' : index < step ? 'is-done' : ''}>
-              {index + 1}
-            </span>
-          ))}
-        </div>
-
-        {step === 0 && (
-          <div className="tutorial-page">
-            <h2 id="tutorial-title">じゃんけんで 勝負！</h2>
-            <p>グー・チョキ・パーから<br /><strong>1つ えらぼう！</strong></p>
-            <div className="tutorial-example tutorial-rps" aria-label="じゃんけんの勝ち方">
-              <div><b aria-hidden="true"><HandIcon hand="rock" alt="" /></b><span>は</span><b aria-hidden="true"><HandIcon hand="scissors" alt="" /></b><strong>に かつ！</strong></div>
-              <div><b aria-hidden="true"><HandIcon hand="scissors" alt="" /></b><span>は</span><b aria-hidden="true"><HandIcon hand="paper" alt="" /></b><strong>に かつ！</strong></div>
-              <div><b aria-hidden="true"><HandIcon hand="paper" alt="" /></b><span>は</span><b aria-hidden="true"><HandIcon hand="rock" alt="" /></b><strong>に かつ！</strong></div>
-            </div>
-          </div>
-        )}
-
-        {step === 1 && (
-          <div className="tutorial-page">
-            <h2 id="tutorial-title">あいこなら れんだ しょうぶ！</h2>
-            <p>同じ手が出たら、<br /><strong>ボタンを たくさん おした方の かち！</strong></p>
-            <div className="tutorial-example tutorial-mash" aria-label="ボタンをれんだ">
-              <strong>◀ ● ▶</strong><b>どれでも</b><strong>れんだ！</strong>
-            </div>
-            <p className="tutorial-note">おなじ かずなら <strong>あいこ！</strong><br />おたがいの♡が 1つへるよ！</p>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="tutorial-page">
-            <h2 id="tutorial-title">相手の ハートをへらそう！</h2>
-            <p>じゃんけんに勝つと、<br /><strong>⚔の数だけ 相手の♡がへるよ！</strong></p>
-            <div className="tutorial-example tutorial-damage" aria-label="剣2つならハート2つのダメージ">
-              <span><b aria-hidden="true">⚔⚔</b><small>こうげき</small></span>
-              <strong aria-hidden="true">→</strong>
-              <span><b aria-hidden="true">♡♡♡ → ♡</b><small>2ダメージ！</small></span>
-            </div>
-            <p className="tutorial-note"><strong>相手の♡を ぜんぶなくしたら かち！</strong></p>
-          </div>
-        )}
-      </section>
-
-      <Deck
-        knobs={{
-          left: step > 0 ? { label: 'もどる', onClick: back } : undefined,
-          center: {
-            label: isLastStep ? 'バトルにもどる' : 'つぎへ',
-            onClick: next,
-            call: true,
-          },
-        }}
-      />
-    </div>
-  );
-}
-
-// ゲージの長さの目安(これだけ押すと いっぱい。CPU の多いときの回数より少し多い)
-const MASH_GAUGE_MAX = CPU_MASH_MAX + 4;
-
-// あいこの連打勝負。会場の3つのボタンのどれでも1回(画面のゲージを押しても数える)。
-// CPU のゲージは、連打の時間をかけて目標の回数まで CSS のアニメーションで伸ばす(回数は終わってから出す)
-function MashDuel({
-  phase,
-  playerCount,
-  cpuCount,
-  winner,
-  onMash,
-}: {
-  phase: 'mash-duel' | 'mash-result';
-  playerCount: number;
-  cpuCount: number;
-  winner: Winner | null;
-  onMash: () => void;
-}) {
-  const width = (count: number) => `${Math.min(1, count / MASH_GAUGE_MAX) * 100}%`;
-  const done = phase === 'mash-result';
-  const title = !done
-    ? 'れんだ しょうぶ！'
-    : winner === 'player' ? 'あなたの かち！' : winner === 'cpu' ? 'CPUの かち！' : 'おなじ かず！ あいこ！';
-  return (
-    <div className={['mash-duel', done ? `mash-duel--done mash-duel--winner-${winner ?? 'none'}` : ''].filter(Boolean).join(' ')} role="status" aria-live="polite">
-      <strong className="mash-duel__title">{title}</strong>
-      {/* のこり時間:連打の時間をかけて 右から縮む(終わったら消す) */}
-      {!done && (
-        <span className="mash-duel__timer" aria-hidden="true">
-          <span className="mash-duel__timer-fill" style={{ animationDuration: `${MASH_DUEL_MS}ms` }} />
-        </span>
-      )}
-      <div className="mash-duel__row mash-duel__row--player">
-        <span className="mash-duel__label">あなた</span>
-        <button type="button" className="mash-duel__gauge" onClick={onMash} aria-label={`あなたの れんだ ${playerCount}かい`}>
-          <span className="mash-duel__fill" style={{ width: width(playerCount) }} />
-        </button>
-        {/* 押すたびに数字がぽんと弾む(key を変えてアニメーションをやり直す) */}
-        <b className="mash-duel__count" key={playerCount}>{playerCount}</b>
-      </div>
-      <div className="mash-duel__row mash-duel__row--cpu">
-        <span className="mash-duel__label">CPU</span>
-        <span className="mash-duel__gauge" aria-label={done ? `CPUの れんだ ${cpuCount}かい` : 'CPUも れんだ中'}>
-          <span
-            className="mash-duel__fill mash-duel__fill--cpu"
-            style={{ width: width(cpuCount), animationDuration: `${MASH_DUEL_MS}ms` }}
-          />
-        </span>
-        <b className="mash-duel__count">{done ? cpuCount : '？'}</b>
-      </div>
-      {/* 会場の3つのボタンをかたどる。押すたびに3つとも光る(key で光り直す) */}
-      {!done && (
-        <div className="mash-duel__keys" aria-hidden="true">
-          <span className="mash-duel__buttons" key={playerCount}>
-            <i>◀</i><i>●</i><i>▶</i>
-          </span>
-          <span className="mash-duel__keys-text">どれでも れんだ！</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// 練習ラウンドの吹き出し。手をえらぶ前(choose)と、結果で止まっているとき(result)。見た目は battle.css の .coach
-function PracticeCoach({ step }: { step: 'choose' | 'result' }) {
-  return (
-    <aside className={`coach coach--${step}`} aria-live="polite">
-      {step === 'choose' ? (
-        <>
-          <p className="coach-title">れんしゅうだよ！</p>
-          <p>グー・チョキ・パーから <strong>1つ えらぼう！</strong></p>
-          <p className="coach-sub">◀ ● ▶ の ボタンでも えらべるよ</p>
-          <p className="coach-stars">同じ手(あいこ)のときは <strong>ボタン れんだ しょうぶ！</strong></p>
-        </>
-      ) : (
-        <>
-          <p className="coach-title">かったね！</p>
-          <p>かつと <strong>⚔の数だけ</strong> 相手の♡が へるよ！</p>
-          <p><strong>相手の♡を ぜんぶなくしたら かち！</strong></p>
-          <p className="coach-sub">れんしゅうは これで おしまい！</p>
-        </>
-      )}
-    </aside>
-  );
-}
-
-// 練習の対戦:相手は練習用の見本(本番の相手は、本番の召喚まで見せない)。
-// 相手の♡は 自分の⚔より多くする(♡が0になって、勝負が終わらないように)
-function practiceData(data: GameData): Pick<GameData, 'player' | 'cpu'> {
-  const cpu = data.practiceCpu;
-  const hp = Math.max(cpu.hp, data.player.attack + 1000) as Monster['hp'];
-  return { player: data.player, cpu: hp === cpu.hp ? cpu : { ...cpu, hp } };
-}
-
-function ChoiceButtons({
-  disabled,
-  selected,
-  coach = false,
-  onSelect,
-}: {
-  disabled: boolean;
-  selected: Hand | null;
-  coach?: boolean;
-  onSelect: (hand: Hand) => void;
-}) {
-  return (
-    <div className={['choice-area', disabled ? 'choice-area--locked' : '', coach ? 'choice-area--coach' : ''].filter(Boolean).join(' ')}>
-      <p className="choice-prompt">{disabled ? 'しょうぶの けっかは…' : 'どの手にする？'}</p>
-      <div className="choice-buttons">
-        {HANDS.map((hand) => (
-          <button
-            key={hand}
-            className={[
-              'hand-button',
-              `hand-button--${hand}`,
-              selected === hand ? 'hand-button--selected' : '',
-            ].filter(Boolean).join(' ')}
-            disabled={disabled}
-            onClick={() => onSelect(hand)}
-            aria-label={HAND_META[hand].label}
-          >
-            <span className="hand-emoji" aria-hidden="true"><HandIcon hand={hand} alt="" /></span>
-            <span className="hand-label">{HAND_META[hand].label}</span>
-            <span className="hand-key" aria-hidden="true">{HAND_KEYS[hand]}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// 手を見せる帯。handWinner はじゃんけんだけの勝ち負け(同じ手は tie)。
-// result は勝者が決まってから(あいこは連打勝負のあと)
-function RoundFeedback({
-  handWinner,
-  result,
-  phase,
-  playerHand,
-  cpuHand,
-}: {
-  handWinner: 'player' | 'cpu' | 'tie';
-  result: RoundResult | null;
-  phase: BattlePhase;
-  playerHand: Hand;
-  cpuHand: Hand;
-}) {
-  const cpuVisible = ['reveal', 'mash-duel', 'mash-result', 'special', 'attack', 'impact', 'result'].includes(phase);
-  const sameHand = handWinner === 'tie';
-  const winner: Winner | null = result?.winner ?? (sameHand ? null : handWinner);
-  // 手のぶつかりで、勝った手を大きく、負けた手を灰色にする(ぽん!のあと。あいこは連打勝負が終わってから)
-  const decided = cpuVisible && winner !== null && (!sameHand || ['mash-result', 'special', 'attack', 'impact', 'result'].includes(phase));
-  const message =
-    winner === 'player'
-      ? 'あなたの かち！'
-      : winner === 'cpu'
-        ? 'CPUの かち！'
-        : 'あいこ！';
-  const sub = sameHand
-    ? (winner === 'none' ? 'おたがいの HPが 1へるよ' : 'れんだで しょうぶがついた！')
-    : 'じゃんけんで しょうぶがついた！';
-  let phaseMessage = message;
-  let phaseSub = sub;
-  if (phase === 'selected') {
-    phaseMessage = 'その手で しょうぶ！';
-    phaseSub = 'CPUの手は まだひみつ';
-  } else if (phase === 'janken-jan') {
-    phaseMessage = 'じゃん';
-    phaseSub = 'せーのっ！';
-  } else if (phase === 'janken-ken') {
-    phaseMessage = 'けん';
-    phaseSub = 'どっちを だすかな？';
-  } else if (phase === 'janken-pon') {
-    phaseMessage = 'ぽん！';
-    phaseSub = 'CPUの手は…';
-  } else if (phase === 'reveal') {
-    phaseMessage = sameHand ? 'あいこ！' : 'CPUの手を こうかい！';
-    phaseSub = sameHand ? 'おなじ手だ！ れんだで しょうぶ！' : 'じゃんけんの しょうぶ！';
-  } else if (phase === 'mash-duel') {
-    phaseMessage = 'れんだ！';
-    phaseSub = 'ボタンを たくさん おそう！';
-  } else if (phase === 'special') {
-    phaseMessage = 'ひっさつわざ！';
-    phaseSub = 'とどめの いちげき！';
-  } else if (phase === 'attack') {
-    phaseMessage = winner === 'none' ? 'あいこ！' : result?.special ? 'ひっさつわざ！' : 'こうげき！';
-    phaseSub = winner === 'none' ? 'おたがいに ダメージ！' : 'モンスターが とびだした！';
-  } else if (phase === 'impact') {
-    phaseMessage = 'ドカーン！';
-    phaseSub = winner === 'none' ? 'おたがいに 1ダメージ！' : 'こうげきが めいちゅう！';
-  }
-
-  const handClass = (side: 'player' | 'cpu') => [
-    'revealed-hand',
-    `revealed-hand--${side}`,
-    sameHand ? 'revealed-hand--same-hand' : '',
-    decided && winner === side ? 'revealed-hand--won' : '',
-    decided && winner !== side && winner !== 'none' ? 'revealed-hand--lost' : '',
-    side === 'cpu' && !cpuVisible ? 'revealed-hand--concealed' : '',
-  ].filter(Boolean).join(' ');
-
-  return (
-    <div
-      className={[
-        'round-feedback',
-        `round-feedback--${phase}`,
-        `round-feedback--reason-${sameHand ? 'mash' : 'hand'}`,
-        `round-feedback--winner-${winner ?? 'pending'}`,
-      ].join(' ')}
-      role="status"
-      aria-live="assertive"
-    >
-      <div className="clash">
-        <div className={handClass('player')}>
-          <span>あなた</span>
-          <b><HandIcon hand={playerHand} /></b>
-        </div>
-        <div className={handClass('cpu')}>
-          <span>CPU</span>
-          {cpuVisible ? (
-            <b><HandIcon hand={cpuHand} /></b>
-          ) : (
-            <b aria-label="CPUの手はまだひみつ">？</b>
-          )}
-        </div>
-        {phase === 'reveal' && <span className="clash-spark" aria-hidden="true" />}
-      </div>
-      <div className="feedback-copy" key={phase}>
-        <strong>{phaseMessage}</strong>
-        <span>{phaseSub}</span>
-      </div>
-    </div>
-  );
-}
-
-function BattleScreen({
-  data,
-  playerHp,
-  cpuHp,
-  round,
-  tutorialMode,
-  phase,
-  playerHand,
-  cpuHand,
-  result,
-  practice,
-  onCloseTutorial,
-  onOpenRules,
-  onEndPractice,
-  onSelect,
-  handWinner,
-  mash,
-  cpuMash,
-  onMash,
-  fxLabel,
-}: {
-  data: Pick<GameData, 'player' | 'cpu'>;
-  playerHp: number;
-  cpuHp: number;
-  round: number;
-  tutorialMode: TutorialMode | null;
-  phase: BattlePhase;
-  playerHand: Hand | null;
-  cpuHand: Hand | null;
-  result: RoundResult | null;
-  practice: boolean;
-  onCloseTutorial: () => void;
-  onOpenRules: () => void;
-  onEndPractice: () => void;
-  onSelect: (hand: Hand) => void;
-  handWinner: 'player' | 'cpu' | 'tie' | null;
-  mash: number;
-  cpuMash: number;
-  onMash: () => void;
-  fxLabel?: string;
-}) {
-  const tutorialOpen = tutorialMode !== null;
-  // とどめのチャンス(相手の♡が1):手を選んでから攻撃までのあいだ、相手のカードを光らせる
-  const finishChance = !practice && isFinishChance(cpuHp)
-    && ['choosing', 'selected', 'janken-jan', 'janken-ken', 'janken-pon', 'reveal', 'mash-duel', 'mash-result', 'special'].includes(phase);
-  // 必殺技の攻撃(とどめのチャンスに じゃんけんで勝った):ためを長く、飛び道具も命中も特大にする
-  const special = Boolean(result?.special) && ['special', 'attack', 'impact'].includes(phase);
-  const playerTheme = getAttributeTheme(data.player.attribute);
-  const cpuTheme = getAttributeTheme(data.cpu.attribute);
-  const attackerTheme =
-    result?.winner === 'player' ? playerTheme : result?.winner === 'cpu' ? cpuTheme : 'neutral';
-  const isFinalBlow = Boolean(
-    result
-    && (result.playerHp === 0 || result.cpuHp === 0)
-    && ['attack', 'impact', 'result'].includes(phase),
-  );
-  const outcome = result ? getGameOutcome(result.playerHp, result.cpuHp) : 'ongoing';
-  // 画面のゆれは、大きいほうのダメージで強くする(1〜3。必殺技はいちばん強い special)
-  const shake = result?.special ? 'special' : result ? Math.min(3, Math.max(result.playerDamage, result.cpuDamage)) : 0;
-
-  // タイプの粒(attackParticles.ts):攻撃のはじめに攻撃する側でためて、命中で当たったカードの上にはじける
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fireRef = useRef<ParticleFire | null>(null);
-  useEffect(() => {
-    if (canvasRef.current) fireRef.current = createParticleFire(canvasRef.current);
-    return () => {
-      fireRef.current?.reset();
-      fireRef.current = null;
-    };
-  }, []);
-  useEffect(() => {
-    const fire = fireRef.current;
-    if (!fire || !result) return;
-    if (phase === 'attack') {
-      if (result.winner === 'none') {
-        chargeAt(fire, 'player', playerTheme);
-        chargeAt(fire, 'cpu', cpuTheme);
-      } else {
-        chargeAt(fire, result.winner, attackerTheme);
-        // 必殺技は、ためを2回重ねる
-        if (result.special) chargeAt(fire, result.winner, attackerTheme);
-      }
-    } else if (phase === 'impact') {
-      if (result.winner === 'none') {
-        burstAt(fire, 'center', playerTheme, { power: 1 });
-        burstAt(fire, 'center', cpuTheme, { power: 1 });
-      } else {
-        const at = result.winner === 'player' ? 'cpu' : 'player';
-        const damage = result.winner === 'player' ? result.cpuDamage : result.playerDamage;
-        const dir = result.winner === 'player' ? 1 : -1;
-        if (result.special) {
-          // 必殺技:当たったところで最大の粒を2回、真ん中にも はじけさせる
-          burstAt(fire, at, attackerTheme, { dir, power: 3, final: true });
-          burstAt(fire, 'center', attackerTheme, { power: 3, final: true });
-          const timer = window.setTimeout(() => burstAt(fireRef.current, at, attackerTheme, { dir, power: 3, final: true }), 220);
-          return () => window.clearTimeout(timer);
-        }
-        burstAt(fire, at, attackerTheme, { dir, power: damage, final: isFinalBlow });
-      }
-    }
-  }, [phase, result]);
-
-  const screenClass = [
-    'screen',
-    'battle-screen',
-    `battle-screen--${phase}`,
-    tutorialOpen ? 'battle-screen--tutorial' : '',
-    practice && phase === 'result' ? 'battle-screen--practice-result' : '',
-    phase === 'attack' ? `battle-screen--attack-${attackerTheme}` : '',
-    isFinalBlow ? 'battle-screen--final-blow' : '',
-    special ? 'battle-screen--special' : '',
-    special ? `battle-screen--special-${playerTheme}` : '',
-  ].filter(Boolean).join(' ');
-
-  return (
-    <main className={screenClass}>
-      <div className="scene-vignette" aria-hidden="true" />
-      <Drift />
-      <div className="battle-topbar">
-        <div className="signboard">
-          <img
-            className="battle-logo"
-            src={TITLE_LOGO_PATH}
-            alt="モンじゃん！"
-            width={1774}
-            height={887}
-            draggable={false}
-          />
-          <span className="signboard__title">じゃんけん バトル</span>
-        </div>
-        <span className="round-chip">ラウンド <b>{round}</b></span>
-        {practice && <span className="practice-chip">れんしゅう</span>}
-        <button
-          className="rule-button"
-          type="button"
-          onClick={onOpenRules}
-          disabled={phase !== 'choosing' || tutorialOpen || practice}
-          aria-label="ルールをもう一度見る"
-        >
-          <span aria-hidden="true">📖</span> ルール
-        </button>
-      </div>
-      <div
-        className={[
-          'battlefield',
-          `battlefield--${phase}`,
-          phase === 'impact' ? `battlefield--shake-${shake}` : '',
-          // 必殺技のカットインの はじめにも 強くゆらす
-          phase === 'special' ? 'battlefield--shake-special' : '',
-        ].filter(Boolean).join(' ')}
-      >
-        <MonsterPanel
-          monster={data.player}
-          hp={playerHp}
-          side="player"
-          phase={phase}
-          result={result}
-          isHit={phase === 'impact' && Boolean(result?.playerDamage)}
-        />
-        <div className="versus" aria-label="バーサス">
-          <span>V</span><span>S</span>
-        </div>
-        <MonsterPanel
-          monster={data.cpu}
-          hp={cpuHp}
-          side="cpu"
-          phase={phase}
-          result={result}
-          isHit={phase === 'impact' && Boolean(result?.cpuDamage)}
-          finishChance={finishChance}
-        />
-        {phase === 'attack' && result && (
-          result.winner === 'none' ? (
-            <>
-              <AttackProjectile from="player" theme={playerTheme} meet />
-              <AttackProjectile from="cpu" theme={cpuTheme} meet />
-            </>
-          ) : (
-            <AttackProjectile from={result.winner} theme={attackerTheme} />
-          )
-        )}
-        {phase === 'impact' && result && (
-          result.winner === 'none' ? (
-            <>
-              <ImpactBurst at="center" theme="neutral" />
-              <ImpactBurst at="player" theme={cpuTheme} />
-              <ImpactBurst at="cpu" theme={playerTheme} />
-            </>
-          ) : (
-            <ImpactBurst at={result.winner === 'player' ? 'cpu' : 'player'} theme={attackerTheme} />
-          )
-        )}
-      </div>
-      {(phase === 'choosing' || phase === 'selected') ? (
-        <ChoiceButtons
-          disabled={phase !== 'choosing' || tutorialOpen}
-          selected={playerHand}
-          coach={practice && phase === 'choosing'}
-          onSelect={onSelect}
-        />
-      ) : handWinner && playerHand && cpuHand ? (
-        <RoundFeedback
-          handWinner={handWinner}
-          result={result}
-          phase={phase}
-          playerHand={playerHand}
-          cpuHand={cpuHand}
-        />
-      ) : (
-        <div className="choice-area choice-area--waiting">
-          <p className="choice-prompt">
-            {tutorialOpen ? 'バトルの じゅんびをしよう！' : practice ? 'れんしゅう スタート！' : 'モンスター召喚！'}
-          </p>
-        </div>
-      )}
-      {phase === 'summon' && !tutorialOpen && (
-        <div className="banner-layer" role="status" aria-live="assertive">
-          <div className="banner summon-announcement">
-            <strong>{practice ? 'れんしゅう スタート！' : 'モンスター召喚！'}</strong>
-          </div>
-        </div>
-      )}
-      {finishChance && phase === 'choosing' && !tutorialOpen && (
-        <p className="finish-notice" role="status">あと1！ じゃんけんで かてば <strong>ひっさつわざ！</strong></p>
-      )}
-      {(phase === 'mash-duel' || phase === 'mash-result') && (
-        <MashDuel phase={phase} playerCount={mash} cpuCount={cpuMash} winner={result?.winner ?? null} onMash={onMash} />
-      )}
-      {phase === 'special' && (
-        <div className={`special-cutin special-cutin--${playerTheme}`} role="status" aria-live="assertive">
-          <span className="special-cutin__lines" aria-hidden="true" />
-          <span className="special-cutin__band" aria-hidden="true" />
-          <div className="special-cutin__monster" aria-hidden="true">
-            <MonsterImage monster={data.player} />
-          </div>
-          <div className="special-cutin__copy">
-            <small>ひっさつわざ！</small>
-            <SpecialMoveTitle monster={data.player} />
-            <span>とどめの いちげき！</span>
-          </div>
-          <span className="special-cutin__flash" aria-hidden="true" />
-        </div>
-      )}
-      {phase === 'impact' && result?.special && (
-        <div className={`special-impact-flash special-impact-flash--${playerTheme}`} aria-hidden="true" />
-      )}
-      {phase === 'next-round' && <NextRoundNotice round={round} />}
-      {phase === 'result' && isFinalBlow && outcome !== 'ongoing' && (
-        <div className={`final-banner final-banner--${outcome}`} aria-hidden="true">
-          <strong>{FINAL_BLOW_COPY[outcome]}</strong>
-        </div>
-      )}
-      {phase === 'impact' && <div className="hit-flash" aria-hidden="true" />}
-      <ParticleLayer ref={canvasRef} />
-      {fxLabel && <p className="fx-preview-label" aria-hidden="true">{fxLabel}</p>}
-      {practice && phase === 'choosing' && <PracticeCoach step="choose" />}
-      {practice && phase === 'result' && (
-        <>
-          <PracticeCoach step="result" />
-          <Deck knobs={{ center: { label: 'つぎへ', onClick: onEndPractice, call: true } }} />
-        </>
-      )}
-      {tutorialOpen && <Tutorial onClose={onCloseTutorial} />}
-    </main>
-  );
-}
-
-function TitleScreen({ onStart }: { onStart: () => void }) {
-  return (
-    <main className="screen title-screen">
-      <div className="scene-vignette" aria-hidden="true" />
-      <Drift />
-      <section className="title-copy">
-        <img
-          className="title-logo"
-          src={TITLE_LOGO_PATH}
-          alt="モンじゃん！ 生き物×モノで、キミだけのモンスター誕生！"
-          width={1774}
-          height={887}
-          draggable={false}
-        />
-        <p className="title-hint">まんなかの ボタンを おしてね</p>
-      </section>
-      <Deck knobs={{ center: { label: 'スタート！', onClick: onStart, call: true } }} />
-    </main>
-  );
-}
-
-function ResultScreen({
-  kind,
-  monster,
-  onContinue,
-}: {
-  kind: 'victory' | 'defeat' | 'draw' | 'practice';
-  monster: Monster;
-  onContinue: () => void;
-}) {
-  const copy = RESULT_COPY[kind];
-  return (
-    <main className={`screen result-screen result-screen--${kind}`}>
-      <div className="scene-vignette" aria-hidden="true" />
-      <div className="result-rays" aria-hidden="true" />
-      <Drift />
-      <div className="signboard result-signboard">
-        <img
-          className="result-brand"
-          src={TITLE_LOGO_PATH}
-          alt="モンじゃん！"
-          width={1774}
-          height={887}
-          draggable={false}
-        />
-      </div>
-      <section className="result-card">
-        <div className="result-card__header">
-          <p className="result-eyebrow">{copy.eyebrow}</p>
-          <h1>{copy.title}</h1>
-          <p className="result-message">{copy.message}</p>
-        </div>
-        <div className="result-card__visual">
-          {kind === 'draw' ? (
-            <div className="real-janken">
-              <div className="real-janken__hands">
-                {HANDS.map((hand) => <span key={hand} aria-hidden="true"><HandIcon hand={hand} alt="" /></span>)}
-              </div>
-              <p>かいじょうの おとなと<br />じゃんけんしてね！</p>
-            </div>
-          ) : (
-            <MonsterCard monster={monster} className={`result-monster result-monster--${kind}`} />
-          )}
-        </div>
-      </section>
-      <Deck knobs={{ center: { label: kind === 'draw' ? 'じゃんけんしたよ！' : kind === 'practice' ? 'ほんばん スタート！' : 'つぎへ', onClick: onContinue, call: true } }} />
-    </main>
-  );
-}
-
-// ありがとう:もらえるカード(左)と、ことば(右)。
-// 撮影のモンスターは、実際に刷ったカード(generator の /card。No. つき)をそのまま見せる
-// (2026年11月9日。画面と手元のカードをそろえ、スタッフが No. を見て渡せるように)。
-// バトルの見本・単体の開発用は、刷ったカードがないので、これまでのカード
-function ThanksScreen({ monster, cardUrl, onTitle }: { monster: Monster; cardUrl: string | null; onTitle: () => void }) {
-  const theme = getAttributeTheme(monster.attribute);
-  return (
-    <main className="screen thanks-screen">
-      <div className="scene-vignette" aria-hidden="true" />
-      <div className="result-rays" aria-hidden="true" />
-      <Drift />
-      <section className="thanks-card">
-        <div className={`thanks-card__visual ${cardUrl ? 'thanks-card__visual--printed' : ''}`}>
-          {cardUrl ? (
-            <div className="printed-card">
-              {/* フォーカスを取らない(会場の3つのボタンは、このページで受ける) */}
-              <iframe className="printed-card__frame" src={cardUrl} title="もらえるカード" tabIndex={-1} />
-            </div>
-          ) : (
-            <div className={`acquired-card acquired-card--${theme}`}>
-              <MonsterCard monster={monster} className="acquired-card__card" />
-              <div className="acquired-card__stats">
-                <span><small>こうげき</small><Swords count={statCount(monster.attack)} /></span>
-                <span><small>HP</small><Hearts current={statCount(monster.hp)} max={statCount(monster.hp)} /></span>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="thanks-card__side">
-          <p className="acquisition-kicker">✦ SPECIAL MONSTER CARD ✦</p>
-          <h1>きみだけのモンスターを<br /><span>ゲット！</span></h1>
-          <p className="thanks-message">あそんでくれて ありがとう！<br />スタッフから カードを うけとってね！</p>
-        </div>
-      </section>
-      <Deck knobs={{ center: { label: 'タイトルへ もどる', onClick: onTitle, call: true } }} />
-    </main>
-  );
-}
+// 会場の3つのボタンと手(左からグー・チョキ・パー。画面のボタンの並びと同じ)
+const PAD_ORDER: PadButton[] = ['left', 'center', 'right'];
 
 export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [data, setData] = useState<GameData | null>(null);
@@ -1077,20 +104,14 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [playerHand, setPlayerHand] = useState<Hand | null>(null);
   const [cpuHand, setCpuHand] = useState<Hand | null>(null);
   // じゃんけんだけの勝ち負け(同じ手は tie)。result は勝者が決まってから(あいこは連打勝負のあと)
-  const [handWinner, setHandWinner] = useState<'player' | 'cpu' | 'tie' | null>(null);
+  const [handWinner, setHandWinner] = useState<HandWinner | null>(null);
   const [result, setResult] = useState<RoundResult | null>(null);
   const [phase, setPhase] = useState<BattlePhase>('summon');
   // あいこの連打勝負:自分の回数(数えるのは ref。表示のために state にも入れる)と CPU の回数
   const [mash, setMash] = useState(0);
   const mashRef = useRef(0);
   const [cpuMash, setCpuMash] = useState(0);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [bgmVolume, setBgmVolume] = useState(0.55);
-  const [sfxVolume, setSfxVolumeState] = useState(0.9);
   const lockRef = useRef(false);
-  const soundEnabledRef = useRef(true);
-  const timersRef = useRef<Set<number>>(new Set());
-  const sequenceRef = useRef(0);
   const tutorialOpen = tutorialMode !== null;
   const autoStartedRef = useRef(false);
   // 開発者メニュー(D キー・⚙)
@@ -1121,55 +142,15 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     startGame();
   }, [data]);
 
-  // 操作する前に始まったときは、ブラウザが音を止めていることがあるので、最初の操作で音を出せるようにする
-  // (展示のキオスクは起動の設定で最初から鳴る)
-  useEffect(() => {
-    const unlock = () => {
-      if (!soundEnabledRef.current) return;
-      void unlockGameAudio();
-      void startGameBgm();
-    };
-    window.addEventListener('pointerdown', unlock, { once: true });
-    window.addEventListener('keydown', unlock, { once: true });
-    return () => {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
-    };
-  }, []);
+  const { schedule, clearTimers } = useTimers();
+  const sound = useGameSound(data !== null);
+  const { playSound } = sound;
 
-  useEffect(() => {
-    if (!data || !soundEnabledRef.current) return;
-
-    // 可能な環境ではタイトル表示から再生する。自動再生が止められた場合も、
-    // スタートボタンやミュート解除のユーザー操作で必ず再試行する。
-    void startGameBgm();
-  }, [data]);
-
-  useEffect(() => () => {
-    timersRef.current.forEach((timer) => window.clearTimeout(timer));
-    timersRef.current.clear();
-    closeGameAudio();
-    disposeGameBgm();
-  }, []);
-
-  // 音を切っていないときだけ効果音を鳴らす
-  const playSound = (...args: Parameters<typeof playGameSound>) => {
-    if (soundEnabledRef.current) playGameSound(...args);
-  };
-
-  const schedule = (callback: () => void, delay: number, sequence = sequenceRef.current) => {
-    const timer = window.setTimeout(() => {
-      timersRef.current.delete(timer);
-      if (sequence === sequenceRef.current) callback();
-    }, delay);
-    timersRef.current.add(timer);
-  };
-
-  const clearTimers = () => {
-    sequenceRef.current += 1;
-    timersRef.current.forEach((timer) => window.clearTimeout(timer));
-    timersRef.current.clear();
-  };
+  // いま戦っている2体(練習は練習用の相手)。描き直しのたびに作り直さない(モンスターの部品が描き直さずに済む)
+  const battleData = useMemo<BattleData | null>(
+    () => (data && practice ? practiceData(data) : data),
+    [data, practice],
+  );
 
   // HP を満タンにして、ラウンドを 1 から数えなおす(バトルの始まり)
   const fillHp = (loaded: GameData) => {
@@ -1191,6 +172,13 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     lockRef.current = true;
   };
 
+  // 進行中のものを止めて、ルールの見直しを閉じる(場面を移るときの共通の片づけ)
+  const stopAll = (nextPractice = false) => {
+    clearTimers();
+    setTutorialMode(null);
+    setPractice(nextPractice);
+  };
+
   // 手を選べるようにする(召喚・次のラウンドのあと)
   const startChoosing = () => {
     clearHands();
@@ -1204,45 +192,15 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     schedule(startChoosing, NEXT_ROUND_DISPLAY_MS);
   };
 
-  const toggleSound = () => {
-    const nextEnabled = !soundEnabledRef.current;
-    soundEnabledRef.current = nextEnabled;
-    setSoundEnabled(nextEnabled);
-    setSfxMuted(!nextEnabled);
-    setGameBgmMuted(!nextEnabled);
-    if (nextEnabled) {
-      playGameSound('toggle');
-      void startGameBgm();
-    } else {
-      pauseGameBgm();
-    }
-  };
-
-  const changeSfxVolume = (value: number) => {
-    setSfxVolumeState(value);
-    setSfxVolume(value);
-  };
-
-  const changeBgmVolume = (value: number) => {
-    setBgmVolume(value);
-    setGameBgmVolume(value);
-  };
-
-  // バトルのはじまり(召喚 → 星の抽選 → 手をえらぶ)。練習も本番も、ここから一から始める
+  // バトルのはじまり(召喚 → 手をえらぶ)。練習も本番も、ここから一から始める
   const beginBattle = (isPractice: boolean) => {
     if (!data) return;
-    clearTimers();
+    stopAll(isPractice);
     fillHp(data);
     if (isPractice) setCpuHp(statCount(practiceData(data).cpu.hp));
     resetRound();
-    setTutorialMode(null);
-    setPractice(isPractice);
     setScreen('battle');
-    if (soundEnabledRef.current) {
-      void unlockGameAudio();
-      playGameSound('start');
-      void startGameBgm();
-    }
+    sound.playStart();
     schedule(() => playSound('summon'), PRACTICE_SUMMON_SOUND_MS);
     schedule(startChoosing, SUMMON_DISPLAY_MS);
   };
@@ -1292,10 +250,11 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     if (winner === 'none') schedule(() => playSound('attack', { attribute: cpuAttribute }), TIE_SECOND_SOUND_MS);
   };
 
+  // 1ラウンド:手を選ぶ → じゃん・けん・ぽん → 手を見せる →(あいこなら連打勝負)→(必殺技)→ 攻撃 → 命中 → 結果
   const chooseHand = (hand: Hand) => {
-    if (!data || lockRef.current || tutorialOpen || phase !== 'choosing') return;
+    if (!data || !battleData || lockRef.current || tutorialOpen || phase !== 'choosing') return;
     lockRef.current = true;
-    const { player: playerMonster, cpu: cpuMonster } = practice ? practiceData(data) : data;
+    const { player: playerMonster, cpu: cpuMonster } = battleData;
     // 練習は必ず勝つ。開発者メニューで勝ち負けを決めているときは、その結果になる手にする(あいこは連打勝負になる)
     const mode: ForcedResult = practice ? 'win' : forced;
     const chosenCpuHand = mode === 'normal' ? pickCpuHand() : cpuHandFor(hand, mode);
@@ -1405,21 +364,24 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     }, SELECTED_DISPLAY_MS);
   };
 
+  // あいこの連打勝負で数える(times は回数。自動プレイは まとめて押したことにする)
+  const addMash = (times: number) => {
+    mashRef.current += times;
+    setMash(mashRef.current);
+  };
+
   // あいこの連打勝負で、1回数える
   const pressMash = () => {
     if (phase !== 'mash-duel') return;
-    mashRef.current += 1;
-    setMash(mashRef.current);
+    addMash(1);
     playSound('select');
   };
 
   const returnToTitle = () => {
     // URL の ?photo= を消す(読みこみ直したときに、前の子のモンスターでバトルが始まらないように)
     if (window.location.search) window.history.replaceState(null, '', BASE_URL);
-    clearTimers();
+    stopAll();
     setScreen('title');
-    setTutorialMode(null);
-    setPractice(false);
     setPlayerHp(0);
     setCpuHp(0);
     resetRound();
@@ -1442,7 +404,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       } else if (practice && phase === 'result') {
         if (button === 'center') finishPractice();
       } else if (!tutorialOpen) {
-        chooseHand(HANDS[['left', 'center', 'right'].indexOf(button)]);
+        chooseHand(HANDS[PAD_ORDER.indexOf(button)]);
       }
     } else if (screen === 'practice-clear') {
       if (button === 'center') startBattle();
@@ -1474,9 +436,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       startGame();
       return;
     }
-    clearTimers();
-    setTutorialMode(null);
-    setPractice(false);
+    stopAll();
     if (target === 'battle') {
       fillHp(data);
       setScreen('battle');
@@ -1520,10 +480,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
   const previewFx = (attributes: string[], direction: FxDirection) => {
     if (!data) return;
-    clearTimers();
+    stopAll();
     setDevOpen(false);
-    setTutorialMode(null);
-    setPractice(false);
     fillHp(data);
     setScreen('battle');
     setPhase('choosing');
@@ -1548,10 +506,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         delay = AUTOPLAY_RULES_MS;
       } else if (phase === 'mash-duel') {
         // あいこの連打勝負:勝ったり負けたりする回数を、まとめて押したことにする
-        action = () => {
-          mashRef.current += Math.floor(Math.random() * (CPU_MASH_MAX + 4));
-          setMash(mashRef.current);
-        };
+        action = () => addMash(Math.floor(Math.random() * (CPU_MASH_MAX + 4)));
         delay = AUTOPLAY_MASH_MS;
       } else if (!tutorialOpen && phase === 'choosing') {
         action = () => chooseHand(HANDS[Math.floor(Math.random() * HANDS.length)]);
@@ -1573,6 +528,15 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     return () => window.clearTimeout(timer);
   }, [autoplay, data, devOpen, screen, phase, tutorialMode, practice]);
 
+  // 「攻撃エフェクトを見る」のあいだは、攻撃する側(あいこは両方)のタイプを選んだものにする
+  const shownData = useMemo<BattleData | null>(() => {
+    if (!battleData || !fxPreview) return battleData;
+    return {
+      player: fxPreview.direction === 'cpu' ? battleData.player : { ...battleData.player, attribute: fxPreview.attribute },
+      cpu: fxPreview.direction === 'player' ? battleData.cpu : { ...battleData.cpu, attribute: fxPreview.attribute },
+    };
+  }, [battleData, fxPreview]);
+
   if (error) {
     return (
       <Stage>
@@ -1582,7 +546,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       </Stage>
     );
   }
-  if (!data) {
+  if (!data || !shownData) {
     return (
       <Stage>
         <main className="screen loading-screen"><div className="loader" /><p>モンスターを よんでいるよ…</p></main>
@@ -1600,19 +564,10 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   } else if (screen !== 'battle') {
     content = <ResultScreen kind={screen} monster={data.player} onContinue={finishGame} />;
   } else {
-    // 「攻撃エフェクトを見る」のあいだは、攻撃する側(あいこは両方)のタイプを選んだものにする
-    const fxTheme = fxPreview ? getAttributeTheme(fxPreview.attribute) : null;
-    const battleData = practice ? practiceData(data) : data;
-    const shownData = fxPreview
-      ? {
-        player: fxPreview.direction === 'cpu' ? battleData.player : { ...battleData.player, attribute: fxPreview.attribute },
-        cpu: fxPreview.direction === 'player' ? battleData.cpu : { ...battleData.cpu, attribute: fxPreview.attribute },
-      }
-      : battleData;
     content = (
       <BattleScreen
         data={shownData}
-        fxLabel={fxPreview ? `${fxPreview.attribute}タイプ(${fxTheme})` : undefined}
+        fxLabel={fxPreview ? `${fxPreview.attribute}タイプ(${getAttributeTheme(fxPreview.attribute)})` : undefined}
         playerHp={playerHp}
         cpuHp={cpuHp}
         round={round}
@@ -1640,12 +595,12 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
       <Stage>
         {content}
         <SoundControls
-          enabled={soundEnabled}
-          bgmVolume={bgmVolume}
-          sfxVolume={sfxVolume}
-          onToggle={toggleSound}
-          onBgmVolumeChange={changeBgmVolume}
-          onSfxVolumeChange={changeSfxVolume}
+          enabled={sound.soundEnabled}
+          bgmVolume={sound.bgmVolume}
+          sfxVolume={sound.sfxVolume}
+          onToggle={sound.toggleSound}
+          onBgmVolumeChange={sound.changeBgmVolume}
+          onSfxVolumeChange={sound.changeSfxVolume}
         />
       </Stage>
       <DevMenu

@@ -301,7 +301,6 @@ button { font: inherit; }
   place-items: center;
   pointer-events: none;
 }
-.banner-layer--low { align-items: end; padding-bottom: 40px; }
 .banner {
   display: flex;
   flex-direction: column;
@@ -323,9 +322,6 @@ button { font: inherit; }
   text-shadow: var(--ink-outline);
 }
 .banner small { font-family: var(--font-title); font-size: 34px; color: var(--leaf); }
-.banner span { font-size: 32px; font-weight: 800; color: var(--white); }
-.banner--small { width: auto; padding: 8px 80px 10px; }
-.banner--small strong { font-size: 56px; }
 @keyframes bannerIn {
   from { opacity: 0; transform: scaleY(0.2); }
   to   { opacity: 1; transform: scaleY(1); }

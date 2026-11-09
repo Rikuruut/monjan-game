@@ -6,7 +6,6 @@ import type { AttributeTheme } from './attributes';
 // 命中(impact)で、当たったカードの上に光の輪とかけらがはじける。あいこは両方から飛んで真ん中でぶつかる。
 // その上に、タイプごとの粒(attackParticles.ts。canvas-confetti)を ParticleLayer の canvas に出す
 
-export type { AttributeTheme };
 export type Side = 'player' | 'cpu';
 
 // 飛び道具のうしろに続く粒の数(--i で大きさと遅れを変える)
@@ -57,25 +56,25 @@ export const ParticleLayer = forwardRef<HTMLCanvasElement>(function ParticleLaye
   return <canvas ref={ref} className="particle-layer" width={1920} height={1080} aria-hidden="true" />;
 });
 
+// 舞い落ちる葉と花びら(位置・遅れ・時間。どの画面でも同じなので、描くたびに作らない)
+const LEAVES = [
+  { left: 180, delay: 0, time: 13 },
+  { left: 520, delay: -4, time: 15 },
+  { left: 820, delay: -9, time: 17, petal: true },
+  { left: 1240, delay: -2, time: 14 },
+  { left: 1520, delay: -7, time: 16, petal: true },
+  { left: 1760, delay: -11, time: 13 },
+].map((leaf) => ({
+  key: leaf.left,
+  className: leaf.petal ? 'drift petal' : 'drift',
+  style: { left: leaf.left, '--d': `${leaf.delay}s`, '--t': `${leaf.time}s` } as CSSProperties,
+}));
+
 /** 舞い落ちる葉と花びら(撮影・合体の画面の .drift と同じ飾り) */
 export function Drift() {
-  const leaves: { left: number; delay: number; time: number; petal?: boolean }[] = [
-    { left: 180, delay: 0, time: 13 },
-    { left: 520, delay: -4, time: 15 },
-    { left: 820, delay: -9, time: 17, petal: true },
-    { left: 1240, delay: -2, time: 14 },
-    { left: 1520, delay: -7, time: 16, petal: true },
-    { left: 1760, delay: -11, time: 13 },
-  ];
   return (
     <div className="drift-layer" aria-hidden="true">
-      {leaves.map((leaf) => (
-        <span
-          key={leaf.left}
-          className={leaf.petal ? 'drift petal' : 'drift'}
-          style={{ left: leaf.left, '--d': `${leaf.delay}s`, '--t': `${leaf.time}s` } as CSSProperties}
-        />
-      ))}
+      {LEAVES.map((leaf) => <span key={leaf.key} className={leaf.className} style={leaf.style} />)}
     </div>
   );
 }

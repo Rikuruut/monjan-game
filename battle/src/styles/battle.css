@@ -291,12 +291,10 @@
 .revealed-hand--concealed b { color: var(--sun); animation: secretPulse 0.7s ease-in-out infinite alternate; }
 @keyframes secretPulse { to { transform: scale(1.12); } }
 
-/* 選んだ → じゃん → けん → ぽん!:手がはねる(拍ごとに別の動きにして、毎回動き直す) */
-.round-feedback--selected .revealed-hand--player { animation: handIn 0.4s cubic-bezier(.2, 1.4, .4, 1) both; }
+/* じゃん → けん → ぽん!:手がはねる(拍ごとに別の動きにして、毎回動き直す) */
 .round-feedback--janken-jan .revealed-hand { animation: beatA 0.35s ease-out; }
 .round-feedback--janken-ken .revealed-hand { animation: beatB 0.35s ease-out; }
 .round-feedback--janken-pon .revealed-hand { animation: beatA 0.35s ease-out; }
-@keyframes handIn { from { opacity: 0; transform: translateY(260px) scale(0.5); } }
 @keyframes beatA { 40% { transform: translateY(-40px) rotate(-8deg); } }
 @keyframes beatB { 40% { transform: translateY(-40px) rotate(8deg); } }
 

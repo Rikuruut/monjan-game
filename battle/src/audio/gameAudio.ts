@@ -4,7 +4,6 @@ export type GameSound =
   | 'start'
   | 'select'
   | 'summon'
-  | 'rarity'
   | 'janken-jan'
   | 'janken-ken'
   | 'janken-pon'
@@ -217,10 +216,6 @@ function scheduleGameSound(context: AudioContext, kind: GameSound, options: Game
       scheduleTone(context, now, 196, 0.48, 0.06, 'triangle', 392);
       scheduleTone(context, now + 0.24, 523.25, 0.3, 0.045, 'sine', 783.99);
       scheduleTone(context, now + 0.42, 1046.5, 0.2, 0.035, 'sine');
-      break;
-    case 'rarity':
-      [880, 1108.73, 1318.51].forEach((frequency, index) =>
-        scheduleTone(context, now + index * 0.09, frequency, 0.1, 0.038, 'sine'));
       break;
     case 'janken-jan':
       scheduleTone(context, now, 220, 0.18, 0.06, 'triangle', 180);

@@ -78,6 +78,14 @@ const cpu = {
   image: '/monsters/cpu.png',
 };
 
+// fetch を差しかえ、パスごとに決まった JSON を返す
+function stubFetch(byPath: Record<string, unknown>) {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
+    ok: true,
+    json: async () => byPath[String(input)],
+  })));
+}
+
 function mockDataFetch() {
   const byPath: Record<string, unknown> = {
     '/data/game-config.json': {
@@ -88,10 +96,7 @@ function mockDataFetch() {
     '/player.json': player,
     '/cpu.json': cpu,
   };
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
-    ok: true,
-    json: async () => byPath[String(input)],
-  })));
+  stubFetch(byPath);
 }
 
 async function advance(milliseconds: number) {
@@ -169,13 +174,6 @@ function expectCpuHandToBeConcealed() {
   const panel = getCpuHandPanel();
   expect(within(panel).getByLabelText('CPUの手はまだひみつ')).toBeInTheDocument();
   expect(within(panel).queryByRole('img', { name: 'グー' })).not.toBeInTheDocument();
-}
-
-function setRandomSequence(...values: number[]) {
-  const random = vi.mocked(Math.random);
-  random.mockReset();
-  values.forEach((value) => random.mockReturnValueOnce(value));
-  random.mockReturnValue(0);
 }
 
 describe('画面上のゲーム進行と演出', () => {
@@ -263,10 +261,7 @@ describe('画面上のゲーム進行と演出', () => {
       '/cpu.json': cpu,
       '/third.json': third,
     };
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
-      ok: true,
-      json: async () => byPath[String(input)],
-    })));
+    stubFetch(byPath);
 
     await startToPractice();
     await playPractice();
@@ -290,10 +285,7 @@ describe('画面上のゲーム進行と演出', () => {
       '/player.json': player,
       '/cpu.json': weakCpu,
     };
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
-      ok: true,
-      json: async () => byPath[String(input)],
-    })));
+    stubFetch(byPath);
 
     await startToPractice();
     await playPractice();
@@ -621,10 +613,7 @@ describe('画面上のゲーム進行と演出', () => {
       '/player.json': weak === 'player' ? { ...player, hp: 1000 } : player,
       '/cpu.json': weak === 'cpu' ? { ...cpu, hp: 1000 } : cpu,
     };
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
-      ok: true,
-      json: async () => byPath[String(input)],
-    })));
+    stubFetch(byPath);
 
     await startToPractice();
     await advance(SUMMON_DISPLAY_MS);
@@ -733,10 +722,7 @@ describe('撮影・合体の画面とのつなぎと、会場の3つのボタン
       '/cpu.json': cpu,
       '/api/battle-monster/abc': generated,
     };
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
-      ok: true,
-      json: async () => byPath[String(input)],
-    })));
+    stubFetch(byPath);
   });
 
   afterEach(() => {
