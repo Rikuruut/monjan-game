@@ -5,6 +5,9 @@
 "use strict";
 
 const params = new URLSearchParams(location.search);
+// ?embed=1:ほかの画面にはめこむ(バトルのありがとうの画面)。背景なしで、カードを窓いっぱいに
+const embed = params.get("embed") === "1";
+document.documentElement.classList.toggle("embed", embed);
 const cardEl = document.getElementById("card");
 
 // タイプのバッジ:アイコン(撮影の画面 static/common/app.js の ELEMENT_STYLES と同じ)と、子供向けのひらがな
@@ -67,7 +70,7 @@ function formatNo(no) {
 // 画面で見るときは、カードを窓いっぱいに大きく見せる(印刷は CSS の @media print で実寸)
 function fitPreview() {
   const mm = 96 / 25.4;   // 1mm の CSS ピクセル
-  const zoom = Math.min(window.innerWidth / (63 * mm), window.innerHeight / (88 * mm)) * 0.9;
+  const zoom = Math.min(window.innerWidth / (63 * mm), window.innerHeight / (88 * mm)) * (embed ? 1 : 0.9);
   document.documentElement.style.setProperty("--zoom", Math.max(zoom, 1).toFixed(3));
 }
 window.addEventListener("resize", fitPreview);
@@ -104,7 +107,9 @@ async function main() {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
     const card = await res.json();
     fill(card);
-    await Promise.all([loadImage(card.image), document.fonts.ready]);
+    // 絵・ロゴ・フォントを読み終えてから印刷する(ロゴは読めなくても止めない)
+    const logo = document.getElementById("card-logo");
+    await Promise.all([loadImage(card.image), document.fonts.ready, logo.decode().catch(() => {})]);
     fitName();
     cardEl.dataset.ready = "1";
     if (params.get("print") === "1") window.print();
@@ -116,7 +121,7 @@ async function main() {
 }
 
 // 撮影の画面に重ねて見せているときは、カードの中でキーを押しても閉じられるように知らせる(app.js の showCardPreview)
-if (window.parent !== window && params.get("print") !== "1") {
+if (window.parent !== window && params.get("print") !== "1" && !embed) {
   document.addEventListener("keydown", () => window.parent.postMessage("monjan-card-close", location.origin));
 }
 

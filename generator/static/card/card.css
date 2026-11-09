@@ -189,26 +189,55 @@ html, body {
   overflow: hidden;
 }
 
-/* 小ロゴ(仮)と No. */
+/* 下の段:タイプの色の帯(台座)に、ロゴと No. を乗せる。
+   ロゴだけを置くと、カードから浮いた「張りぼて」に見えたので(2026年11月9日 依頼者)、
+   カードの枠と同じ色・素材の帯を作り、ロゴを帯から少し上にはみ出させて「立たせる」 */
 .card-foot {
+  position: relative;
+  flex: none;
+  height: 5.6mm;
+  margin-top: 1.6mm;   /* ロゴが上にはみ出すぶん */
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: flex-end;
+  padding: 0 1.2mm;
+  border-radius: 1.4mm;
+  background:
+    repeating-linear-gradient(135deg, rgb(255 255 255 / 0.07) 0 0.6mm, transparent 0.6mm 1.4mm),
+    linear-gradient(180deg, color-mix(in srgb, var(--el) 80%, #fff), var(--el) 55%, color-mix(in srgb, var(--el) 70%, #000));
+  box-shadow:
+    inset 0 0.25mm 0 rgb(255 255 255 / 0.45),    /* 上のふちの明るい線 */
+    inset 0 -0.25mm 0 rgb(0 0 0 / 0.25),
+    0 0.3mm 0.6mm rgb(0 0 0 / 0.2);
 }
+
+/* ロゴ(static/card/logo.png。元は リポジトリの一番上の カード用ロゴ.png。tools/make_card_logo.py で背景を抜いた)。
+   文字がつぶれないよう、高さ 7.2mm(小さい「ゃ」でも 約2mm)より小さくしない */
 .card-logo {
-  padding: 0.4mm 1.2mm;
-  border-radius: 0.8mm;
-  border: 0.3mm solid var(--el);
-  font-family: "Dela Gothic One", sans-serif;
-  font-size: 2.2mm;
-  line-height: 1.1;
-  color: var(--el);
+  position: absolute;
+  left: 0.6mm;
+  bottom: 0.5mm;
+  height: 7.2mm;
+  width: auto;
+  display: block;
+  /* 白いふち(シールの縁)+ 下にうすい影。カードの色が何でもロゴが沈まない */
+  filter:
+    drop-shadow(0.22mm 0 0 #fff) drop-shadow(-0.22mm 0 0 #fff)
+    drop-shadow(0 0.22mm 0 #fff) drop-shadow(0 -0.22mm 0 #fff)
+    drop-shadow(0 0.45mm 0.35mm rgb(0 0 0 / 0.35));
 }
+
+/* No.:帯の右の、濃い色の丸いバッジ */
 .card-no {
+  padding: 0.7mm 1.8mm 0.6mm;
+  border-radius: 99mm;
+  background: color-mix(in srgb, var(--el) 35%, #1a1410);
+  border: 0.25mm solid rgb(255 255 255 / 0.7);
   font-family: "Dela Gothic One", sans-serif;
   font-size: 2.6mm;
+  line-height: 1;
   letter-spacing: 0.1mm;
-  color: #6b5d4c;
+  color: #fff;
 }
 
 .card-error {
@@ -232,6 +261,10 @@ html, body {
   }
   .card-error { color: #ff8a8a; }
 
+  /* はめこみ(?embed=1。バトルのありがとうの画面):背景なし・影なし(まわりの光はバトルの画面が付ける) */
+  .embed body { background: transparent; overflow: hidden; }
+  .embed .card { box-shadow: none; }
+
   /* ---- キラキラ(画面で見るときだけ。印刷・PDF には出さない) ---- */
   /* ホログラムの枠:タイプの色の枠に、虹色のうすい模様がゆっくり流れる */
   .card::before {
@@ -240,12 +273,15 @@ html, body {
     inset: 0;
     z-index: 0;   /* 白い紙(.card-inner)の下。見えるのは枠のところだけ */
     pointer-events: none;
+    /* 淡い虹色。最初と最後の色をそろえ、0〜100% の中だけを行き来させる。
+       ※ 2026年11月9日:0% → 300% で動かしていたころ、模様の繰り返しの境目(黄 → ピンク)が枠の中に入り、
+         色が2つにくっきり分かれて見えた。濃さも控えめにした(依頼者:派手すぎないように) */
     background: linear-gradient(115deg,
-      #ff7ac8 0%, #ffd36b 16%, #8dffb4 33%, #6bd8ff 50%, #b48dff 66%, #ff7ac8 83%, #ffd36b 100%);
+      #ffc2e2 0%, #ffe7b0 20%, #c8f5d8 40%, #bfe8ff 60%, #dccbff 80%, #ffc2e2 100%);
     background-size: 300% 300%;
-    mix-blend-mode: overlay;
-    opacity: 0.55;
-    animation: holo 6s linear infinite;
+    mix-blend-mode: soft-light;
+    opacity: 0.4;
+    animation: holo 10s ease-in-out infinite alternate;
   }
   /* 光の帯:斜めの白い光が、数秒ごとにカードの上をすっと横切る */
   .card::after {
@@ -258,7 +294,7 @@ html, body {
     z-index: 3;
     pointer-events: none;
     background: linear-gradient(100deg,
-      transparent 0%, rgb(255 255 255 / 0) 30%, rgb(255 255 255 / 0.55) 50%, rgb(255 255 255 / 0) 70%, transparent 100%);
+      transparent 0%, rgb(255 255 255 / 0) 20%, rgb(255 255 255 / 0.28) 50%, rgb(255 255 255 / 0) 80%, transparent 100%);
     transform: translateX(-150%) skewX(-18deg);
     animation: shine 4.5s ease-in-out infinite;
   }
@@ -292,7 +328,7 @@ html, body {
 
   @keyframes holo {
     from { background-position: 0% 50%; }
-    to   { background-position: 300% 50%; }
+    to   { background-position: 100% 50%; }
   }
   @keyframes shine {
     0%, 55% { transform: translateX(-150%) skewX(-18deg); }

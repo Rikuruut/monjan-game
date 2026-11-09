@@ -38,6 +38,7 @@ import {
   GENERATOR_URL,
   navigateTo,
   readLaunch,
+  cardPreviewUrl,
   usePadButtons,
   type Launch,
   type PadButton,
@@ -990,7 +991,11 @@ function ResultScreen({
   );
 }
 
-function ThanksScreen({ monster, onTitle }: { monster: Monster; onTitle: () => void }) {
+// ありがとう:もらえるカード(左)と、ことば(右)。
+// 撮影のモンスターは、実際に刷ったカード(generator の /card。No. つき)をそのまま見せる
+// (2026年11月9日。画面と手元のカードをそろえ、スタッフが No. を見て渡せるように)。
+// バトルの見本・単体の開発用は、刷ったカードがないので、これまでのカード
+function ThanksScreen({ monster, cardUrl, onTitle }: { monster: Monster; cardUrl: string | null; onTitle: () => void }) {
   const theme = getAttributeTheme(monster.attribute);
   return (
     <main className="screen thanks-screen">
@@ -998,14 +1003,21 @@ function ThanksScreen({ monster, onTitle }: { monster: Monster; onTitle: () => v
       <div className="result-rays" aria-hidden="true" />
       <Drift />
       <section className="thanks-card">
-        <div className="thanks-card__visual">
-          <div className={`acquired-card acquired-card--${theme}`}>
-            <MonsterCard monster={monster} className="acquired-card__card" />
-            <div className="acquired-card__stats">
-              <span><small>こうげき</small><Swords count={statCount(monster.attack)} /></span>
-              <span><small>HP</small><Hearts current={statCount(monster.hp)} max={statCount(monster.hp)} /></span>
+        <div className={`thanks-card__visual ${cardUrl ? 'thanks-card__visual--printed' : ''}`}>
+          {cardUrl ? (
+            <div className="printed-card">
+              {/* フォーカスを取らない(会場の3つのボタンは、このページで受ける) */}
+              <iframe className="printed-card__frame" src={cardUrl} title="もらえるカード" tabIndex={-1} />
             </div>
-          </div>
+          ) : (
+            <div className={`acquired-card acquired-card--${theme}`}>
+              <MonsterCard monster={monster} className="acquired-card__card" />
+              <div className="acquired-card__stats">
+                <span><small>こうげき</small><Swords count={statCount(monster.attack)} /></span>
+                <span><small>HP</small><Hearts current={statCount(monster.hp)} max={statCount(monster.hp)} /></span>
+              </div>
+            </div>
+          )}
         </div>
         <div className="thanks-card__side">
           <p className="acquisition-kicker">✦ SPECIAL MONSTER CARD ✦</p>
@@ -1548,7 +1560,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   if (screen === 'title') {
     content = <TitleScreen onStart={pressStart} />;
   } else if (screen === 'thanks') {
-    content = <ThanksScreen monster={data.player} onTitle={returnToTitle} />;
+    content = <ThanksScreen monster={data.player} cardUrl={cardPreviewUrl(launch)} onTitle={returnToTitle} />;
   } else if (screen === 'practice-clear') {
     content = <ResultScreen kind="practice" monster={data.player} onContinue={startBattle} />;
   } else if (screen !== 'battle') {

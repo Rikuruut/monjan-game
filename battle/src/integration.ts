@@ -26,6 +26,18 @@ export function battleMonsterUrl(photoId: string, name?: string | null): string 
 // 撮影・合体の画面のテストプレイで使う見本(ゴリラ × はさみ)の ID(generator/app/battle.py の DEMO_ID)
 export const DEMO_PHOTO_ID = 'demo';
 
+/**
+ * ありがとうの画面に出す、実際に刷ったカードのページ(generator/static/card/。`embed=1` で背景なし)。
+ * 撮影のモンスター(`?photo=`・テストプレイの見本)だけ。バトルの見本・単体の開発用(サーバーなし)は null。
+ */
+export function cardPreviewUrl(launch: Launch): string | null {
+  if (!launch.toGenerator || !launch.photoId) return null;
+  const url = `/card?id=${encodeURIComponent(launch.photoId)}&embed=1`;
+  return launch.photoId === DEMO_PHOTO_ID && launch.playerName
+    ? `${url}&name=${encodeURIComponent(launch.playerName)}`
+    : url;
+}
+
 /** 別のページ(撮影・合体の画面)へ移る。 */
 export function navigateTo(url: string) {
   window.location.href = url;

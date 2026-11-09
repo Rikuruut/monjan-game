@@ -764,6 +764,16 @@ describe('撮影・合体の画面とのつなぎと、会場の3つのボタン
     expect(navigateTo).not.toHaveBeenCalled();
   });
 
+  it('ありがとうの画面では、生まれたモンスターの実際に刷ったカードを出す', async () => {
+    render(<App launch={{ photoId: 'abc', skipTitle: true, toGenerator: true }} />);
+    await screen.findByText('れんしゅう');
+    fireEvent.keyDown(window, { key: 'd' });
+    const menu = screen.getByRole('complementary', { name: '開発者メニュー' });
+    fireEvent.click(within(menu).getByRole('tab', { name: '画面・勝ち負け' }));
+    fireEvent.click(within(menu).getByRole('button', { name: 'ありがとう' }));
+    expect(screen.getByTitle('もらえるカード')).toHaveAttribute('src', '/card?id=abc&embed=1');
+  });
+
   it('← / Enter / → だけで、スタートから練習ラウンド・本番のじゃんけんまで遊べる', async () => {
     render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
     await screen.findByRole('button', { name: /スタート！/ });
@@ -813,6 +823,7 @@ describe('開発者メニュー(D キー)', () => {
     mockDataFetch();
     vi.spyOn(Math, 'random').mockReturnValue(0);
     window.sessionStorage.clear();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
@@ -820,25 +831,46 @@ describe('開発者メニュー(D キー)', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     window.sessionStorage.clear();
+    window.localStorage.clear();
   });
 
   const openMenu = () => fireEvent.keyDown(window, { key: 'd' });
+  const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name }));
 
   it('D で開き、画面へとべて、モンスターの中身が見える', async () => {
     render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
     await screen.findByRole('button', { name: /スタート！/ });
     openMenu();
     const menu = screen.getByRole('complementary', { name: '開発者メニュー' });
+    // 最初は「よく使う」のタブ。中身は「データ」のタブ
+    expect(screen.getByRole('tab', { name: 'よく使う' })).toHaveAttribute('aria-selected', 'true');
+    openTab('データ');
     expect(menu).toHaveTextContent('ボトルマンタ');
     expect(menu).toHaveTextContent('パンチイーグル');
 
+    openTab('画面・勝ち負け');
     fireEvent.click(within(menu).getByRole('button', { name: 'かち' }));
     expect(screen.getByRole('heading', { name: 'しょうり！' })).toBeInTheDocument();
     fireEvent.click(within(menu).getByRole('button', { name: 'ありがとう' }));
     expect(screen.getByText(/あそんでくれて ありがとう/)).toBeInTheDocument();
+    // 見本のモンスターは刷ったカードがないので、これまでのカード
+    expect(screen.queryByTitle('もらえるカード')).not.toBeInTheDocument();
 
     openMenu();
     expect(screen.queryByRole('complementary', { name: '開発者メニュー' })).not.toBeInTheDocument();
+  });
+
+  it('最後に開いたタブを、閉じて開き直しても出す', async () => {
+    render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
+    await screen.findByRole('button', { name: /スタート！/ });
+    openMenu();
+    openTab('攻撃エフェクト');
+    expect(screen.getByRole('button', { name: '8つ順番に' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /開始/ })).not.toBeInTheDocument();
+    openMenu();
+    openMenu();
+    expect(screen.getByRole('tab', { name: '攻撃エフェクト' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: '8つ順番に' })).toBeInTheDocument();
   });
 
   it('「かつ」にすると、ふつうなら あいこ になる手でも勝つ', async () => {
@@ -846,6 +878,7 @@ describe('開発者メニュー(D キー)', () => {
     await screen.findByRole('button', { name: /スタート！/ });
     vi.useFakeTimers();
     openMenu();
+    openTab('画面・勝ち負け');
     fireEvent.click(screen.getByRole('radio', { name: 'かつ' }));
     fireEvent.click(screen.getByRole('button', { name: 'バトル' }));
     fireEvent.click(screen.getByRole('button', { name: 'とじる' }));

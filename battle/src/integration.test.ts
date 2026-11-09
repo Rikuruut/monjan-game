@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assetUrl, BASE_URL, battleMonsterUrl, padButtonOf, readLaunch } from './integration';
+import { assetUrl, BASE_URL, battleMonsterUrl, cardPreviewUrl, padButtonOf, readLaunch } from './integration';
 
 describe('撮影・合体の画面とのつなぎ', () => {
   it('?photo= があれば、そのモンスターですぐバトルから始める', () => {
@@ -19,6 +19,15 @@ describe('撮影・合体の画面とのつなぎ', () => {
     expect(readLaunch('', true)).toEqual({ photoId: null, playerName: null, skipTitle: false, toGenerator: true });
     expect(readLaunch('', false).toGenerator).toBe(false);
     expect(readLaunch('?standalone=1', true).toGenerator).toBe(false);
+  });
+
+  it('ありがとうの画面のカードは、撮影のモンスターだけ実際に刷ったカードのページ', () => {
+    expect(cardPreviewUrl(readLaunch('?photo=abc', true))).toBe('/card?id=abc&embed=1');
+    expect(cardPreviewUrl(readLaunch('?photo=20261109_103949', true))).toBe('/card?id=20261109_103949&embed=1');
+    expect(cardPreviewUrl(readLaunch('?play=demo&name=%E3%82%B4%E3%83%AA', true))).toBe('/card?id=demo&embed=1&name=%E3%82%B4%E3%83%AA');
+    expect(cardPreviewUrl(readLaunch('?play=sample', true))).toBeNull();
+    expect(cardPreviewUrl(readLaunch('?photo=abc', false))).toBeNull();          // 単体の開発用(サーバーなし)
+    expect(cardPreviewUrl(readLaunch('?photo=abc&standalone=1', true))).toBeNull();
   });
 
   it('public/ のファイルには公開する場所を付け、サーバーの API はそのまま', () => {

@@ -39,6 +39,7 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
   - ⚔(attack)は 1〜3、♡(hp)は 3〜5 をランダム。絵ができたときに決めて `result.json` の `battle` に残す(カード印刷と数字をそろえるため)
   - id は photo_id のほか、`outputs/` のフォルダ名(絵は `/api/output-image/<フォルダ名>`)と `demo`(見本のゴリラ × はさみ。`?name=` で名前)も受け付ける
   - カード印刷(試作):誕生の「いんさつ」→ `/card?id=<photo_id>`(同じ id の形。⚔♡は `result.json` の `battle` を個数で載せる)。くわしくは `generator/CLAUDE.md` の 1.
+  - ありがとうの画面は、撮影のモンスター(`?photo=`・テストプレイの見本)なら実際に刷ったカードを iframe で見せる(`/card?id=<id>&embed=1`。`integration.ts` の `cardPreviewUrl`。スタッフが No. を見て渡せる)。バトルの見本・単体の開発用は これまでのカード
   - CPU は バトルの見本のモンスター(`battle/public/data/monsters/`)からランダム。練習ラウンドの相手は、本番の CPU・自分のモンスター以外の見本(本番の相手は本番の召喚ではじめて出る。見本が足りないときだけ同じ)
 - バトル側のつなぎは `battle/src/integration.ts` にまとめてある(URL の読み方・パス・3つのボタン)
   - `?photo=<id>`:そのモンスターで、タイトルを飛ばしてルール説明から
@@ -52,6 +53,8 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
 
 ## 開発者メニュー
 D キーか右下の ⚙ で開く(会場の3つのボタンでは開かない)。撮影・合体(`generator/static/common/app.js`)とバトル(`battle/src/DevMenu.tsx`)で同じ見た目で、上の3つは共通。
+- タブで分けてある(2026年11月9日。最後に開いたタブを `localStorage` の `monjan-dev-tab-generator` / `-battle` に覚える)。1つ目の「よく使う」が下の3つ。撮影側:演出を見る・前回の結果(エラーが出ると見ていないときタブに赤い点)・スマホ・名前のテスト / バトル側:画面・勝ち負け・攻撃エフェクト・データ。各項目に説明の1行と、料金の印(無料 / API 有料)
+- 見た目の CSS は `generator/static/common/common.css` と `battle/src/styles/devmenu.css` に同じものを置いている(片方を変えたら、もう片方も)
 - ページ:タイトル・撮影・テストプレイ(`/?autotest=1`)・見本でバトル
 - 通しの自動プレイ:タイトル → テストプレイ → バトル(手はランダム)→ 結果 → タイトル をくり返す(API なし。展示前の耐久テスト用)。`sessionStorage` の `monjan-autoplay` で2つのページに受け渡す。メニューを開いているあいだは止まる
 - 作ったモンスターで戦う:`GET /api/recent-monsters`(`outputs/` の新しい順に30件)から選ぶと `/battle/?photo=<フォルダ名>`(サーバーを再起動したあとでも戦える)

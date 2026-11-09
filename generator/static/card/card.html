@@ -11,7 +11,7 @@
 <body>
   <!-- カード1枚(63×88mm)。中身は card.js が /api/card-data/<id> から差し込む。
        レイアウトは依頼者の案(2026年11月9日):
-         名前 [タイプ] / 動物 × 物 / 絵 / こうげき ⚔⚔⚔⚔⚔ たいりょく ♥♥♥♥♥(数だけ満) / 説明 / [小ロゴ] No.0042 -->
+         名前 [タイプ] / 動物 × 物 / 絵 / こうげき ⚔⚔⚔⚔⚔ たいりょく ♥♥♥♥♥(数だけ満) / 説明 / [ロゴ] No.0042 -->
   <main class="sheet">
     <article id="card" class="card" data-ready="0">
       <!-- キラキラの星(画面で見るときだけ。card.css) -->
@@ -31,8 +31,8 @@
         </div>
         <p id="card-desc" class="card-desc"></p>
         <footer class="card-foot">
-          <!-- 小ロゴは仮(ロゴができたら、ここを <img> にする) -->
-          <span class="card-logo">モンじゃん!</span>
+          <!-- ロゴ(tools/make_card_logo.py で背景を抜いたもの) -->
+          <img id="card-logo" class="card-logo" src="/static/card/logo.png" alt="モンじゃん!">
           <span id="card-no" class="card-no"></span>
         </footer>
       </div>
