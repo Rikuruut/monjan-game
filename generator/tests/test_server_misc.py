@@ -7,9 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main
-from app import storage
-from tests.test_api_dry_run import upload
-from tests.test_battle import make_output
+from app import config, pipeline, storage
+from app.routes import generate, name_test
+from app.ws_manager import ws_manager
+from tests.helpers import make_output, upload
 
 
 @pytest.fixture
@@ -33,7 +34,7 @@ def test_usage_log_counts_cumulative_cost(tmp_path):
 
 
 def test_build_usage_with_costs_adds_to_log():
-    usage = main.build_usage(
+    usage = pipeline.build_usage(
         check={"estimated_cost_usd": 0.001, "total_tokens": 10},
         describe=None,
         generate={"estimated_cost_usd": 0.02, "total_tokens": 400},
@@ -41,20 +42,20 @@ def test_build_usage_with_costs_adds_to_log():
     assert usage["total_cost_usd"] == pytest.approx(0.021)
     assert usage["describe"] == {}
     assert usage["cumulative_cost_usd"] == pytest.approx(0.021)
-    lines = (main.OUTPUTS_DIR / storage.USAGE_LOG_NAME).read_text(encoding="utf-8").splitlines()
+    lines = (config.OUTPUTS_DIR / storage.USAGE_LOG_NAME).read_text(encoding="utf-8").splitlines()
     entry = json.loads(lines[-1])
     assert entry["cost_usd"] == pytest.approx(0.021)
     assert entry["check_tokens"] == 10 and entry["generate_tokens"] == 400
 
     # 2回目は累計が増える
-    again = main.build_usage(generate={"estimated_cost_usd": 0.02})
+    again = pipeline.build_usage(generate={"estimated_cost_usd": 0.02})
     assert again["cumulative_cost_usd"] == pytest.approx(0.041)
 
 
 def test_build_usage_without_cost_does_not_log():
-    usage = main.build_usage(check={}, generate=None)
+    usage = pipeline.build_usage(check={}, generate=None)
     assert usage["total_cost_usd"] is None and "cumulative_cost_usd" not in usage
-    assert not (main.OUTPUTS_DIR / storage.USAGE_LOG_NAME).exists()
+    assert not (config.OUTPUTS_DIR / storage.USAGE_LOG_NAME).exists()
 
 
 # ----------------------------------------------------------------------
@@ -68,12 +69,12 @@ def test_name_test_dry_run(client):
     assert len(data["runs"]) == 3 and all(r["name"] for r in data["runs"])
     assert data["total_cost_usd"] == 0 and data["cumulative_cost_yen"] is None
     # からうちのダミーの名前は残さない
-    assert not (main.OUTPUTS_DIR / main.NAME_TEST_LOG_NAME).exists()
+    assert not (config.OUTPUTS_DIR / name_test.NAME_TEST_LOG_NAME).exists()
 
 
 def test_name_test_limits_count_and_needs_object(client):
     data = client.post("/api/name-test", data={"animal": "ネコ", "object_name": "かさ", "count": 50}).json()
-    assert len(data["runs"]) == main.NAME_TEST_MAX_COUNT
+    assert len(data["runs"]) == name_test.NAME_TEST_MAX_COUNT
     res = client.post("/api/name-test", data={"animal": "ネコ", "object_name": "  "})
     assert res.status_code == 400
 
@@ -100,7 +101,7 @@ def test_cache_header_only_on_pages(client):
 
 def test_info_and_qr(client):
     info = client.get("/api/info").json()
-    assert info["phone_url"].endswith(f":{main.PORT}/phone")
+    assert info["phone_url"].endswith(f":{config.PORT}/phone")
     assert info["phone_connected"] is False
     assert info["text_model"] == "test-text-model"
     first = client.get("/api/qr")
@@ -132,8 +133,8 @@ def test_recent_monsters_newest_30(client):
 
 def test_recent_monsters_skips_odd_folders(client):
     make_output("20261102_090000")
-    (main.OUTPUTS_DIR / "notes").mkdir()
-    bad = main.OUTPUTS_DIR / "20261102_100000"
+    (config.OUTPUTS_DIR / "notes").mkdir()
+    bad = config.OUTPUTS_DIR / "20261102_100000"
     bad.mkdir()
     (bad / "monster.png").write_bytes(b"\x89PNG")
     (bad / "result.json").write_text("{こわれている", encoding="utf-8")
@@ -150,15 +151,15 @@ def test_choose_name_while_drawing(client, monkeypatch):
         # 名前の候補が届いたら(絵ができる前に)、子供が最後の候補を選んだことにする
         if stage == "names":
             chosen["name"] = extra["name_choices"][-1]
-            await main.api_choose_name(photo_id=extra["photo_id"], name=chosen["name"])
+            await generate.api_choose_name(photo_id=extra["photo_id"], name=chosen["name"])
 
     async def ignore(*args, **kwargs):
         pass
 
-    monkeypatch.setattr(main.ws_manager, "notify_progress", record)
-    monkeypatch.setattr(main.ws_manager, "notify_name_chosen", ignore)
+    monkeypatch.setattr(ws_manager, "notify_progress", record)
+    monkeypatch.setattr(ws_manager, "notify_name_chosen", ignore)
     data = client.post("/api/generate", data={"photo_id": upload(client)["photo_id"]}).json()
     assert data["monster"]["monster_name"] == chosen["name"]
     assert data["monster"]["name_chosen_by_child"] is True
-    result = json.loads((main.OUTPUTS_DIR / data["output_dir"] / "result.json").read_text(encoding="utf-8"))
+    result = json.loads((config.OUTPUTS_DIR / data["output_dir"] / "result.json").read_text(encoding="utf-8"))
     assert result["monster"]["monster_name"] == chosen["name"]

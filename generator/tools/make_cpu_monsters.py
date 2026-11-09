@@ -40,7 +40,8 @@ load_dotenv(BASE_DIR / ".env", override=True)
 from app.generator import get_generator  # noqa: E402
 from app.openai_client import get_client, get_image_timeout, is_dry_run  # noqa: E402
 from app.pricing import read_usage, to_yen  # noqa: E402
-from app.recognizer import choose_plan, combine, describe, quick_check  # noqa: E402
+from app.card import CPU_PURPOSE  # noqa: E402
+from app.recognizer import choose_plan, combine, describe, image_design_plan, object_parts, quick_check  # noqa: E402
 from app.storage import append_usage_log, save_result  # noqa: E402
 
 logger = logging.getLogger("make_cpu_monsters")
@@ -99,10 +100,8 @@ def make_one(animal: str, object_name: str, slug: str, number: int, out_dir: Pat
     first, _ = combine(animal, plan, check, None)
     if first["needs_retake"]:
         raise RuntimeError(f"{animal} × {object_name}:撮り直しと判定されました({first['retake_reason']})")
-    parts = {k: first[k] for k in ("object_part", "object_sub_part") if first.get(k)}
-    design_plan: dict = {}
-    plan.apply(design_plan, animal)
-    design_plan.update(parts)
+    parts = object_parts(first)
+    design_plan = image_design_plan(plan, animal, parts)
 
     details = describe(photo, animal, first["object_name"], plan, False)
     monster, notes = combine(animal, plan, check, details)
@@ -121,7 +120,7 @@ def make_one(animal: str, object_name: str, slug: str, number: int, out_dir: Pat
 
     battle = {"attack": random.choice(CPU_ATTACK_CHOICES), "hp": random.choice(CPU_HP_CHOICES)}
     result = {
-        "created_at": datetime.now().isoformat(timespec="seconds"), "animal": animal, "purpose": "CPU用",
+        "created_at": datetime.now().isoformat(timespec="seconds"), "animal": animal, "purpose": CPU_PURPOSE,
         "monster": monster, "validator_notes": notes, "usage": {**usages, "total_cost_usd": total},
         "image_prompt": generation.prompt, "needs_retake": False, "battle": battle,
     }

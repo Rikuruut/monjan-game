@@ -11,16 +11,13 @@ outputs/<フォルダ>/card.pdf に残す(あとで見直す・刷り直すた�
 
 from __future__ import annotations
 
-import json
-import logging
 import os
-import re
 import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("monjan")
+from .storage import OUTPUT_NAME_PATTERN, iter_finished_outputs
 
 CARD_PDF_NAME = "card.pdf"
 
@@ -37,17 +34,8 @@ PDF_WRITE_WAIT_SECONDS = 40
 PDF_POLL_SECONDS = 0.5
 
 
-# outputs/ のフォルダ名の形(storage.make_output_dir。YYYYMMDD_HHMMSS、同じ秒なら _2 など)
-_OUTPUT_NAME = re.compile(r"^(\d{8})_\d{6}(_\d+)?$")
 # CPU 用に作ったモンスター(tools/make_cpu_monsters.py)の印。番号は付けない
 CPU_PURPOSE = "CPU用"
-
-
-def _read_json(path: Path) -> dict[str, Any] | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
 
 
 def is_numbered(result: dict[str, Any]) -> bool:
@@ -57,17 +45,7 @@ def is_numbered(result: dict[str, Any]) -> bool:
 
 def _numbered_folders(outputs_dir: Path, day: str) -> list[tuple[str, dict[str, Any]]]:
     """その日(YYYYMMDD)に作った、番号を付けるモンスターのフォルダ(作った順)。"""
-    found = []
-    if not outputs_dir.is_dir():
-        return found
-    for d in sorted(outputs_dir.iterdir()):
-        m = _OUTPUT_NAME.match(d.name)
-        if not m or m.group(1) != day or not (d / "monster.png").is_file():
-            continue
-        result = _read_json(d / "result.json")
-        if result is not None and is_numbered(result):
-            found.append((d.name, result))
-    return found
+    return [(name, result) for name, result in iter_finished_outputs(outputs_dir, day=day) if is_numbered(result)]
 
 
 def next_card_number(outputs_dir: Path, day: str) -> int:
@@ -88,7 +66,7 @@ def card_number(outputs_dir: Path, out_name: str, result: dict[str, Any]) -> int
     saved = (result.get("card") or {}).get("no")
     if isinstance(saved, int):
         return saved
-    m = _OUTPUT_NAME.match(out_name or "")
+    m = OUTPUT_NAME_PATTERN.match(out_name or "")
     if not m:
         return None
     names = [name for name, _ in _numbered_folders(outputs_dir, m.group(1))]

@@ -13,13 +13,14 @@ from fastapi.testclient import TestClient
 import app.main as main
 from app import card, kiosk
 from app.card import CARD_PDF_NAME, card_number, next_card_number, pdf_command, to_card
-from tests.test_api_dry_run import upload
-from tests.test_battle import make_output
+from app import config, session
+from app.routes import monsters
+from tests.helpers import make_output, upload
 
 
 def edit_result(name, **fields):
     """make_output で作った result.json に項目を足す。"""
-    path = main.OUTPUTS_DIR / name / "result.json"
+    path = config.OUTPUTS_DIR / name / "result.json"
     result = json.loads(path.read_text(encoding="utf-8"))
     result.update(fields)
     path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
@@ -57,7 +58,7 @@ def test_card_data_by_output_folder(client):
 def test_card_data_by_photo_id_uses_folder_image(client):
     # いま作ったモンスター(photo_id)でも、絵はサーバーを再起動しても見られるフォルダの URL にする
     make_output("20261102_090000")
-    main._photo_outputs["a" * 32] = "20261102_090000"
+    session.photo_outputs["a" * 32] = "20261102_090000"
     c = client.get("/api/card-data/" + "a" * 32).json()
     assert c["id"] == "a" * 32
     assert c["image"] == "/api/output-image/20261102_090000"
@@ -99,18 +100,18 @@ def test_card_pdf_api_saves_into_output_folder(client, monkeypatch):
         out = next(a for a in args if a.startswith("--print-to-pdf=")).split("=", 1)[1]
         Path(out).write_bytes(b"%PDF-1.4")
 
-    monkeypatch.setattr(main, "find_browser", lambda: Path("C:/edge/msedge.exe"))
+    monkeypatch.setattr(monsters, "find_browser", lambda: Path("C:/edge/msedge.exe"))
     monkeypatch.setattr(card.subprocess, "run", fake_run)
     monkeypatch.setattr(card, "PDF_POLL_SECONDS", 0.05)
     res =client.post("/api/card-pdf/20261102_090000").json()
     assert res == {"ok": True, "output_dir": "20261102_090000", "file": CARD_PDF_NAME}
-    assert (main.OUTPUTS_DIR / "20261102_090000" / CARD_PDF_NAME).read_bytes() == b"%PDF-1.4"
+    assert (config.OUTPUTS_DIR / "20261102_090000" / CARD_PDF_NAME).read_bytes() == b"%PDF-1.4"
     assert calls[0][-1].endswith("/card?id=20261102_090000")
 
 
 def test_card_pdf_api_reports_failure(client, monkeypatch):
     make_output("20261102_090000")
-    monkeypatch.setattr(main, "find_browser", lambda: Path("C:/edge/msedge.exe"))
+    monkeypatch.setattr(monsters, "find_browser", lambda: Path("C:/edge/msedge.exe"))
     monkeypatch.setattr(card.subprocess, "run", lambda args, **kwargs: None)   # PDF を書き出さない
     monkeypatch.setattr(card, "PDF_WRITE_WAIT_SECONDS", 0.3)
     monkeypatch.setattr(card, "PDF_POLL_SECONDS", 0.05)
@@ -136,7 +137,7 @@ def test_card_number_counts_only_that_day():
     make_output("20261102_095000")
     make_output("20261102_100000")
     edit_result("20261102_100000", purpose="CPU用")  # CPU 用
-    out = main.OUTPUTS_DIR
+    out = config.OUTPUTS_DIR
     read = lambda n: json.loads((out / n / "result.json").read_text(encoding="utf-8"))
     assert card_number(out, "20261101_230000", read("20261101_230000")) == 1
     assert card_number(out, "20261102_090000", read("20261102_090000")) == 1
@@ -149,7 +150,7 @@ def test_card_number_counts_only_that_day():
 def test_saved_card_number_wins():
     make_output("20261102_090000")
     edit_result("20261102_090000", card={"no": 7})
-    out = main.OUTPUTS_DIR
+    out = config.OUTPUTS_DIR
     result = json.loads((out / "20261102_090000" / "result.json").read_text(encoding="utf-8"))
     assert card_number(out, "20261102_090000", result) == 7
     assert next_card_number(out, "20261102") == 8   # 残っている番号の次
@@ -161,7 +162,7 @@ def test_generate_saves_card_number(client):
         photo_id = upload(client, animal="ゴリラ")["photo_id"]
         data = client.post("/api/generate", data={"photo_id": photo_id}).json()
         assert data["ok"] is True, data
-        result = json.loads((main.OUTPUTS_DIR / data["output_dir"] / "result.json").read_text(encoding="utf-8"))
+        result = json.loads((config.OUTPUTS_DIR / data["output_dir"] / "result.json").read_text(encoding="utf-8"))
         assert data["output_dir"].startswith(datetime.now().strftime("%Y%m%d"))
         nos.append(result["card"]["no"])
         assert client.get("/api/card-data/" + photo_id).json()["no"] == result["card"]["no"]

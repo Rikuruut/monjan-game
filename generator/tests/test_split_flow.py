@@ -7,9 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main
-from app import generator, recognizer
+from app import generator, pipeline, recognizer
+from app.ws_manager import ws_manager
 from app.prompts import build_recognize_instructions
-from tests.test_api_dry_run import upload
+from tests.helpers import upload
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def stages(monkeypatch):
     async def record(stage, **extra):
         sent.append((stage, extra))
 
-    monkeypatch.setattr(main.ws_manager, "notify_progress", record)
+    monkeypatch.setattr(ws_manager, "notify_progress", record)
     return sent
 
 
@@ -91,8 +92,8 @@ def test_quick_check_unreadable_is_retake_without_drawing(client, stages, monkey
     def must_not_call(*args, **kwargs):
         raise AssertionError("撮り直しなのに呼ばれました")
 
-    monkeypatch.setattr(main, "get_generator", must_not_call)
-    monkeypatch.setattr(main, "describe", must_not_call)
+    monkeypatch.setattr(pipeline, "get_generator", must_not_call)
+    monkeypatch.setattr(pipeline, "describe", must_not_call)
 
     data = client.post("/api/generate", data={"photo_id": upload(client)["photo_id"]}).json()
     assert data["ok"] is True and data["needs_retake"] is True
@@ -105,7 +106,7 @@ def test_quick_check_retake(client, stages, monkeypatch):
             {"needs_retake": True, "retake_reason": "ひとが うつっているよ", "has_person": True, "object_name": "ひと"},
             0.1, "test-text-model")
 
-    monkeypatch.setattr(main, "quick_check", retake)
+    monkeypatch.setattr(pipeline, "quick_check", retake)
     data = client.post("/api/generate", data={"photo_id": upload(client)["photo_id"]}).json()
     assert data["needs_retake"] is True and data["retake_reason"] == "ひとが うつっているよ"
     assert "generate" not in data["timings"]
@@ -116,7 +117,7 @@ def test_describe_failure_still_makes_monster(client, stages, monkeypatch):
     def broken(*args, **kwargs):
         raise recognizer.RecognizeError("名前・説明の呼び出しに失敗しました")
 
-    monkeypatch.setattr(main, "describe", broken)
+    monkeypatch.setattr(pipeline, "describe", broken)
     data = client.post("/api/generate", data={"photo_id": upload(client)["photo_id"]}).json()
     assert data["ok"] is True
     assert data["monster"]["monster_name"] == "なぞのモンスター"
@@ -247,7 +248,7 @@ def test_revealed_tells_phone_after_pc_birth(client, monkeypatch):
 
     photo_id = upload(client)["photo_id"]
     client.post("/api/generate", data={"photo_id": photo_id})
-    monkeypatch.setattr(main.ws_manager, "notify_revealed", record)
+    monkeypatch.setattr(ws_manager, "notify_revealed", record)
     res = client.post("/api/revealed", data={"photo_id": photo_id})
     assert res.status_code == 200
     assert sent == [(photo_id, f"/api/monster-image/{photo_id}")]

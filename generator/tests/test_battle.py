@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 
 import app.main as main
 from app.battle import ATTACK_CHOICES, HP_CHOICES, make_battle_stats, to_battle_monster
-from tests.test_api_dry_run import upload
+from app import config, session
+from tests.helpers import make_output, upload
 
 
 @pytest.fixture
@@ -55,11 +56,11 @@ def test_battle_monster_api_uses_saved_stats_and_chosen_name(client):
     photo_id = upload(client, animal="ゴリラ")["photo_id"]
     data = client.post("/api/generate", data={"photo_id": photo_id}).json()
     assert data["ok"] is True, data
-    result_path = main.OUTPUTS_DIR / data["output_dir"] / "result.json"
+    result_path = config.OUTPUTS_DIR / data["output_dir"] / "result.json"
     saved = json.loads(result_path.read_text(encoding="utf-8"))["battle"]
 
     # 絵ができたあとに子供が名前を選んでも、バトルにはその名前が渡る
-    other = main._name_choices[photo_id][-1]
+    other = session.name_choices[photo_id][-1]
     assert client.post("/api/choose-name", data={"photo_id": photo_id, "name": other}).status_code == 200
 
     m = client.get(f"/api/battle-monster/{photo_id}").json()
@@ -84,20 +85,6 @@ def test_battle_monster_api_demo(client):
     # 名前がなければ見本の名前。長すぎる名前は切る
     assert client.get("/api/battle-monster/demo").json()["name"] == "ゴリザミ"
     assert len(client.get("/api/battle-monster/demo", params={"name": "ア" * 100}).json()["name"]) == 20
-
-
-def make_output(name, *, retake=False, image=True, monster_name="ゴリシザー"):
-    """outputs/ に、前に作ったモンスターのフォルダを作る(テストでは一時フォルダ)。"""
-    d = main.OUTPUTS_DIR / name
-    d.mkdir(parents=True)
-    result = {
-        "created_at": "2026-11-02T10:00:00", "animal": "ゴリラ", "needs_retake": retake,
-        "monster": {"monster_name": monster_name, "object_name": "はさみ", "element": "風"},
-        "battle": {"attack": 3000, "hp": 5000},
-    }
-    (d / "result.json").write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
-    if image:
-        (d / "monster.png").write_bytes(b"\x89PNG\r\n\x1a\n")
 
 
 def test_recent_monsters_lists_finished_ones_newest_first(client):
@@ -128,7 +115,7 @@ def test_output_image_rejects_bad_names(client):
 
 
 def test_battle_page_is_served(client):
-    if not (main.BATTLE_DIR / "index.html").is_file():
+    if not (config.BATTLE_DIR / "index.html").is_file():
         pytest.skip("static/battle/ がまだビルドされていない")
     res = client.get("/battle/")
     assert res.status_code == 200

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import base64
 import logging
-import os
 import random
 import time
 from dataclasses import dataclass, field
@@ -16,6 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from .env import env_str
 from .openai_client import allow_person, get_client, is_dry_run
 from .pricing import format_cost, read_usage
 from .prompts import (
@@ -87,6 +87,11 @@ def _to_data_url(photo_bytes: bytes) -> str:
     return f"data:image/jpeg;base64,{b64}"
 
 
+def _pick_avoiding(pool, last: str | None) -> str:
+    """候補からランダムに1つ選ぶ。直前(`last`)と同じものは選ばない(候補がそれしかなければ選ぶ)。"""
+    return random.choice([x for x in pool if x != last] or list(pool))
+
+
 # 直前に選んだ融合の型(同じ型が続かないようにするため。サーバーを再起動すると忘れる)
 _last_fusion_type: str | None = None
 
@@ -99,11 +104,10 @@ def choose_fusion_type() -> str:
     ランダムのときは、直前と同じ型を選ばない(4回続けて武器型になったことがあったため)。
     """
     global _last_fusion_type
-    fixed = (os.getenv("FUSION_TYPE") or "").strip().lower()
+    fixed = env_str("FUSION_TYPE", lower=True)
     if fixed in FUSION_TYPES:
         return fixed
-    candidates = [t for t in FUSION_TYPES if t != _last_fusion_type] or list(FUSION_TYPES)
-    _last_fusion_type = random.choice(candidates)
+    _last_fusion_type = _pick_avoiding(FUSION_TYPES, _last_fusion_type)
     return _last_fusion_type
 
 
@@ -119,12 +123,10 @@ def choose_fusion_part(animal: str) -> str:
     なければ、その動物で使うパターンの中からランダムに選ぶ。直前と同じパターンは選ばない。
     """
     global _last_fusion_part
-    fixed = (os.getenv("FUSION_PART") or "").strip().lower()
+    fixed = env_str("FUSION_PART", lower=True)
     if fixed in FUSION_PARTS:
         return fixed
-    pool = fusion_part_candidates(animal)
-    candidates = [k for k in pool if k != _last_fusion_part] or pool
-    _last_fusion_part = random.choice(candidates)
+    _last_fusion_part = _pick_avoiding(fusion_part_candidates(animal), _last_fusion_part)
     return _last_fusion_part
 
 
@@ -151,8 +153,7 @@ def choose_staging(poses: list[str] | None = None) -> dict[str, str]:
     staging = {key: random.choice(options) for key, options in STAGING_OPTIONS.items()}
     # ポーズは、取り込む場所や動物に合う候補から選ぶ(前足の回・水の中の動物:prompts.pose_candidates)
     staging["pose"] = random.choice(poses or STAGING_OPTIONS["pose"])
-    scenes = [s for s in STAGING_OPTIONS["scene"] if s != _last_scene] or STAGING_OPTIONS["scene"]
-    staging["scene"] = _last_scene = random.choice(scenes)
+    staging["scene"] = _last_scene = _pick_avoiding(STAGING_OPTIONS["scene"], _last_scene)
     return staging
 
 
@@ -163,12 +164,10 @@ def choose_background_place(animal: str) -> str:
     なければ、その動物のすみかの中からランダムに選ぶ。直前と同じ場所は選ばない。
     """
     global _last_background_place
-    fixed = (os.getenv("BACKGROUND") or "").strip()
+    fixed = env_str("BACKGROUND")
     if fixed:
         return fixed
-    pool = background_place_candidates(animal)
-    candidates = [p for p in pool if p != _last_background_place] or pool
-    _last_background_place = random.choice(candidates)
+    _last_background_place = _pick_avoiding(background_place_candidates(animal), _last_background_place)
     return _last_background_place
 
 
@@ -227,7 +226,7 @@ def choose_fusion_style() -> str:
 
     `.env` の FUSION_STYLE に weapon / body があればそれに固定し、なければ半分ずつ(依頼者の希望)。
     """
-    fixed = (os.getenv("FUSION_STYLE") or "").strip().lower()
+    fixed = env_str("FUSION_STYLE", lower=True)
     if fixed in FUSION_STYLES:
         return fixed
     return random.choice(FUSION_STYLES)
@@ -255,7 +254,7 @@ class StepResult:
 
 
 def _text_model() -> str:
-    model = (os.getenv("TEXT_MODEL") or "").strip()
+    model = env_str("TEXT_MODEL")
     if not model:
         raise RecognizeError(".envの TEXT_MODEL が設定されていません")
     return model
@@ -357,7 +356,7 @@ def recognize(photo_bytes: bytes, animal: str) -> RecognizeResult:
 # ※ 2026年11月2日:待ち時間を短くするため、判定を2つに分けた。
 #   それまでは1回の判定(14〜31秒)が終わってから画像生成(18〜21秒)を始めていた。
 #   画像生成に要るのは物の名前と撮り直しかどうかだけなので、それだけを先に短く判定し(quick_check)、
-#   名前・説明(describe)は画像生成と同時に作る(app/main.py の _generate_split)。
+#   名前・説明(describe)は画像生成と同時に作る(app/pipeline.py の _generate_split)。
 #   simple では設計図(design_plan)を画像に使わないので、作らない。
 class QuickCheck(BaseModel):
     """すぐ要る判定で返してもらう形式。"""
@@ -424,6 +423,22 @@ def describe(
     return StepResult(raw, elapsed, model, usage)
 
 
+def object_parts(first: dict[str, Any]) -> dict[str, str]:
+    """すぐ要る判定で分かった物のパーツ(object_part・object_sub_part。答えがあるものだけ)。
+
+    画像では物の全体ではなく、パーツごとに別々の場所へ作り変える(prompts.fusion_line)。
+    """
+    return {key: first[key] for key in ("object_part", "object_sub_part") if first.get(key)}
+
+
+def image_design_plan(plan: Plan, animal: str, parts: dict[str, str]) -> dict[str, Any]:
+    """短いプロンプトの画像生成に渡す design_plan(選んだ方向 + 物のパーツ)。"""
+    design_plan: dict[str, Any] = {}
+    plan.apply(design_plan, animal)
+    design_plan.update(parts)
+    return design_plan
+
+
 def combine(
     animal: str, plan: Plan, check: StepResult, details: StepResult | None
 ) -> tuple[dict[str, Any], list[str]]:
@@ -466,7 +481,7 @@ def generate_names(animal: str, object_name: str) -> dict[str, Any]:
 
     # からうちモード:APIを呼ばずにダミーの候補を返す(料金0円)
     if is_dry_run():
-        candidates = ["ダミーモン", "ダミガオン", "モノドラ"]
+        candidates = list(_DRY_DETAILS["name_candidates"])
         name, checked, notes = choose_monster_name(candidates, candidates[0], animal, object_name)
         return {**result, "name": name, "candidates": checked, "notes": notes,
                 "seconds": 0.0, "model": f"{model}(からうち)", "usage": {}}

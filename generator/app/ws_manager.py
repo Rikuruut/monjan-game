@@ -66,23 +66,23 @@ class WSManager:
     # ------------------------------------------------------------------
     # 送信
     # ------------------------------------------------------------------
-    async def send_to(self, ws: WebSocket, message: dict[str, Any]) -> None:
-        """1つの接続へ送る。失敗しても無視する。"""
+    async def send_to(self, ws: WebSocket, message: dict[str, Any]) -> bool:
+        """1つの接続へ送る。失敗しても無視する(切断済みなど)。送れたかを返す。"""
         try:
             await ws.send_json(message)
-        except Exception:  # 切断済みなど
+            return True
+        except Exception:
             logger.debug("WebSocket送信に失敗(無視)", exc_info=True)
+            return False
 
     async def broadcast(self, role: str, message: dict[str, Any]) -> int:
-        """その役割の全接続へ送る。送れた件数を返す。"""
+        """その役割の全接続へ送る。送れなかった接続は外す。送れた件数を返す。"""
         sent = 0
         # 送信中に集合が変わる可能性があるのでコピーしてから回す
         for ws in list(self._connections.get(role, ())):
-            try:
-                await ws.send_json(message)
+            if await self.send_to(ws, message):
                 sent += 1
-            except Exception:
-                logger.debug("WebSocket送信に失敗(無視)", exc_info=True)
+            else:
                 self._connections[role].discard(ws)
         return sent
 
@@ -143,3 +143,7 @@ class WSManager:
             "type": "upload_done",
             "photo_id": photo_id,
         })
+
+
+# サーバーで1つだけ使う(app/routes/・app/pipeline.py から送る)
+ws_manager = WSManager()

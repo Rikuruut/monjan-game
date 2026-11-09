@@ -11,7 +11,8 @@ import os
 
 from openai import OpenAI
 
-from .env import env_flag
+from .env import env_flag, env_str
+from .prompts import normalize_image_prompt_style
 
 # タイムアウトの既定値(秒)
 #
@@ -65,7 +66,6 @@ def image_prompt_style() -> str:
     detailed(設計図つきの詳しいプロンプト)/ simple(Playground と同じ短いプロンプト)。
     不明な値や未設定のときは detailed にする。
     """
-    from .prompts import normalize_image_prompt_style
     return normalize_image_prompt_style(os.getenv("IMAGE_PROMPT_STYLE"))
 
 
@@ -88,20 +88,25 @@ def get_image_timeout() -> float:
     return _read_seconds("IMAGE_TIMEOUT_SECONDS", DEFAULT_IMAGE_TIMEOUT_SECONDS)
 
 
+# 作ったクライアント((APIキー, タイムアウト) ごと)。
+# 毎回作り直すと、呼ぶたびに接続(TLS)をやり直すので使い回す。キーかタイムアウトが変われば作り直す
+_clients: dict[tuple[str, float], OpenAI] = {}
+
+
 def get_client(timeout: float | None = None) -> OpenAI:
-    """OpenAIクライアントを作って返す。
+    """OpenAIクライアントを返す。
 
     リトライはこちらで制御したいので、SDKの自動リトライは切る。
     `timeout`を渡さない場合は`API_TIMEOUT_SECONDS`を使う。
     """
-    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    api_key = env_str("OPENAI_API_KEY")
     if not api_key:
         raise MissingApiKeyError(
             ".envの OPENAI_API_KEY が設定されていません"
         )
 
-    return OpenAI(
-        api_key=api_key,
-        timeout=get_timeout() if timeout is None else timeout,
-        max_retries=0,
-    )
+    seconds = get_timeout() if timeout is None else timeout
+    client = _clients.get((api_key, seconds))
+    if client is None:
+        client = _clients[(api_key, seconds)] = OpenAI(api_key=api_key, timeout=seconds, max_retries=0)
+    return client

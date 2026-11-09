@@ -19,6 +19,7 @@ from typing import Callable, Protocol
 
 from PIL import Image as PILImage, ImageDraw, ImageFilter
 
+from .env import env_str
 from .openai_client import (
     allow_person,
     get_client,
@@ -120,8 +121,8 @@ class OpenAIImageGenerator:
     """
 
     def __init__(self) -> None:
-        self.model = (os.getenv("IMAGE_MODEL") or "").strip()
-        self.quality = (os.getenv("IMAGE_QUALITY") or "").strip().lower()
+        self.model = env_str("IMAGE_MODEL")
+        self.quality = env_str("IMAGE_QUALITY", lower=True)
         self.size = _valid_size(os.getenv("IMAGE_SIZE"))
         self.partial_images = partial_images_setting()
 
@@ -359,10 +360,7 @@ def _add_partial_image_cost(usage: dict, model: str, partial_count: int) -> None
 
 def _blurred(png: bytes, radius: int) -> bytes:
     """ぼかした画像(からうちモードの途中の絵)。"""
-    img = PILImage.open(io.BytesIO(png)).filter(ImageFilter.GaussianBlur(radius))
-    buf = io.BytesIO()
-    img.save(buf, "PNG")
-    return buf.getvalue()
+    return _png_bytes(PILImage.open(io.BytesIO(png)).filter(ImageFilter.GaussianBlur(radius)))
 
 
 def _dummy_image(size: str, animal: str, object_name: str) -> bytes:
@@ -388,6 +386,11 @@ def _dummy_image(size: str, animal: str, object_name: str) -> bytes:
         d.text((w // 2, y), text, fill=(70, 80, 110), anchor="mm")
         y += 26
 
+    return _png_bytes(img)
+
+
+def _png_bytes(img: PILImage.Image) -> bytes:
+    """画像を PNG のバイト列にする。"""
     buf = io.BytesIO()
     img.save(buf, "PNG")
     return buf.getvalue()

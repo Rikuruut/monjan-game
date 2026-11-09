@@ -90,7 +90,7 @@ NAME_RULES = """【モンスター名のつけ方】
 #   QUICK_CHECK_INSTRUCTIONS :短いプロンプト(simple)の、すぐ要る判定(物の名前・撮り直し・人)
 #   DESCRIBE_INSTRUCTIONS    :短いプロンプト(simple)の、名前・説明(画像生成と同時に作る)
 # ※ 2026年11月2日:simple で判定を2つに分けたときに部品にした。
-#   RECOGNIZE_INSTRUCTIONS の文は、分ける前と1字も変わらない(tests/test_prompts.py で確かめている)
+#   RECOGNIZE_INSTRUCTIONS の文は、分ける前と1字も変わらない(tests/test_split_flow.py で確かめている)
 # ※ 番号は組み立てるときに振る(部品には番号を書かない)
 
 _RULE_OBJECT_NAME = """写真に写っている物の名前(object_name)は、小学生にわかる言葉で答える。
@@ -456,7 +456,7 @@ def build_recognize_prompt(
 
     `fusion_type` は FUSION_TYPES のキー。指定された型に合わせて設計するよう伝える。
     `staging` は STAGING_OPTIONS から選んだ演出。pose と background をこの方向で書くよう伝える。
-    `fusion_place` は物を取り込む場所(短いプロンプト用)。モンスター名のヒントとして伝える。
+    `fusion_place` は物を取り込む場所。モンスター名のヒントとして伝える。
     """
     text = (
         f"子供が選んだ動物は「{animal}」です。\n"

@@ -161,7 +161,7 @@ def cut_description(text: str) -> str:
     """
     if len(text) <= MAX_DESCRIPTION:
         return text
-    head = text[:MAX_DESCRIPTION + 1]   # 41文字目が区切りなら、40文字ちょうどで切れる
+    head = text[:MAX_DESCRIPTION + 1]   # MAX_DESCRIPTION + 1 文字目が区切りなら、ちょうど MAX_DESCRIPTION 文字で切れる
     cut = max(head.rfind(mark) for mark in _DESCRIPTION_BREAKS)
     if cut < MIN_CUT_DESCRIPTION:
         return text[:MAX_DESCRIPTION]
@@ -247,7 +247,7 @@ def validate_monster(
     )
     notes.extend(name_notes)
 
-    # --- 説明文(40文字以内) ---
+    # --- 説明文(MAX_DESCRIPTION 文字以内) ---
     description = _as_text(raw.get("description"))
     if not description:
         description = DEFAULT_DESCRIPTION

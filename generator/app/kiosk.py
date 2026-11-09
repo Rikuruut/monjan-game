@@ -18,7 +18,7 @@ from typing import Callable
 
 from .env import env_flag
 
-logger = logging.getLogger("monjan")
+logger = logging.getLogger(__name__)
 
 # 探すブラウザ(上から順に。展示のPCは Windows なので Edge を先にする)
 BROWSER_CANDIDATES = [

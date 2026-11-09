@@ -10,8 +10,8 @@ OpenAI API は一切呼ばない(料金0円)。そのために2重に守って�
 
 import pytest
 
-import app.main as main  # 先に読みこむ(.env で上書きされるのを、ここで済ませておく)
-from app import generator, openai_client, recognizer
+import app.main  # noqa: F401  先に読みこむ(.env で上書きされるのを、ここで済ませておく)
+from app import config, generator, openai_client, recognizer, session
 
 
 def _no_api(*args, **kwargs):
@@ -36,10 +36,10 @@ def safe_env(monkeypatch, tmp_path):
     outputs = tmp_path / "outputs"
     uploads.mkdir()
     outputs.mkdir()
-    monkeypatch.setattr(main, "UPLOADS_DIR", uploads)
-    monkeypatch.setattr(main, "OUTPUTS_DIR", outputs)
+    monkeypatch.setattr(config, "UPLOADS_DIR", uploads)
+    monkeypatch.setattr(config, "OUTPUTS_DIR", outputs)
 
     # 名前の候補の記録は、テストごとに空にする
-    for store in (main._name_choices, main._chosen_names, main._photo_outputs):
+    for store in (session.name_choices, session.chosen_names, session.photo_outputs):
         store.clear()
     yield
