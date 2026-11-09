@@ -31,28 +31,33 @@ body { overflow: hidden; }
 
 /* ------------------------------------------------------------------ */
 /* 生まれたモンスターの絵(.card-art)の上を、光沢の帯がときどき流れる     */
-/* どのテーマにも付く。テーマ側で止めるときは [data-scene="s4"] .card-art::after { content: none; } */
+/* どのテーマにも付く(テーマの .card-art は overflow: hidden にする)。                */
+/* テーマ側で止めるときは [data-scene="s4"] .card-art::after { content: none; }     */
 /* ------------------------------------------------------------------ */
 .card-art { position: relative; }
 [data-scene="s4"] .card-art::after {
   content: "";
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 300%;
   pointer-events: none;
   /* 太い帯1本と、後ろを追いかける細い線1本 */
   background: linear-gradient(115deg,
     transparent 45%, #ffffff80 48.5%, #ffffffd9 50%, #ffffff80 51.5%, transparent 55%,
     transparent 56.5%, #ffffff8c 57.3%, transparent 58.1%);
-  background-size: 300% 100%;
-  background-position: 100% 0;
+  transform: translateX(-66.6667%);
   mix-blend-mode: screen;
   /* カードが出そろってから(どのテーマも 1.8 秒以内)流し始める。3.6 秒ごとに1回 */
   animation: gloss-sweep 3.6s ease-in-out 1.8s infinite;
+  /* ※ 2026年11月9日:background-position を動かしていたのを、3倍の幅の帯を transform で動かす形にした
+       (毎フレームの描き直しがなくなる。帯の大きさは元の背景と同じなので、斜めの角度も見た目も同じ) */
 }
 /* 0〜40%:左から右へ流れる / 40〜100%:お休み */
 @keyframes gloss-sweep {
-  0%        { background-position: 100% 0; }
-  40%, 100% { background-position: 0% 0; }
+  0%        { transform: translateX(-66.6667%); }
+  40%, 100% { transform: translateX(0); }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-scene="s4"] .card-art::after { display: none; }

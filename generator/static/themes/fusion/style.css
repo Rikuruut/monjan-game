@@ -277,7 +277,10 @@ body {
 .arm-moss  { fill: var(--moss); }
 .arm-petal { fill: var(--petal); }
 .arm-sun   { fill: #F2C14E; }   /* 木もれ日(淡い金のままだと地にとけるので、少し濃く) */
-.arms-b { fill: var(--white); opacity: 0; animation-duration: 7s; }
+.arms-b { fill: var(--white); opacity: 0; visibility: hidden; animation-duration: 7s; }
+/* 見えるのは s2 と、がったい中の1段目から(それまでは opacity 0 なので描かない。回る動きはそのまま続く) */
+[data-scene="s2"] .arms-b,
+[data-scene="s3"]:not([data-level="0"]) .arms-b { visibility: visible; }
 .bands  { fill: var(--sun); opacity: 0.3; animation-duration: 12s;
   -webkit-mask-image: radial-gradient(circle, #000 60%, transparent 74%);
           mask-image: radial-gradient(circle, #000 60%, transparent 74%); }
@@ -335,15 +338,15 @@ body {
   text-shadow: 0 2px 0 var(--ink), 0 0 8px var(--ink);
 }
 
-/* 吸いこまれる粒(effects.js が .mote を足す。外側の span を回し、中の i を中心へ動かして、らせんを描く)
+/* 吸いこまれる粒(effects.js が .mote を足す。うずの中心を軸に回しながら中心へ動かして、らせんを描く。
+   回る軸がうずの中心になるよう、transform の基準は粒の左上(= .inflow の中心)にする)
    種類:葉・花びら・光の粒・風の筋 */
 .inflow { position: absolute; z-index: 2; left: 300px; top: 300px; width: 0; height: 0; }
-.mote { position: absolute; left: 0; top: 0; width: 0; height: 0; }
-.mote i { position: absolute; left: 0; top: 0; border-radius: 50%; }
-.mote .m-leaf  { background: var(--leaf); border-radius: 0 100% 0 100%; box-shadow: inset 0 0 0 2px #ffffff55; }
-.mote .m-petal { background: var(--petal); border-radius: 50% 0 50% 50%; }
-.mote .m-light { background: #fffbe0; box-shadow: 0 0 10px 3px var(--sun); }
-.mote .m-wind  { background: #fff; box-shadow: 0 0 8px 2px var(--wind); border-radius: 999px; }
+.mote { position: absolute; left: 0; top: 0; border-radius: 50%; transform-origin: 0 0; }
+.mote.m-leaf  { background: var(--leaf); border-radius: 0 100% 0 100%; box-shadow: inset 0 0 0 2px #ffffff55; }
+.mote.m-petal { background: var(--petal); border-radius: 50% 0 50% 50%; }
+.mote.m-light { background: #fffbe0; box-shadow: 0 0 10px 3px var(--sun); }
+.mote.m-wind  { background: #fff; box-shadow: 0 0 8px 2px var(--wind); border-radius: 999px; }
 
 /* 誕生:中心の一点の光・はじける風・衝撃波の輪(ふだんは見えない) */
 .vortex-point {
@@ -600,11 +603,22 @@ body {
 .knob:disabled .knob-label { color: #7f9a8a; }
 .knob.empty { visibility: hidden; }
 .knob:focus-visible .knob-face { outline: 4px dashed var(--white); outline-offset: 16px; }
-/* がったい!のボタンは、押せるときだけ光って呼びかける */
-[data-scene="s2"] .knob-main .knob-face { animation: knob-call 1.4s ease-in-out infinite; }
+/* がったい!のボタンは、押せるときだけ光って呼びかける(ふちが花の色から金に変わり、まわりがぼうっと光る)
+   ※ 2026年11月9日:box-shadow を動かしていた(毎フレーム描き直し)のを、金のふちと光をのせた層の opacity を動かす形にした */
+[data-scene="s2"] .knob-main .knob-face::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* 元の光ったときと同じ影(ふちの外にだけ描かれるので、ボタンの面と花のしるしはそのまま見える) */
+  box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--sun), 0 7px 0 9px #061510, 0 0 50px 18px #ffe9a8cc;
+  opacity: 0;
+  pointer-events: none;
+  animation: knob-call 1.4s ease-in-out infinite;
+}
 @keyframes knob-call {
-  0%, 100% { box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--petal), 0 7px 0 9px #061510, 0 0 0 0 #ffe9a800; }
-  50%      { box-shadow: 0 0 0 6px var(--forest-deep), 0 0 0 9px var(--sun), 0 7px 0 9px #061510, 0 0 50px 18px #ffe9a8cc; }
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
 }
 
 /* 短いお知らせ */

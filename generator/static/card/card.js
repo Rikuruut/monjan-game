@@ -113,7 +113,11 @@ async function main() {
     await Promise.all([loadImage(card.image), document.fonts.ready, logo.decode().catch(() => {})]);
     fitName();
     cardEl.dataset.ready = "1";
-    if (params.get("print") === "1") window.print();
+    if (params.get("print") === "1") {
+      window.print();   // 印刷のダイアログが閉じる(キオスクの印刷なら送り終える)まで、ここで止まる
+      // 撮影の画面の見えない iframe で開いているときは、終わったことを知らせる(画面が iframe を片づける)
+      if (window.parent !== window) window.parent.postMessage("monjan-card-printed", location.origin);
+    }
   } catch (e) {
     const err = document.getElementById("card-error");
     err.hidden = false;

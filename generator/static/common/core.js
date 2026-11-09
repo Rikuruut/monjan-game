@@ -141,8 +141,19 @@ function closeCardPreview() {
   return true;
 }
 
+// 印刷が終わったら、見えない iframe を外す(カードのページのキラキラが、見えないまま動き続けないように)。
+// 念のため少し待つ(印刷の送り出しの途中で外さないように)
+const PRINT_FRAME_CLEANUP_MS = 10000;
+
 window.addEventListener("message", (ev) => {
-  if (ev.origin === location.origin && ev.data === "monjan-card-close") closeCardPreview();
+  if (ev.origin !== location.origin) return;
+  if (ev.data === "monjan-card-close") closeCardPreview();
+  else if (ev.data === "monjan-card-printed") {
+    const frame = el("print-frame");
+    if (frame && ev.source === frame.contentWindow) {
+      setTimeout(() => { if (el("print-frame") === frame) frame.remove(); }, PRINT_FRAME_CLEANUP_MS);
+    }
+  }
 });
 
 // 「いんさつ」:誕生の画面のまま、見えない iframe でカードのページを開いて印刷する(ページが自分で印刷する)。

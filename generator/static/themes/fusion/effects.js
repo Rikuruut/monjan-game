@@ -52,33 +52,31 @@
 
   function spawnMote(speed = 1) {
     if (inflow.childElementCount >= MAX_MOTES) return;
-    const mote = document.createElement("span");
-    mote.className = "mote";
-    const dot = document.createElement("i");
+    const mote = document.createElement("i");
     const kind = MOTE_KINDS[Math.floor(Math.random() * MOTE_KINDS.length)];
-    dot.className = kind.cls;
-    mote.appendChild(dot);
+    mote.className = "mote " + kind.cls;
     inflow.appendChild(mote);
     const size = gsap.utils.random(kind.w[0], kind.w[1]);
-    dot.style.width = size + "px";
-    dot.style.height = size * kind.h + "px";
+    mote.style.width = size + "px";
+    mote.style.height = size * kind.h + "px";
     const start = gsap.utils.random(0, 360);
     const turn = gsap.utils.random(150, 240);
     const radius = gsap.utils.random(250, 330);
     const tilt = kind.cls === "m-wind" ? 90 : gsap.utils.random(0, 360);
     const ms = gsap.utils.random(1100, 1800) / speed;
     const easeIn = "cubic-bezier(.55, .085, .68, .53)";   // だんだん速く(GSAP の power2.in に近い)
-    // うずと同じ時計回りに回りながら、中心へ近づくほど速くなる
+    // うずと同じ時計回りに回りながら、中心へ近づくほど速くなる。
+    // 回る(うずの中心が軸)・中心へ動く・自分の向き(粒の真ん中が軸)を1つの transform にまとめてある。
+    // ※ 2026年11月9日:それまでは外の span を回し、中の i を動かしていた(要素2つ・動き3つ)。
+    //   同じ長さ・同じ速さの変化なので、まとめても通り道は同じ。粒が多い「もうすぐ」で軽くなる
+    const at = (angle, distance, scale) =>
+      `rotate(${angle}deg) translate(calc(-50% + ${distance}px), -50%) ` +
+      `translate(50%, 50%) rotate(${tilt}deg) scale(${scale}) translate(-50%, -50%)`;
     mote.animate(
-      [{ transform: `rotate(${start}deg)` }, { transform: `rotate(${start + turn}deg)` }],
+      [{ transform: at(start, radius, 1) }, { transform: at(start + turn, 8, 0.3) }],
       { duration: ms, easing: easeIn, fill: "both" },
     ).onfinish = () => mote.remove();
-    dot.animate(
-      [{ transform: `translate(calc(-50% + ${radius}px), -50%) rotate(${tilt}deg) scale(1)` },
-       { transform: `translate(calc(-50% + 8px), -50%) rotate(${tilt}deg) scale(0.3)` }],
-      { duration: ms, easing: easeIn, fill: "both" },
-    );
-    dot.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: ms, fill: "both" });
+    mote.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: ms, fill: "both" });
   }
 
   function startMotes() {
@@ -106,7 +104,7 @@
   }
 
   // ----------------------------------------------------------------------
-  // 舞い散る 葉と花びら(tsParticles。たまごのテーマの紙吹雪と同じく、ゆれて回りながら、ゆっくり落ちる)
+  // 舞い散る 葉と花びら(tsParticles。ゆれて回りながら、ゆっくり落ちる)
   // ----------------------------------------------------------------------
   const svg = (viewBox, body) =>
     "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${body}</svg>`);
@@ -221,7 +219,6 @@
     if (lastScene === "s4") {
       gsap.killTweensOf(moved());
       gsap.set(moved(), { clearProps: "all" });
-      stage.classList.remove("fx-hold");
     }
     lastScene = scene;
     onScene();
@@ -238,7 +235,6 @@
     if (img.getAttribute("src") && img.decode) img.decode().catch(() => {});
     const card = $("#card");
     const nameEl = $("#card-name");
-    stage.classList.add("fx-hold");
     gsap.set(card, { autoAlpha: 0 });  // s4 になった瞬間にカードが見えないように
     // 動かす要素の形を、ここで1回にまとめて読ませる(GSAP は動かし始めるときに要素の形を読み、そのたびに画面の再計算が起きるため)。
     // カードはまだ隠れているので入れない(隠れた要素は、GSAP が一時的に表示して測るので、かえって重い)
@@ -299,7 +295,6 @@
 
     return new Promise((resolve) => {
       tl.eventCallback("onComplete", () => {
-        stage.classList.remove("fx-hold");
         clearMotes();
         resolve();
       });
