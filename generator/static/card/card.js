@@ -22,9 +22,10 @@ const ELEMENT_LABELS = {
   "無": { icon: "⚪", label: "ノーマル" },
 };
 
-// ⚔♥ の数(どちらも5つ並べ、数だけ「満」にする。こうげきは 1〜3、たいりょくは 3〜5)。
+// ⚔♥ の枠の数(いちばん多いときの数だけ並べ、数だけ「満」にする。こうげきは 1〜3、たいりょくは 3〜5)。
 // 文字と見た目は じゃんけんバトルと同じ(battle/src/App.tsx の Swords・Hearts、styles/base.css)
-const STAT_SLOTS = 5;
+const ATTACK_SLOTS = 3;
+const HP_SLOTS = 5;
 
 // 名前の文字の大きさ(mm)。枠に収まるまで小さくする
 const NAME_SIZE_MAX = 5;
@@ -35,17 +36,17 @@ function set(id, text) {
   document.getElementById(id).textContent = text;
 }
 
-// ⚔⚔⚔⚔⚔ / ♥♥♥♥♥ を作り、数だけ「満」(.on)にする。色は card.css
-function fillIcons(id, glyph, count) {
+// ⚔⚔⚔ / ♥♥♥♥♥ を作り、数だけ「満」(.on)にする。色は card.css
+function fillIcons(id, glyph, count, slots) {
   const box = document.getElementById(id);
   box.innerHTML = "";
-  for (let i = 0; i < STAT_SLOTS; i++) {
+  for (let i = 0; i < slots; i++) {
     const icon = document.createElement("span");
     icon.className = "icon" + (i < count ? " on" : "");
     icon.textContent = glyph;
     box.appendChild(icon);
   }
-  box.setAttribute("aria-label", count + " / " + STAT_SLOTS);
+  box.setAttribute("aria-label", count + " / " + slots);
 }
 
 // 名前が枠からはみ出さない大きさにする(フォントを読み終えてから呼ぶ。印刷・PDF も同じ大きさになる)。
@@ -84,8 +85,8 @@ function fill(card) {
   set("card-element-icon", el.icon);
   set("card-element-label", el.label);
   set("card-recipe", card.animal && card.object ? card.animal + " × " + card.object : "");
-  fillIcons("card-attack", "⚔", card.attack);
-  fillIcons("card-hp", "♥", card.hp);
+  fillIcons("card-attack", "⚔", card.attack, ATTACK_SLOTS);
+  fillIcons("card-hp", "♥", card.hp, HP_SLOTS);
   set("card-desc", card.description);
   set("card-no", formatNo(card.no));
 }

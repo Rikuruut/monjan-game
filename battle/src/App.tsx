@@ -256,7 +256,13 @@ function MonsterImage({ monster }: { monster: Monster }) {
 }
 
 /** 撮影・合体の画面の誕生カード(fusion の .card)と同じ作りのカード:名前とタイプの帯・絵 */
-function MonsterCard({ monster, className = '', imageClassName = '' }: { monster: Monster; className?: string; imageClassName?: string }) {
+// footer:絵の下にのせる段(バトルの こうげき ⚔ / HP ♥)。ほかの画面では使わない
+function MonsterCard({
+  monster,
+  className = '',
+  imageClassName = '',
+  footer,
+}: { monster: Monster; className?: string; imageClassName?: string; footer?: ReactNode }) {
   const theme = getAttributeTheme(monster.attribute);
   return (
     <div className={`monster-card ${className}`.trim()}>
@@ -267,6 +273,7 @@ function MonsterCard({ monster, className = '', imageClassName = '' }: { monster
       <div className={`monster-frame monster-image-container ${imageClassName}`.trim()}>
         <MonsterImage monster={monster} />
       </div>
+      {footer}
     </div>
   );
 }
@@ -327,19 +334,24 @@ function MonsterPanel({
             <i /><i /><b>✦</b>
           </div>
         )}
-        <MonsterCard monster={monster} imageClassName="monster-image-container--battle" />
-      </div>
-      {/* カードの下:こうげき ⚔ と HP ♥ を1枚の板にまとめる */}
-      <div className="monster-stats">
-        <span className="stat stat--attack">
-          <span className="stat__label">こうげき</span>
-          <Swords count={statCount(monster.attack)} glow={swordGlow} />
-        </span>
-        <span className="stat__divider" aria-hidden="true" />
-        <span className="stat stat--hp">
-          <span className="stat__label">HP</span>
-          <Hearts current={hp} max={statCount(monster.hp)} damage={phase === 'impact' ? damage : 0} />
-        </span>
+        {/* カードの下の段に、こうげき ⚔ と HP ♥(カードといっしょに動く) */}
+        <MonsterCard
+          monster={monster}
+          imageClassName="monster-image-container--battle"
+          footer={
+            <div className="monster-stats">
+              <span className="stat stat--attack">
+                <span className="stat__label">こうげき</span>
+                <Swords count={statCount(monster.attack)} glow={swordGlow} />
+              </span>
+              <span className="stat__divider" aria-hidden="true" />
+              <span className="stat stat--hp">
+                <span className="stat__label">HP</span>
+                <Hearts current={hp} max={statCount(monster.hp)} damage={phase === 'impact' ? damage : 0} />
+              </span>
+            </div>
+          }
+        />
       </div>
       {showDamage && <span className="damage-burst" aria-label={`${damage}ダメージ`}>−{damage}</span>}
     </article>

@@ -8,7 +8,7 @@
 - カードの印刷は**試作中**(2026年11月9日。レイアウトは仮。載せる項目は未定):
   - `/card?id=<photo_id・outputs のフォルダ名・demo>` がカード1枚(63×88mm。`static/card/`)。中身は `GET /api/card-data/{id}`(`app/card.py` の `to_card`。載せる項目を変えるときはここだけ)
   - 誕生(s4)の右「いんさつ」:見えない iframe で `/card?…&print=1` を開いて印刷し、同時に `POST /api/card-pdf/{id}` で `outputs/<フォルダ>/card.pdf` を残す(Edge をヘッドレスで起動。約8秒。Edge はコマンドが先に終わり、PDF はあとから書き出される)
-  - レイアウトは依頼者の案:名前・タイプ(ひらがな)/ 動物 × 物 / 絵 / こうげき・たいりょく(●○ を5つ)/ 説明 / 下の段はタイプの色の帯に ロゴ・No.。文字は端から 3mm 内側
+  - レイアウトは依頼者の案:名前・タイプ(ひらがな)/ 動物 × 物 / 絵 / こうげき(⚔ の枠3つ)・たいりょく(♥ の枠5つ)。数だけ「満」/ 説明 / 下の段はタイプの色の帯に ロゴ・No.。文字は端から 3mm 内側
   - ロゴは `static/card/logo.png`。元は依頼者の `../カード用ロゴ.png`(背景のマス目が焼き込まれた RGB)で、`tools/make_card_logo.py` が茶色のふちの外側を透明にして作る(ロゴが変わったら `.venv\Scripts\python.exe -m tools.make_card_logo ..\カード用ロゴ.png`)。文字がつぶれないよう高さ 7.2mm より小さくしない
   - No. は**その日に作った順**(4けた)。絵ができたときに `result.json` の `card.no` に残す(`card.next_card_number`)。撮り直し・CPU用は数えず、CPU用は No.----。記録にない古いものは、読むときに同じ数え方で出す。展示中に `outputs/` のフォルダを消すと次の番号がずれるので消さない
   - `.env` の `KIOSK_PRINTING=true` でキオスクに `--kiosk-printing`(ダイアログなしで既定のプリンター。既定は false)

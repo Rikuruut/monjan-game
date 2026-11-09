@@ -57,10 +57,11 @@
   --side-color: var(--leaf);
   position: absolute;
   top: 128px;
-  width: 680px;
+  width: 630px; /* 下の段(⚔・♥)のぶん細くして、真ん中の「どの手にする？」にかからないように */
 }
-.monster-panel--player { left: 170px; }
-.monster-panel--cpu { left: 1070px; --side-color: var(--petal); }
+/* カードの中心は x=510 / 1410 のまま(飛び道具などがこの位置を使う) */
+.monster-panel--player { left: 195px; }
+.monster-panel--cpu { left: 1095px; --side-color: var(--petal); }
 
 /* カードの上:あなた / CPU */
 .monster-tag {
@@ -87,23 +88,18 @@
   transition: filter 0.3s;
 }
 
-/* カードの下:こうげき ⚔ と HP ♥ の板(背景に負けないよう濃い板にのせる) */
+/* カードの下の段:こうげき ⚔ と HP ♥(上の名前の段 .monster-card__head と同じ作りで、カードとつなげる) */
 .monster-stats {
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: fit-content;
-  max-width: 650px; /* ⚔3・♥5 でも「どの手にする？」の札(x=825〜)にかからない */
-  margin-top: 22px;
-  padding: 6px 16px;
-  border: 3px solid var(--ink);
-  border-radius: 18px;
-  background: var(--panel);
-  box-shadow: 0 5px 0 var(--forest-deep), 0 10px 20px #0d221955;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--ink), var(--moss));
   color: var(--white);
 }
-/* 相手は右に寄せる(真ん中の「どの手にする？」にかぶらないように) */
-.monster-panel--cpu .monster-stats { margin-left: auto; }
 .stat { display: inline-flex; align-items: center; gap: 8px; }
 .stat__label {
   padding: 1px 10px 3px;
@@ -121,18 +117,18 @@
 .monster-stats .sword {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border: 3px solid var(--ink);
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #fff3c4, var(--gold) 55%, #c98f1c);
   box-shadow: 0 3px 0 var(--ink);
   color: var(--ink);
-  font-size: 30px;
+  font-size: 27px;
   font-weight: 900;
   text-shadow: none;
 }
-.monster-stats .hearts { gap: 2px; font-size: 46px; }
+.monster-stats .hearts { gap: 2px; font-size: 42px; }
 
 /* 真ん中の VS */
 .versus {
