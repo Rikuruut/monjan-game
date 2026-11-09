@@ -150,6 +150,27 @@ body { overflow: hidden; }
 .dev-monsters img { flex: none; object-fit: cover; }
 .dev-monsters span { display: grid; }
 .dev-monsters small { color: #6b7a93; }
+/* カード・PDF のボタン(撮影側だけ。モンスターの行の右に並べる) */
+.dev-monsters li { display: flex; gap: 4px; }
+.dev-monsters li > button:first-child { flex: 1; }
+.dev-monsters button.dev-monster-sub {
+  flex: none;
+  width: auto;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+/* カードの印刷に使う、見えない iframe(static/card/。中のページが自分で印刷する) */
+.print-frame {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  border: 0;
+  opacity: 0;   /* display: none・visibility: hidden だと、ブラウザによって印刷されないので使わない */
+  pointer-events: none;
+}
 .dev-autoplay-badge {
   position: fixed;
   left: 50%;
@@ -173,4 +194,33 @@ body { overflow: hidden; }
   --steel-soft: #8fb1d6;
   --font-body: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
   font-family: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Meiryo", sans-serif;
+}
+
+/* カードを画面の上に重ねて見せる(開発者メニューの「カード」「カードを見る」。開発者メニューより上) */
+.card-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.7);
+}
+.card-preview-frame {
+  width: min(90vw, 70vh);
+  height: 90vh;
+  border: 0;
+  border-radius: 12px;
+  background: #1d2330;
+}
+.card-preview-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  padding: 10px 18px;
+  font-size: 18px;
+  font-weight: 700;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
 }

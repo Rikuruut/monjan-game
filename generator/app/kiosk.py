@@ -42,6 +42,11 @@ def kiosk_enabled() -> bool:
     return env_flag("KIOSK_MODE", default=True)
 
 
+def kiosk_printing_enabled() -> bool:
+    """.env の KIOSK_PRINTING(既定 false)。true なら、印刷のダイアログを出さずに既定のプリンターで刷る。"""
+    return env_flag("KIOSK_PRINTING", default=False)
+
+
 def find_browser() -> Path | None:
     """使うブラウザを探す。.env の KIOSK_BROWSER に書いてあれば、それを使う。"""
     custom = os.getenv("KIOSK_BROWSER", "").strip()
@@ -66,14 +71,8 @@ def _wait_for_server(port: int, timeout: float = 30.0) -> bool:
     return False
 
 
-def _launch(url: str, port: int, on_close: Callable[[], None] | None = None) -> None:
-    browser = find_browser()
-    if browser is None:
-        logger.warning("キオスクモード:ブラウザ(Edge / Chrome)が見つかりませんでした。%s を手で開いてください", url)
-        return
-    if not _wait_for_server(port):
-        logger.warning("キオスクモード:サーバーの起動を待ちきれませんでした。%s を手で開いてください", url)
-        return
+def kiosk_args(browser: Path, url: str) -> list[str]:
+    """キオスクのブラウザの起動のしかた。"""
     args = [
         str(browser),
         "--kiosk", url,
@@ -84,6 +83,21 @@ def _launch(url: str, port: int, on_close: Callable[[], None] | None = None) -> 
         "--overscroll-history-navigation=0",   # 横にスワイプして「戻る」にならないようにする
         "--autoplay-policy=no-user-gesture-required",  # ページを移ったあとも、ボタンを押す前から音を出せるように
     ]
+    if kiosk_printing_enabled():
+        # カードの「いんさつ」で、ダイアログを出さずに既定のプリンターへ(プリンターの設定は Windows 側で決めておく)
+        args.append("--kiosk-printing")
+    return args
+
+
+def _launch(url: str, port: int, on_close: Callable[[], None] | None = None) -> None:
+    browser = find_browser()
+    if browser is None:
+        logger.warning("キオスクモード:ブラウザ(Edge / Chrome)が見つかりませんでした。%s を手で開いてください", url)
+        return
+    if not _wait_for_server(port):
+        logger.warning("キオスクモード:サーバーの起動を待ちきれませんでした。%s を手で開いてください", url)
+        return
+    args = kiosk_args(browser, url)
     try:
         started = time.monotonic()
         process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

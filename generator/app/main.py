@@ -32,8 +32,9 @@ from PIL import Image
 
 from .animals import ANIMAL_ICONS, ANIMALS, DEFAULT_ANIMAL_ICON, normalize_animal
 from .battle import DEMO_ID, demo_battle_monster, make_battle_stats, recent_monster_entry, to_battle_monster
+from .card import CARD_PDF_NAME, card_number, make_card_pdf, next_card_number, to_card
 from .generator import GenerationResult, PartialCallback, get_generator
-from .kiosk import kiosk_enabled, open_kiosk_in_background
+from .kiosk import find_browser, kiosk_enabled, open_kiosk_in_background
 from .net_utils import get_lan_ip, port_in_use
 from .openai_client import allow_person, image_prompt_style, is_dry_run
 from .pricing import format_cost, to_yen
@@ -98,7 +99,7 @@ async def no_cache_for_pages(request, call_next):
     """
     response = await call_next(request)
     path = request.url.path
-    if path in ("/", "/phone") or path.startswith(("/static/", "/battle")):
+    if path in ("/", "/phone", "/card") or path.startswith(("/static/", "/battle")):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -666,14 +667,17 @@ async def _save_success(
     _apply_chosen_name(run.photo_id, monster)
 
     report = run.report(monster, notes, generator_notes=generation.notes)
+    now = datetime.now()
     result = {
-        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "created_at": now.isoformat(timespec="seconds"),
         "animal": run.animal,
         **report,
         "image_prompt": generation.prompt,
         "needs_retake": False,
         # じゃんけんバトルの ⚔ と ♡(app/battle.py)
         "battle": make_battle_stats(),
+        # カードの No.(その日に作った順。app/card.py)。生成は _generate_lock で1つずつなので、番号はかぶらない
+        "card": {"no": next_card_number(OUTPUTS_DIR, now.strftime("%Y%m%d"))},
     }
     out_dir = await run_in_threadpool(
         save_result, OUTPUTS_DIR, run.photo_bytes, generation.image_bytes, result
@@ -722,6 +726,25 @@ async def api_battle_monster_demo(name: str | None = None) -> JSONResponse:
     return JSONResponse(demo_battle_monster(name))
 
 
+def _find_monster(monster_id: str) -> tuple[str, dict[str, Any], str | None]:
+    """photo_id か outputs/ のフォルダ名から、モンスターの記録を探す。
+
+    戻り値は (outputs/ のフォルダ名, result.json の中身, 絵の URL)。
+    絵の URL は、フォルダ名で探したときだけ /api/output-image/<フォルダ名>(photo_id のときは None = いま作った絵)。
+    """
+    if _OUTPUT_NAME_PATTERN.match(monster_id or ""):
+        result = _read_result(monster_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="そのモンスターは見つかりませんでした")
+        return monster_id, result, f"/api/output-image/{monster_id}"
+
+    out_name = _photo_outputs.get(_check_photo_id(monster_id))
+    result = _read_result(out_name) if out_name else None
+    if result is None:
+        raise HTTPException(status_code=404, detail="その写真のモンスターは見つかりませんでした")
+    return out_name, result, None
+
+
 @app.get("/api/battle-monster/{photo_id}")
 async def api_battle_monster(photo_id: str) -> JSONResponse:
     """できたモンスターを、じゃんけんバトルが読む形で返す(バトルの /battle/?photo=<photo_id> が読む)。
@@ -729,17 +752,50 @@ async def api_battle_monster(photo_id: str) -> JSONResponse:
     photo_id の代わりに outputs/ のフォルダ名も受け付ける(開発者メニューの「作ったモンスターで戦う」。
     サーバーを再起動したあとでも、前に作ったモンスターで戦える)。
     """
-    if _OUTPUT_NAME_PATTERN.match(photo_id or ""):
-        result = _read_result(photo_id)
-        if result is None:
-            raise HTTPException(status_code=404, detail="そのモンスターは見つかりませんでした")
-        return JSONResponse(to_battle_monster(photo_id, result, image=f"/api/output-image/{photo_id}"))
+    _, result, image = _find_monster(photo_id)
+    return JSONResponse(to_battle_monster(photo_id, result, image=image))
 
-    out_name = _photo_outputs.get(_check_photo_id(photo_id))
-    result = _read_result(out_name) if out_name else None
-    if result is None:
-        raise HTTPException(status_code=404, detail="その写真のモンスターは見つかりませんでした")
-    return JSONResponse(to_battle_monster(photo_id, result))
+
+# ----------------------------------------------------------------------
+# モンスターカード(印刷用。2026年11月9日の試作。app/card.py・static/card/)
+# ----------------------------------------------------------------------
+@app.get("/card")
+async def page_card() -> FileResponse:
+    """カードのページ。/card?id=<photo_id か outputs のフォルダ名か demo>(&print=1 で印刷)。"""
+    return FileResponse(STATIC_DIR / "card" / "card.html")
+
+
+@app.get("/api/card-data/{monster_id}")
+async def api_card_data(monster_id: str, name: str | None = None) -> JSONResponse:
+    """カードに載せる情報。demo は見本のゴリラ × はさみ(?name= で名前)。"""
+    if monster_id == DEMO_ID:
+        return JSONResponse(to_card(demo_battle_monster(name), no=0))
+    out_name, result, _ = _find_monster(monster_id)
+    # 絵は、サーバーを再起動したあとでも見られるフォルダ名の URL にする
+    monster = to_battle_monster(monster_id, result, image=f"/api/output-image/{out_name}")
+    no = card_number(OUTPUTS_DIR, out_name, result)
+    return JSONResponse(to_card(monster, result.get("created_at") or "", no))
+
+
+@app.post("/api/card-pdf/{monster_id}")
+async def api_card_pdf(monster_id: str) -> JSONResponse:
+    """カードを PDF にして outputs/<フォルダ>/card.pdf に残す(ブラウザを画面に出さずに使う。API は使わない)。"""
+    if monster_id == DEMO_ID:
+        return JSONResponse({"ok": False, "error": "見本のモンスターは PDF にしません"}, status_code=400)
+    out_name, _, _ = _find_monster(monster_id)
+    browser = find_browser()
+    if browser is None:
+        return JSONResponse({"ok": False, "error": "ブラウザ(Edge / Chrome)が見つかりません"}, status_code=500)
+    out_path = OUTPUTS_DIR / out_name / CARD_PDF_NAME
+    url = f"http://localhost:{PORT}/card?id={out_name}"
+    try:
+        # ブラウザがこのサーバーからカードのページを読むので、待つあいだもサーバーが止まらないよう別のスレッドで
+        await run_in_threadpool(make_card_pdf, browser, url, out_path)
+    except RuntimeError as e:
+        logger.warning("カードの PDF を作れませんでした(%s): %s", out_name, e)
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    logger.info("カードの PDF を保存しました: %s", out_path)
+    return JSONResponse({"ok": True, "output_dir": out_name, "file": CARD_PDF_NAME})
 
 
 # ----------------------------------------------------------------------

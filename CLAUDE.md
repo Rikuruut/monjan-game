@@ -38,6 +38,7 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
   - `name` は子供が選んだ名前、`attribute` はタイプ(火 など8つ。バトルの属性と同じ)、`image` は `/api/monster-image/{photo_id}`
   - ⚔(attack)は 1〜3、♡(hp)は 3〜5 をランダム。絵ができたときに決めて `result.json` の `battle` に残す(カード印刷と数字をそろえるため)
   - id は photo_id のほか、`outputs/` のフォルダ名(絵は `/api/output-image/<フォルダ名>`)と `demo`(見本のゴリラ × はさみ。`?name=` で名前)も受け付ける
+  - カード印刷(試作):誕生の「いんさつ」→ `/card?id=<photo_id>`(同じ id の形。⚔♡は `result.json` の `battle` を個数で載せる)。くわしくは `generator/CLAUDE.md` の 1.
   - CPU は バトルの見本のモンスター(`battle/public/data/monsters/`)からランダム。練習ラウンドの相手は、本番の CPU・自分のモンスター以外の見本(本番の相手は本番の召喚ではじめて出る。見本が足りないときだけ同じ)
 - バトル側のつなぎは `battle/src/integration.ts` にまとめてある(URL の読み方・パス・3つのボタン)
   - `?photo=<id>`:そのモンスターで、タイトルを飛ばしてルール説明から

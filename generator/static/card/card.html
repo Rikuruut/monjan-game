@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>モンスターカード</title>
+  <!-- フォントはネットから読まない(会場の Wi-Fi 対策)。Dela Gothic One と M PLUS Rounded 1c -->
+  <link rel="stylesheet" href="/static/vendor/fonts/gacha.css">
+  <link rel="stylesheet" href="/static/card/card.css">
+</head>
+<body>
+  <!-- カード1枚(63×88mm)。中身は card.js が /api/card-data/<id> から差し込む。
+       レイアウトは依頼者の案(2026年11月9日):
+         名前 [タイプ] / 動物 × 物 / 絵 / こうげき ⚔⚔⚔⚔⚔ たいりょく ♥♥♥♥♥(数だけ満) / 説明 / [小ロゴ] No.0042 -->
+  <main class="sheet">
+    <article id="card" class="card" data-ready="0">
+      <!-- キラキラの星(画面で見るときだけ。card.css) -->
+      <div class="sparkles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="card-inner">
+        <header class="card-head">
+          <h1 id="card-name" class="card-name"></h1>
+          <span class="card-element"><span id="card-element-icon" class="card-element-icon"></span><span id="card-element-label"></span></span>
+        </header>
+        <p id="card-recipe" class="card-recipe"></p>
+        <figure class="card-art">
+          <img id="card-img" alt="">
+        </figure>
+        <div class="card-stats">
+          <span class="stat stat-attack"><span class="stat-label">こうげき</span><span id="card-attack" class="icons"></span></span>
+          <span class="stat stat-hp"><span class="stat-label">たいりょく</span><span id="card-hp" class="icons"></span></span>
+        </div>
+        <p id="card-desc" class="card-desc"></p>
+        <footer class="card-foot">
+          <!-- 小ロゴは仮(ロゴができたら、ここを <img> にする) -->
+          <span class="card-logo">モンじゃん!</span>
+          <span id="card-no" class="card-no"></span>
+        </footer>
+      </div>
+    </article>
+  </main>
+  <p id="card-error" class="card-error" hidden></p>
+  <script src="/static/card/card.js"></script>
+</body>
+</html>

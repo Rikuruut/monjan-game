@@ -87,8 +87,74 @@ function buttonsFor(scene) {
   return {
     left: { label: "もう一回", action: restart },
     center: { label: "たたかう!", action: goBattle },
-    right: { label: "いんさつ", action: () => toast("いんさつは じゅんびちゅう") },
+    right: { label: "いんさつ", action: printCard },
   };
+}
+
+// ----------------------------------------------------------------------
+// カードの印刷(2026年11月9日の試作。カードのページは /card。static/card/・app/card.py)
+// ----------------------------------------------------------------------
+// いまのモンスターのカードの id。テストプレイ・見本(写真の ID がない)は demo
+function cardId() {
+  const id = state.photoId || "";
+  return /^[0-9a-f]{32}$/.test(id) ? id : "demo";
+}
+
+function cardUrl(id, extra = "") {
+  const name = id === "demo" ? "&name=" + encodeURIComponent(state.chosenName || demoName()) : "";
+  return "/card?id=" + encodeURIComponent(id) + name + extra;
+}
+
+// カードの PDF を outputs/<フォルダ>/card.pdf に残す(見本は残さない)。終わるまで画面は待たない
+function saveCardPdf(id) {
+  if (id === "demo") return Promise.resolve(null);
+  return fetch("/api/card-pdf/" + encodeURIComponent(id), { method: "POST" })
+    .then((r) => r.json())
+    .catch((e) => ({ ok: false, error: String(e) }));
+}
+
+// カードを、いまの画面の上に重ねて見せる(開発者メニュー用)。
+// ※ 2026年11月9日:はじめは新しいタブで開いていたが、キオスクにはタブの切りかえがなく、戻れなかった。
+//   閉じるのは「とじる」・外側のクリック・どのキーでも(カードの中でキーを押したときは card.js が知らせてくる)
+function showCardPreview(id) {
+  closeCardPreview();
+  const box = document.createElement("div");
+  box.id = "card-preview";
+  box.className = "card-preview";
+  box.innerHTML = '<iframe class="card-preview-frame" title="カード"></iframe>' +
+    '<button type="button" class="card-preview-close">× とじる(どのキーでも)</button>';
+  box.querySelector("iframe").src = cardUrl(id);
+  box.addEventListener("click", (ev) => { if (ev.target === box) closeCardPreview(); });
+  box.querySelector("button").addEventListener("click", closeCardPreview);
+  document.body.appendChild(box);
+}
+
+function closeCardPreview() {
+  const box = el("card-preview");
+  if (!box) return false;
+  box.remove();
+  return true;
+}
+
+window.addEventListener("message", (ev) => {
+  if (ev.origin === location.origin && ev.data === "monjan-card-close") closeCardPreview();
+});
+
+// 「いんさつ」:誕生の画面のまま、見えない iframe でカードのページを開いて印刷する(ページが自分で印刷する)。
+// .env の KIOSK_PRINTING=true のキオスクでは、ダイアログを出さずに既定のプリンターで刷る
+function printCard() {
+  const id = cardId();
+  el("print-frame")?.remove();
+  const frame = document.createElement("iframe");
+  frame.id = "print-frame";
+  frame.className = "print-frame";
+  frame.setAttribute("aria-hidden", "true");
+  frame.src = cardUrl(id, "&print=1");
+  document.body.appendChild(frame);
+  toast("いんさつ しているよ");
+  saveCardPdf(id).then((res) => {
+    if (res && !res.ok) console.warn("カードの PDF を作れませんでした:", res.error);
+  });
 }
 
 // じゃんけんバトル(友人の担当。/battle/)へ。できたモンスターは、バトルが /api/battle-monster/<photo_id> から読む。
@@ -170,6 +236,12 @@ document.addEventListener("keydown", (ev) => {
   const tag = (ev.target.tagName || "").toLowerCase();
   if (tag === "input" || tag === "select" || tag === "textarea") return;
   if (ev.repeat) return;
+  // カードを重ねて見せているあいだは、どのキーでも閉じるだけにする(うしろの画面は動かさない)
+  if (el("card-preview")) {
+    ev.preventDefault();
+    closeCardPreview();
+    return;
+  }
   // 開発者メニューのボタンを押したあとは、そこにフォーカスが残る。
   // そのまま Enter・Space を押すと、メニューのボタンと大きなボタンの両方が動くので、D キーだけを受け付ける
   const inDev = ev.target.closest && ev.target.closest("#dev");
@@ -591,6 +663,11 @@ document.body.insertAdjacentHTML("beforeend", `
       <button id="demo-retake">撮り直しの表示</button>
       <button id="demo-reset">はじめに もどす</button>
     </p>
+    <p class="dev-row">カード
+      <button id="dev-card-open">カードを見る</button>
+      <button id="dev-card-print">いんさつ</button>
+      <span class="dev-muted">(いまのモンスター。テストプレイ・見本は ゴリラ × はさみ)</span>
+    </p>
     <p class="dev-row">効果音
       <button data-demo-sfx="press">press</button>
       <button data-demo-sfx="tick">tick</button>
@@ -977,6 +1054,8 @@ el("demo-retake").addEventListener("click", () => {
   endWithMessage("もういちど とってね", "ひとが うつっているよ");
 });
 el("demo-reset").addEventListener("click", restart);
+el("dev-card-open").addEventListener("click", () => showCardPreview(cardId()));
+el("dev-card-print").addEventListener("click", printCard);
 document.querySelectorAll("[data-demo-sfx]").forEach((btn) => {
   btn.addEventListener("click", () => sound(btn.dataset.demoSfx));
 });
@@ -1084,6 +1163,25 @@ async function loadRecentMonsters() {
       btn.append(img, text);
       btn.addEventListener("click", () => { location.href = "/battle/?photo=" + encodeURIComponent(m.id); });
       li.appendChild(btn);
+      // カード(撮影側だけ。バトルの開発者メニューにはない)
+      const cardBtn = document.createElement("button");
+      cardBtn.className = "dev-monster-sub";
+      cardBtn.textContent = "カード";
+      cardBtn.addEventListener("click", () => showCardPreview(m.id));
+      const pdfBtn = document.createElement("button");
+      pdfBtn.className = "dev-monster-sub";
+      pdfBtn.textContent = "PDF を作る";
+      pdfBtn.addEventListener("click", async () => {
+        pdfBtn.disabled = true;
+        pdfBtn.textContent = "作っています…";
+        const res = await saveCardPdf(m.id);
+        pdfBtn.disabled = false;
+        pdfBtn.textContent = res && res.ok ? "PDF ✓" : "PDF を作る";
+        msg.textContent = res && res.ok
+          ? "outputs/" + res.output_dir + "/" + res.file + " に保存しました"
+          : "PDF を作れませんでした(" + ((res && res.error) || "?") + ")";
+      });
+      li.append(cardBtn, pdfBtn);
       list.appendChild(li);
     });
     msg.textContent = data.monsters.length ? "" : "まだ ありません(outputs/ が空)。";

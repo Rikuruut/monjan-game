@@ -1,0 +1,318 @@
+/* モンスターカード(印刷用。63×88mm のトレカの大きさ)。
+   配置はすべて mm で書く(印刷したときの大きさがそのまま決まる)。
+   文字・ロゴは端から 3mm 以上内側に置く(フチなし印刷で端が少し切れても欠けないように)。背景の色は端まで。
+   画面で開いたときは、card.js が --zoom でカードを大きく見せる(印刷は実寸) */
+
+@page {
+  size: 63mm 88mm;
+  margin: 0;
+}
+
+:root {
+  /* タイプの色(撮影の画面 static/themes/fusion/style.css の .el-* と同じ) */
+  --el: #536e80;
+  --paper: #fffaf0;
+  --ink: #2b2118;
+  /* ⚔♥ の色(じゃんけんバトルの battle/src/styles/base.css の --gold・--heart・--ink と同じ) */
+  --gold: #F2C14E;
+  --heart: #ff4d6d;
+  --battle-ink: #173A2E;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  /* 背景の色も印刷する(ふつうは印刷で消される) */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.card[data-element="火"] { --el: #a72d2d; }
+.card[data-element="水"] { --el: #176aa1; }
+.card[data-element="草"] { --el: #33743e; }
+.card[data-element="光"] { --el: #a77c1d; }
+.card[data-element="闇"] { --el: #51398d; }
+.card[data-element="風"] { --el: #277a69; }
+.card[data-element="土"] { --el: #77502c; }
+.card[data-element="無"] { --el: #536e80; }
+
+/* ---- カード本体 ---- */
+.card {
+  width: 63mm;
+  height: 88mm;
+  padding: 3mm;   /* ここまでが安全域(タイプの色の枠) */
+  background:
+    radial-gradient(circle at 20% 10%, rgb(255 255 255 / 0.28), transparent 45%),
+    linear-gradient(160deg, var(--el), color-mix(in srgb, var(--el) 60%, #000));
+  overflow: hidden;
+  position: relative;
+  font-family: "M PLUS Rounded 1c", sans-serif;
+  color: var(--ink);
+}
+
+/* キラキラの飾り(画面だけ。下の @media screen で見せる) */
+.sparkles { display: none; }
+
+.card-inner {
+  position: relative;
+  z-index: 1;   /* 枠の虹色(.card::before)より上 */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+  padding: 1.5mm;
+  border-radius: 2mm;
+  background: var(--paper);
+  border: 0.4mm solid color-mix(in srgb, var(--el) 40%, #fff);
+}
+
+/* 名前(左)とタイプのバッジ(右) */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1mm;
+  min-height: 6mm;
+}
+
+/* 文字の大きさは card.js の fitName が、枠に収まるまで小さくする(5mm〜3mm)。
+   濁点・半濁点が上と右にはみ出すので、行の高さと右の余白をとり、はみ出しても切らない */
+.card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding-right: 0.6mm;
+  font-family: "Dela Gothic One", sans-serif;
+  font-weight: 400;
+  font-size: 5mm;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.card-element {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6mm;
+  padding: 0.8mm 1.6mm;
+  border-radius: 99mm;
+  background: var(--el);
+  color: #fff;
+  font-size: 2.8mm;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+.card-element-icon { font-size: 2.6mm; }
+
+/* 動物 × 物(名前のすぐ下) */
+.card-recipe {
+  margin: -0.4mm 0 0;
+  font-size: 2.5mm;
+  font-weight: 800;
+  line-height: 1.1;
+  color: color-mix(in srgb, var(--el) 70%, #000);
+}
+
+/* 絵は横長(4:3)のまま */
+.card-art {
+  margin: 0;
+  flex: none;
+  aspect-ratio: 4 / 3;
+  border-radius: 1.2mm;
+  overflow: hidden;
+  border: 0.6mm solid var(--el);
+  background: #ddd;
+}
+.card-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* こうげき ●●●○○  たいりょく ●●●●○ */
+.card-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 1mm;
+}
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 0.6mm;
+  padding: 0.5mm 0.9mm;
+  border-radius: 1mm;
+  background: color-mix(in srgb, var(--el) 12%, #fff);
+}
+.stat-label { font-size: 2.1mm; font-weight: 800; white-space: nowrap; }
+
+/* ⚔♥:じゃんけんバトルと同じ文字・色・ふち(battle/src/styles/base.css の .swords・.heart--full を mm に) */
+.icons { display: inline-flex; align-items: center; gap: 0.1mm; line-height: 1; }
+.icon {
+  display: inline-block;
+  font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif;   /* 絵文字にならないように */
+  font-size: 3.4mm;
+  /* 空:紙の白地でも形が分かる、薄いグレー(ふちは付けない。小さいと形がつぶれる) */
+  color: #d6d0c2;
+}
+.stat-attack .icon.on {
+  color: var(--gold);
+  text-shadow:
+    -0.12mm -0.12mm 0 var(--battle-ink), 0.12mm -0.12mm 0 var(--battle-ink),
+    -0.12mm 0.12mm 0 var(--battle-ink), 0.12mm 0.12mm 0 var(--battle-ink),
+    0 0.25mm 0 var(--battle-ink);
+}
+.stat-hp .icon.on {
+  color: var(--heart);
+  text-shadow:
+    -0.12mm -0.12mm 0 #fff, 0.12mm -0.12mm 0 #fff,
+    -0.12mm 0.12mm 0 #fff, 0.12mm 0.12mm 0 #fff,
+    0 0.25mm 0 var(--battle-ink);
+}
+
+/* 説明 */
+.card-desc {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 1mm 1.4mm;
+  border-radius: 1mm;
+  background: #fff;
+  border: 0.3mm solid #e2d8c6;
+  font-size: 2.6mm;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow: hidden;
+}
+
+/* 小ロゴ(仮)と No. */
+.card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.card-logo {
+  padding: 0.4mm 1.2mm;
+  border-radius: 0.8mm;
+  border: 0.3mm solid var(--el);
+  font-family: "Dela Gothic One", sans-serif;
+  font-size: 2.2mm;
+  line-height: 1.1;
+  color: var(--el);
+}
+.card-no {
+  font-family: "Dela Gothic One", sans-serif;
+  font-size: 2.6mm;
+  letter-spacing: 0.1mm;
+  color: #6b5d4c;
+}
+
+.card-error {
+  font-family: sans-serif;
+  color: #c00;
+  text-align: center;
+}
+
+/* ---- 画面で見るとき(プレビュー) ---- */
+@media screen {
+  body {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #1d2330;
+  }
+  .sheet { zoom: var(--zoom, 3); }
+  .card {
+    border-radius: 3mm;
+    box-shadow: 0 2mm 6mm rgb(0 0 0 / 0.5);
+  }
+  .card-error { color: #ff8a8a; }
+
+  /* ---- キラキラ(画面で見るときだけ。印刷・PDF には出さない) ---- */
+  /* ホログラムの枠:タイプの色の枠に、虹色のうすい模様がゆっくり流れる */
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;   /* 白い紙(.card-inner)の下。見えるのは枠のところだけ */
+    pointer-events: none;
+    background: linear-gradient(115deg,
+      #ff7ac8 0%, #ffd36b 16%, #8dffb4 33%, #6bd8ff 50%, #b48dff 66%, #ff7ac8 83%, #ffd36b 100%);
+    background-size: 300% 300%;
+    mix-blend-mode: overlay;
+    opacity: 0.55;
+    animation: holo 6s linear infinite;
+  }
+  /* 光の帯:斜めの白い光が、数秒ごとにカードの上をすっと横切る */
+  .card::after {
+    content: "";
+    position: absolute;
+    top: -20%;
+    bottom: -20%;
+    left: 0;
+    width: 40%;
+    z-index: 3;
+    pointer-events: none;
+    background: linear-gradient(100deg,
+      transparent 0%, rgb(255 255 255 / 0) 30%, rgb(255 255 255 / 0.55) 50%, rgb(255 255 255 / 0) 70%, transparent 100%);
+    transform: translateX(-150%) skewX(-18deg);
+    animation: shine 4.5s ease-in-out infinite;
+  }
+  /* 星のまたたき */
+  .sparkles {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .sparkles i {
+    position: absolute;
+    font-style: normal;
+    font-size: 2.6mm;
+    line-height: 1;
+    color: #fff;
+    text-shadow: 0 0 0.8mm #fff, 0 0 1.6mm #ffe9a8;
+    opacity: 0;
+    transform: scale(0.3);
+    animation: twinkle 2.4s ease-in-out infinite;
+  }
+  .sparkles i::before { content: "✦"; }
+  .sparkles i:nth-child(1) { top: 1mm;   left: 6mm;  animation-delay: 0s; }
+  .sparkles i:nth-child(2) { top: 14mm;  right: 0.6mm; animation-delay: 0.6s; font-size: 2mm; }
+  .sparkles i:nth-child(3) { top: 40mm;  left: 0.4mm; animation-delay: 1.2s; }
+  .sparkles i:nth-child(4) { bottom: 0.8mm; right: 10mm; animation-delay: 1.8s; font-size: 2mm; }
+  .sparkles i:nth-child(5) { top: 25mm;  left: 30mm; animation-delay: 0.9s; font-size: 2.2mm; }
+  .sparkles i:nth-child(6) { top: 66mm;  right: 0.4mm; animation-delay: 1.5s; }
+  .sparkles i:nth-child(7) { bottom: 0.6mm; left: 18mm; animation-delay: 0.3s; font-size: 1.8mm; }
+
+  @keyframes holo {
+    from { background-position: 0% 50%; }
+    to   { background-position: 300% 50%; }
+  }
+  @keyframes shine {
+    0%, 55% { transform: translateX(-150%) skewX(-18deg); }
+    100%    { transform: translateX(350%) skewX(-18deg); }
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(0.3) rotate(0deg); }
+    50%      { opacity: 1; transform: scale(1) rotate(45deg); }
+  }
+
+  /* 動きを減らす設定のときは、キラキラを止める(枠の虹色だけ残す) */
+  @media (prefers-reduced-motion: reduce) {
+    .card::before { animation: none; }
+    .card::after, .sparkles { display: none; }
+  }
+}
+
+/* ---- 印刷するとき:1ページにカード1枚、実寸 ---- */
+@media print {
+  .sheet { zoom: 1; }
+  .card { break-inside: avoid; }
+  .card-error, .sparkles { display: none; }
+}
