@@ -16,7 +16,7 @@
 
 ## 2. 守ること(`../CLAUDE.md` の「守ること」に加えて)
 - API は同じ確認で何度も呼ばない。API を使わずに済む確認は、からうちモード(`.env` の `DRY_RUN=true`。料金0円)か pytest で行う
-  - ※ `app/main.py` は `load_dotenv(override=True)` なので、**起動前に環境変数で `DRY_RUN=true` にしても `.env` の値に戻る**。
+  - ※ `app/config.py`(`app/main.py` が最初に読む)は `load_dotenv(override=True)` なので、**起動前に環境変数で `DRY_RUN=true` にしても `.env` の値に戻る**。
     `uvicorn` の一時サーバーはからうちにならない(`?demo=1` の画面は API を呼ばないので、それだけに使う)
   - `tests/conftest.py` は、からうちにしたうえで API を呼ぼうとしたら失敗させる
 - OpenAI API の書き方・モデル名は、推測せず公式ドキュメントで確認する
@@ -29,12 +29,15 @@
 - ノートPCでサーバーを `0.0.0.0` で動かし、PC とスマホのブラウザからつなぐ(同じ Wi-Fi。公共 Wi-Fi は端末同士の通信が禁止されがち)
 
 ```
-app/      main.py(ルーティング)・battle.py(バトルへの受け渡し)・recognizer.py(判定)・generator.py(画像生成。別サービスに差し替えられる作り)・
-          prompts.py・validator.py・animals.py・openai_client.py・pricing.py(単価)・storage.py・ws_manager.py・kiosk.py
-static/   common/(app.js:場面の進行と開発者メニュー / sound.js:効果音 / common.css)・themes/<名前>/・
+app/      main.py(アプリを組み立てるだけ)・config.py(.env・フォルダの場所)・routes/(API と画面の入口:pages・link・generate・monsters・name_test)・
+          pipeline.py(生成の流れ・料金・途中の絵)・session.py(名前の選択・photo_id とフォルダ)・uploads.py(届いた写真)・themes.py・
+          battle.py(バトルへの受け渡し)・card.py・recognizer.py(判定)・generator.py(画像生成。別サービスに差し替えられる作り)・
+          prompts.py・validator.py・animals.py・openai_client.py・pricing.py(単価)・storage.py(outputs/ の読み書き・料金の累計)・ws_manager.py・kiosk.py・env.py
+static/   common/(shared.js:スマホと共通の道具 / core.js:場面の進行 / dev.js:開発者メニュー・見本・テストプレイ / boot.js:起動 /
+          sound.js:効果音 / common.css)・themes/<名前>/・
           phone.html/js/css・vendor/・sounds/(今は仮の音。README 参照)・
           battle/(../battle/ をビルドしたもの。手で書きかえない)
-tests/    pytest(API は呼ばない)
+tests/    pytest(API は呼ばない。いくつかのテストで使う道具は helpers.py)
 outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・モデル・画質・時間・料金 usage・バトルの ⚔♡ battle)
 ```
 
@@ -55,15 +58,15 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 
 ## 5. 画面
 ### PC(`/`。展示の大画面 1920×1080)
-- 1920×1080 の舞台を、モニターに合わせて拡大縮小(`app.js` の `fitStage`)。操作は3つのボタン = ← / Enter・Space / →。開発者メニュー(共通の項目は `../CLAUDE.md`)の撮影側だけの項目:テーマ・テストプレイ(見本のゴリラ × はさみで「がったい!」から誕生後まで通しで流す。がったい中 約25秒)・確認用の場面・演出・効果音のボタン(APIなし)・判定の JSON・時間・料金・名前のテスト
+- 1920×1080 の舞台を、モニターに合わせて拡大縮小(`core.js` の `fitStage`)。操作は3つのボタン = ← / Enter・Space / →。開発者メニュー(共通の項目は `../CLAUDE.md`)の撮影側だけの項目:テーマ・テストプレイ(見本のゴリラ × はさみで「がったい!」から誕生後まで通しで流す。がったい中 約25秒)・確認用の場面・演出・効果音のボタン(APIなし)・判定の JSON・時間・料金・名前のテスト
 - 場面は `#stage` の `data-scene`:s1 しゃしんを とろう / s2 しゃしん × どうぶつ = ? / s3 がったい中 / s4 たんじょう(左 もう一回・中 たたかう!・右 いんさつ)。バトルの「スタート!」で s1 に来る
 - **見た目はテーマで切りかえる**:`static/themes/<名前>/`(index.html・style.css・theme.json)。`/?theme=名前`、なければ `.env` の `PC_THEME`(既定 fusion。`.env` が知らない名前のときも fusion)。フォルダを足すだけで選べる
   - 今あるテーマは fusion(たんじょうのもり)だけ(2026年11月2日に依頼者が決めた。ほかのテーマと元の背景 bg.png は `archive/20261102_before_fusion_only/`)。
     写真と動物がうずのまわりを回りながら吸いこまれ、一点に縮んでから風がはじけて葉と花びらが舞う。背景は `static/themes/fusion/bg.webp`(依頼者の絵を 1920×1080 の WebP に)
-  - テーマに用意する要素(ID)は `app.js` 先頭の「テーマとの約束」
+  - テーマに用意する要素(ID)は `core.js` 先頭の「テーマとの約束」。テーマの index.html は shared.js → core.js → dev.js → boot.js の順に読む
   - 進み具合は `#stage` の `--progress`(0〜1)と `data-level`(0〜5)を CSS で見せる。**段ごとの見た目は静的な指定で出し、transition やアニメーションを使わない**(回る・ゆれる要素の中で途中のまま止まって見えた)
   - 場面転換は `#stage.shut` を CSS で見せる。時間は `--scene-close-ms` / `--scene-open-ms`
-  - JavaScript の演出は任意:`window.themeFx.birth(showCard)` で誕生をまかせられる(失敗しても `app.js` がカードを出す)。段が変わると `#stage` に `levelchange`。
+  - JavaScript の演出は任意:`window.themeFx.birth(showCard)` で誕生をまかせられる(失敗しても `core.js` がカードを出す)。段が変わると `#stage` に `levelchange`。
     今は fusion の `effects.js`(GSAP・tsParticles)。ライブラリが読めないときは `<html>` に `fx` が付かず、CSS の演出で動く
   - 効果音 `window.sfx.play(名前)`:press・tick(段が上がった)・crack・fanfare。themeFx のあるテーマは誕生の音を自分で鳴らす。BGM は `sounds/bgm.mp3` をくり返す。がったい中(s3)は `fusion1〜3.mp3` の1つを流し、`bgm.mp3` を小さくする(開発者メニューで選ぶ)。`?sound=0` で消す
 - 確認用(API なし):`/?theme=…&demo=1&scene=s3&progress=0.8&photo=…&img=…&animal=…&name=…`、`&play=birth` で割れる直前から誕生後まで流す、`&dev=1` で開発者メニュー。`photo`・`img` を付けなければ見本(`static/demo/`)を使う

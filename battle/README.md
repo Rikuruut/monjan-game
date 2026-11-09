@@ -11,6 +11,9 @@
 
 ## プロジェクト構成
 - ゲーム本体：`src/`
+  - `App.tsx`:場面の切りかえと1ラウンドの進み方(状態)/ `timings.ts`:時間 / `hooks/`:タイマー・音
+  - `battle/`:バトル画面の部品(BattleScreen・MonsterPanel・ChoiceButtons・RoundFeedback・MashDuel・Tutorial)と段階(phases.ts)
+  - `screens/`:タイトル・結果・ありがとう / `components/`:手の絵・モンスターのカード・ロゴと背景・音の設定
 - モンスター画像：`public/monsters/`
 - モンスターデータ：`public/data/monsters/`
 - タイトル／バトル／結果ロゴ：`public/assets/monjan-title-logo.png`

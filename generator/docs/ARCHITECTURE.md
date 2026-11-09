@@ -124,7 +124,16 @@ sequenceDiagram
 ```
 monjan-prototype/
 ├── app/                 サーバー(Python)
-│   ├── main.py          FastAPI の入口。画面・API・WebSocket のルーティング、生成の流れ
+│   ├── main.py          FastAPI の入口。アプリを組み立てる(ミドルウェア・静的ファイル・routes/ を組み込む)
+│   ├── config.py        .env の読み込み・ログ・フォルダの場所・スマホの URL
+│   ├── routes/          API と画面の入口(pages:画面とテーマ / link:WebSocket・QR・撮影の合図 /
+│   │                    generate:写真・生成・名前 / monsters:バトル・カード・作ったモンスター / name_test)
+│   ├── pipeline.py      1回の生成の流れ(判定 → 画像生成 → 保存)・料金の試算・途中の絵
+│   ├── session.py       名前の候補・選んだ名前・photo_id → outputs/ のフォルダ、モンスターの探し方
+│   ├── uploads.py       スマホから届いた写真(uploads/)の保存・読み出し・片づけ
+│   ├── themes.py        PC 画面のテーマの一覧
+│   ├── battle.py        じゃんけんバトルへの受け渡し(⚔♡・見本のモンスター)
+│   ├── card.py          カード(印刷用)のデータ・No.・PDF
 │   ├── ws_manager.py    WebSocket の接続管理(PC用・スマホ用)とメッセージの送信
 │   ├── recognizer.py    判定(テキスト用モデル)。構造化出力で JSON を受け取る
 │   ├── generator.py     画像生成(画像生成モデル)。別のサービスに差し替えられる作り(ImageGenerator)
@@ -133,12 +142,15 @@ monjan-prototype/
 │   ├── animals.py       動物の一覧とアイコン
 │   ├── openai_client.py OpenAI クライアントの共通処理(APIキー・タイムアウト・からうちモード)
 │   ├── pricing.py       料金の単価と試算
-│   ├── storage.py       結果の保存と、料金の累計の記録
+│   ├── storage.py       outputs/ の読み書き(結果の保存・result.json・フォルダの走査)と、料金の累計の記録
 │   ├── net_utils.py     PC の LAN 内 IP アドレスの取得
 │   └── kiosk.py         起動時に PC 用ページをキオスクモード(全画面)で開く
 ├── static/              画面(HTML・CSS・素の JavaScript)
 │   ├── common/          PC 画面の共通部分
-│   │   ├── app.js       場面の進行・ボタン・WebSocket・開発者メニュー(どのテーマでも同じ)
+│   │   ├── shared.js    スマホのページと共通の小さな道具(fetch・WebSocket の再接続など)
+│   │   ├── core.js      場面の進行・ボタン・合体・WebSocket(どのテーマでも同じ)
+│   │   ├── dev.js       開発者メニュー・見本の表示・テストプレイ・通しの自動プレイ
+│   │   ├── boot.js      起動(この順に読む:shared → core → dev → boot)
 │   │   ├── sound.js     効果音
 │   │   └── common.css   舞台の拡大縮小・開発者メニューの見た目
 │   ├── themes/<名前>/   PC 画面の見た目(テーマ)。index.html・style.css・theme.json
@@ -171,7 +183,7 @@ monjan-prototype/
 ### PC 画面のテーマ
 
 - 見た目はテーマごとに `static/themes/<名前>/` に分かれていて、`/?theme=<名前>` で切りかえる(何も付けないときは `.env` の `PC_THEME`)
-- 動きは共通の `app.js` が受け持つので、テーマはフォルダを足すだけで増やせる。テーマに用意する要素(ID)は `app.js` の先頭のコメント「テーマとの約束」にある
+- 動きは共通の `common/` の JavaScript が受け持つので、テーマはフォルダを足すだけで増やせる。テーマに用意する要素(ID)は `core.js` の先頭のコメント「テーマとの約束」にある
 - API を使わずに場面を確認できる:`/?theme=fusion&demo=1&scene=s3&progress=0.8`、`&play=birth` で誕生の演出、`&dev=1` で開発者メニュー。`&photo=`・`&img=` を付けなければ見本の写真と絵(`static/demo/`)を使う。
   同じことは、開発者メニューの「確認用(APIなし)」のボタン(場面・進み具合・誕生の演出・途中の絵・名前が選ばれた・撮り直しの表示・効果音)からもできる。
   「▶ テストプレイ」は、サーバーから届くメッセージを画面の中で本番と同じ順に作り、「がったい!」から誕生後までを通しで流す(がったい中 約25秒)

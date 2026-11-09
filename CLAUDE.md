@@ -52,7 +52,7 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
 - タイプは バトルの属性そのもの:火・水・草・光・闇・風・土・無(攻撃の色・音が変わる)。撮影側の判定が8つから選ぶ(2026年11月2日まではひらがなの性質6つで、バトルが読みかえていた。古い outputs/ の値もバトルはそのまま読める)
 
 ## 開発者メニュー
-D キーか右下の ⚙ で開く(会場の3つのボタンでは開かない)。撮影・合体(`generator/static/common/app.js`)とバトル(`battle/src/DevMenu.tsx`)で同じ見た目で、上の3つは共通。
+D キーか右下の ⚙ で開く(会場の3つのボタンでは開かない)。撮影・合体(`generator/static/common/dev.js`)とバトル(`battle/src/DevMenu.tsx`)で同じ見た目で、上の3つは共通。
 - タブで分けてある(2026年11月9日。最後に開いたタブを `localStorage` の `monjan-dev-tab-generator` / `-battle` に覚える)。1つ目の「よく使う」が下の3つ。撮影側:演出を見る・前回の結果(エラーが出ると見ていないときタブに赤い点)・スマホ・名前のテスト / バトル側:画面・勝ち負け・攻撃エフェクト・データ。各項目に説明の1行と、料金の印(無料 / API 有料)
 - 見た目の CSS は `generator/static/common/common.css` と `battle/src/styles/devmenu.css` に同じものを置いている(片方を変えたら、もう片方も)
 - ページ:タイトル・撮影・テストプレイ(`/?autotest=1`)・見本でバトル
