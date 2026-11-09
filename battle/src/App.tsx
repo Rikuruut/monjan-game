@@ -14,7 +14,7 @@ import {
   startGameBgm,
 } from './audio/gameBgm';
 import { burstAt, chargeAt, createParticleFire, type ParticleFire } from './attackParticles';
-import { getAttributeTheme, specialMoveName } from './attributes';
+import { getAttributeTheme, specialMoveFontSize, specialMoveName, specialMoveParts } from './attributes';
 import { AttackProjectile, Drift, ImpactBurst, ParticleLayer } from './BattleEffects';
 import { loadGameData, type GameData } from './data/loadGameData';
 import { Deck } from './Deck';
@@ -82,7 +82,7 @@ export const MASH_RESULT_MS = 900;
 export const ATTACK_DISPLAY_MS = 700;
 // 命中:一瞬止まって(ヒットストップ)から ゆれる(2026年11月2日 420 → 600ms)
 export const IMPACT_DISPLAY_MS = 600;
-// 必殺技のカットイン(相手の♡が1のときに じゃんけんで勝つと、⚔×2)
+// 必殺技のカットイン(相手の♡が1のときに じゃんけんで勝つと出る、とどめの演出)
 export const SPECIAL_DISPLAY_MS = 1800;
 // 必殺技の攻撃は、ためを長く見せる
 export const SPECIAL_ATTACK_MS = 1000;
@@ -332,6 +332,17 @@ function MonsterPanel({
       </div>
       {showDamage && <span className="damage-burst" aria-label={`${damage}ダメージ`}>−{damage}</span>}
     </article>
+  );
+}
+
+// 必殺技のカットインの名前。撮った物とタイプの言葉を2行に分け、長いほど字を小さくして枠に収める
+function SpecialMoveTitle({ monster }: { monster: Monster }) {
+  const parts = specialMoveParts(monster);
+  return (
+    <strong title={specialMoveName(monster)} style={{ fontSize: `${specialMoveFontSize(parts)}px` }}>
+      {parts.object && <span className="special-cutin__object">{parts.object}</span>}
+      <span className="special-cutin__word">{parts.word}</span>
+    </strong>
   );
 }
 
@@ -602,7 +613,7 @@ function RoundFeedback({
     phaseSub = 'ボタンを たくさん おそう！';
   } else if (phase === 'special') {
     phaseMessage = 'ひっさつわざ！';
-    phaseSub = 'とどめの いちげき！ こうげき 2ばい！';
+    phaseSub = 'とどめの いちげき！';
   } else if (phase === 'attack') {
     phaseMessage = winner === 'none' ? 'あいこ！' : result?.special ? 'ひっさつわざ！' : 'こうげき！';
     phaseSub = winner === 'none' ? 'おたがいに ダメージ！' : 'モンスターが とびだした！';
@@ -891,8 +902,8 @@ function BattleScreen({
           </div>
           <div className="special-cutin__copy">
             <small>ひっさつわざ！</small>
-            <strong>{specialMoveName(data.player)}</strong>
-            <span>こうげき 2ばい！</span>
+            <SpecialMoveTitle monster={data.player} />
+            <span>とどめの いちげき！</span>
           </div>
           <span className="special-cutin__flash" aria-hidden="true" />
         </div>
@@ -1266,7 +1277,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     const mode: ForcedResult = practice ? 'win' : forced;
     const chosenCpuHand = mode === 'normal' ? pickCpuHand() : cpuHandFor(hand, mode);
     const roundHandWinner = decideWinner(hand, chosenCpuHand);
-    // とどめのチャンス(ラウンドの前に相手の♡が1)に じゃんけんで勝つと必殺技(⚔×2)
+    // とどめのチャンス(ラウンドの前に相手の♡が1)に じゃんけんで勝つと必殺技(とどめの演出)
     const finishChance = !practice && isFinishChance(cpuHp);
     const resolve = (winner: Winner, reason: RoundResult['reason']) => resolveRound({
       winner,

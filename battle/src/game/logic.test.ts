@@ -63,9 +63,9 @@ describe('ダメージとHP', () => {
       .toMatchObject({ reason: 'mash', playerDamage: 1, cpuDamage: 1, playerHp: 3, cpuHp: 4 });
   });
 
-  it('とどめのチャンスに じゃんけんで勝つと必殺技で⚔×2', () => {
+  it('とどめのチャンスに じゃんけんで勝つと必殺技(ダメージは ふつうの⚔の数で、とどめになる)', () => {
     expect(resolveRound({ ...base, winner: 'player', finishChance: true, cpuHp: 1 }))
-      .toMatchObject({ special: true, cpuDamage: 4, cpuHp: 0 });
+      .toMatchObject({ special: true, cpuDamage: 2, cpuHp: 0 });
   });
 
   it('とどめのチャンスでも、連打勝負の勝ちは ふつうの攻撃', () => {

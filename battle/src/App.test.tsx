@@ -639,7 +639,7 @@ describe('画面上のゲーム進行と演出', () => {
     await endPracticeToChoosing();
   }
 
-  it('相手の♡が1のとき じゃんけんで勝つと、必殺技のカットインのあと 特大の攻撃で ⚔×2', async () => {
+  it('相手の♡が1のとき じゃんけんで勝つと、必殺技のカットインのあと 特大の攻撃で とどめ', async () => {
     await openFinishBattle();
     // 予告:相手のカードが光る
     expect(screen.getByText(/あと1！/)).toBeInTheDocument();
@@ -652,7 +652,7 @@ describe('画面上のゲーム進行と演出', () => {
     // 名前は 撮った物 + タイプの言葉。自分のモンスターの絵もカットインに出る
     const cutin = document.querySelector<HTMLElement>('.special-cutin');
     expect(cutin).not.toBeNull();
-    expect(within(cutin as HTMLElement).getByText('水筒 スプラッシュ!')).toBeInTheDocument();
+    expect(within(cutin as HTMLElement).getByTitle('水筒 スプラッシュ!')).toHaveTextContent('水筒スプラッシュ!');  // 撮った物 / タイプの言葉 の2行
     expect(within(cutin as HTMLElement).getByAltText(player.name)).toBeInTheDocument();
     expect(cutin).toHaveClass('special-cutin--water');
     expect(document.querySelector('.battlefield')).toHaveClass('battlefield--shake-special');
@@ -665,9 +665,9 @@ describe('画面上のゲーム進行と演出', () => {
     await advance(ATTACK_DISPLAY_MS);
     expect(screen.getByLabelText('HP 1 / 1')).toBeInTheDocument();
     await advance(SPECIAL_ATTACK_MS - ATTACK_DISPLAY_MS);
-    // ⚔2 × 2 = 4
+    // ダメージは ふつうの⚔の数(2)。相手の♡は1なので とどめ
     expect(screen.getByLabelText('HP 0 / 1')).toBeInTheDocument();
-    expect(screen.getByLabelText('4ダメージ')).toBeInTheDocument();
+    expect(screen.getByLabelText('2ダメージ')).toBeInTheDocument();
     expect(document.querySelector('.special-impact-flash')).not.toBeNull();
     expect(document.querySelector('.battlefield')).toHaveClass('battlefield--shake-special');
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ELEMENTS, getAttributeTheme, specialMoveName, type AttributeTheme } from './attributes';
+import { ELEMENTS, getAttributeTheme, specialMoveFontSize, specialMoveName, specialMoveParts, type AttributeTheme } from './attributes';
 
 describe('getAttributeTheme', () => {
   const cases: [string, AttributeTheme][] = [
@@ -34,5 +34,24 @@ describe('必殺技の名前', () => {
   it('撮った物がなければ ひっさつわざ', () => {
     expect(specialMoveName({ attribute: '水', source: { object: '' } })).toBe('ひっさつわざ!');
     expect(specialMoveName({ attribute: '水' })).toBe('ひっさつわざ!');
+  });
+});
+
+describe('必殺技の名前の大きさ(カットインからはみ出さない)', () => {
+  it('撮った物とタイプの言葉の2行に分ける', () => {
+    expect(specialMoveParts({ attribute: '水', source: { object: 'スマートフォン' } })).toEqual({ object: 'スマートフォン', word: 'スプラッシュ!' });
+    expect(specialMoveParts({ attribute: '水' })).toEqual({ object: '', word: 'ひっさつわざ!' });
+  });
+
+  it('短い名前は いちばん大きいまま', () => {
+    expect(specialMoveFontSize(specialMoveParts({ attribute: '風', source: { object: 'はさみ' } }))).toBe(140);
+  });
+
+  it('長い名前ほど小さくし、幅 1060px に収める(下限 72px)', () => {
+    const fit = (object: string) => specialMoveFontSize(specialMoveParts({ attribute: '水', source: { object } }));
+    const long = fit('ペットボトルのふた');
+    expect(long).toBeLessThan(140);
+    expect(long * 9).toBeLessThanOrEqual(1060);
+    expect(fit('ペットボトルのふたの うらがわの もよう')).toBe(72);
   });
 });

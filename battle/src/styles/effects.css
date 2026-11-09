@@ -556,10 +556,18 @@
   text-shadow:
     -6px -6px 0 var(--ink), 6px -6px 0 var(--ink), -6px 6px 0 var(--ink), 6px 6px 0 var(--ink),
     0 14px 0 var(--ink), 0 0 70px var(--sp-a);
-  white-space: nowrap;
+  /* 撮った物 / タイプの言葉 の2行。字の大きさは App.tsx の SpecialMoveTitle が長さで決める(attributes.ts の specialMoveFontSize)。
+     それでも入らないほど長いときは、行の中で折り返す */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+  text-align: center;
+  overflow-wrap: anywhere;
   animation: nameSlam 0.45s cubic-bezier(.2, 1.5, .4, 1) 0.35s both, namePulse 0.3s ease-in-out 0.8s infinite alternate;
 }
-.special-cutin__copy span {
+.special-cutin__copy strong > span { display: block; max-width: 100%; }
+.special-cutin__copy > span {
   font-size: 56px;
   font-weight: 900;
   color: var(--sun);
@@ -592,10 +600,16 @@
 /* 必殺技の攻撃:ためを長く、飛び道具も命中も特大に                       */
 /* ------------------------------------------------------------------ */
 .battle-screen--special.battle-screen--attack .projectile {
-  scale: 2.4;
+  --special-scale: 2.4;
+  scale: var(--special-scale);
   animation-duration: 1s;
   filter: drop-shadow(0 0 30px #fff);
+  /* scale は飛ぶ距離(translateX)まで大きくして、相手を通り過ぎてしまう。距離を同じ割合で割り、ふつうの技と同じ所で当てる */
+  --travel: calc(900px / var(--special-scale));
 }
+.battle-screen--special.battle-screen--attack .projectile--from-cpu { --travel: calc(-900px / var(--special-scale)); }
+.battle-screen--special.battle-screen--attack .projectile--meet { --travel: calc(450px / var(--special-scale)); }
+.battle-screen--special.battle-screen--attack .projectile--from-cpu.projectile--meet { --travel: calc(-450px / var(--special-scale)); }
 /* 攻撃のあいだ、まわりを暗くして 自分のカードを光らせる */
 .battle-screen--special.battle-screen--attack .scene-vignette {
   background: radial-gradient(circle at 50% 45%, transparent 20%, #000000cc 80%);
