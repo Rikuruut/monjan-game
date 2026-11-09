@@ -170,11 +170,12 @@ function Hearts({ current, max, damage = 0 }: { current: number; max: number; da
   );
 }
 
-function Swords({ count }: { count: number }) {
+// glow:攻撃のときに光らせる ⚔ の数(相手に与えたダメージと同じ数)
+function Swords({ count, glow = 0 }: { count: number; glow?: number }) {
   return (
     <span className="swords" aria-label={`こうげき力 ${count}`}>
       {Array.from({ length: count }, (_, index) => (
-        <span key={index} aria-hidden="true">⚔</span>
+        <span key={index} className={`sword ${index < glow ? 'sword--glow' : ''}`} aria-hidden="true">⚔</span>
       ))}
     </span>
   );
@@ -297,6 +298,9 @@ function MonsterPanel({
   const isRoundWinner = Boolean(roundDecided && result?.winner === side);
   const isRoundLoser = Boolean(roundDecided && result?.winner !== side && phase === 'result');
   const isDefeated = hp === 0 && (phase === 'impact' || phase === 'result');
+  // 攻撃のとき、相手に与えるダメージの数だけ ⚔ を光らせる(⚔ の数だけ ♥ が減ることを見せる)
+  const dealt = side === 'player' ? result?.cpuDamage ?? 0 : result?.playerDamage ?? 0;
+  const swordGlow = isAttacking ? dealt : 0;
 
   return (
     <article
@@ -316,7 +320,6 @@ function MonsterPanel({
     >
       <div className="monster-tag">
         <span className="side-label">{side === 'player' ? 'あなた' : 'CPU'}</span>
-        <Swords count={statCount(monster.attack)} />
       </div>
       <div className="monster-card-motion">
         {isSummoning && (
@@ -326,9 +329,17 @@ function MonsterPanel({
         )}
         <MonsterCard monster={monster} imageClassName="monster-image-container--battle" />
       </div>
-      <div className="monster-hp">
-        <span className="monster-hp__label">HP</span>
-        <Hearts current={hp} max={statCount(monster.hp)} damage={phase === 'impact' ? damage : 0} />
+      {/* カードの下:こうげき ⚔ と HP ♥ を1枚の板にまとめる */}
+      <div className="monster-stats">
+        <span className="stat stat--attack">
+          <span className="stat__label">こうげき</span>
+          <Swords count={statCount(monster.attack)} glow={swordGlow} />
+        </span>
+        <span className="stat__divider" aria-hidden="true" />
+        <span className="stat stat--hp">
+          <span className="stat__label">HP</span>
+          <Hearts current={hp} max={statCount(monster.hp)} damage={phase === 'impact' ? damage : 0} />
+        </span>
       </div>
       {showDamage && <span className="damage-burst" aria-label={`${damage}ダメージ`}>−{damage}</span>}
     </article>

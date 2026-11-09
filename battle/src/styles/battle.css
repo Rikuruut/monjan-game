@@ -62,14 +62,13 @@
 .monster-panel--player { left: 170px; }
 .monster-panel--cpu { left: 1070px; --side-color: var(--petal); }
 
-/* カードの上:あなた / CPU と ⚔ */
+/* カードの上:あなた / CPU */
 .monster-tag {
   display: flex;
   align-items: center;
   gap: 16px;
   height: 48px;
   margin-bottom: 8px;
-  font-size: 50px;
 }
 .monster-panel--cpu .monster-tag { flex-direction: row-reverse; }
 .side-label {
@@ -88,23 +87,52 @@
   transition: filter 0.3s;
 }
 
-/* カードの下:♥ */
-.monster-hp {
+/* カードの下:こうげき ⚔ と HP ♥ の板(背景に負けないよう濃い板にのせる) */
+.monster-stats {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-top: 18px;
-}
-.monster-panel--cpu .monster-hp { flex-direction: row-reverse; }
-.monster-hp__label {
-  padding: 2px 16px;
+  gap: 12px;
+  width: fit-content;
+  max-width: 650px; /* ⚔3・♥5 でも「どの手にする？」の札(x=825〜)にかからない */
+  margin-top: 22px;
+  padding: 6px 16px;
+  border: 3px solid var(--ink);
+  border-radius: 18px;
   background: var(--panel);
-  border: 3px solid var(--heart);
+  box-shadow: 0 5px 0 var(--forest-deep), 0 10px 20px #0d221955;
+  color: var(--white);
+}
+/* 相手は右に寄せる(真ん中の「どの手にする？」にかぶらないように) */
+.monster-panel--cpu .monster-stats { margin-left: auto; }
+.stat { display: inline-flex; align-items: center; gap: 8px; }
+.stat__label {
+  padding: 1px 10px 3px;
+  border: 3px solid var(--gold);
   border-radius: 10px;
   font-family: var(--font-title);
-  font-size: 24px;
+  font-size: 22px;
+  line-height: 1.3;
+  white-space: nowrap;
 }
-.monster-hp .hearts { gap: 6px; font-size: 58px; }
+.stat--hp .stat__label { border-color: var(--heart); }
+.stat__divider { align-self: stretch; width: 3px; margin: 6px 0; border-radius: 2px; background: #ffffff40; }
+/* ⚔ は細い記号なので、金のメダルの中に入れて ♥ と同じくらい目立たせる */
+.monster-stats .swords { gap: 4px; }
+.monster-stats .sword {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, var(--gold) 55%, #c98f1c);
+  box-shadow: 0 3px 0 var(--ink);
+  color: var(--ink);
+  font-size: 30px;
+  font-weight: 900;
+  text-shadow: none;
+}
+.monster-stats .hearts { gap: 2px; font-size: 46px; }
 
 /* 真ん中の VS */
 .versus {
