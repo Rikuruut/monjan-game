@@ -31,7 +31,7 @@ function connectPhone() {
       showView("view-ready");
     } else if (msg.type === "revealed") {
       // PC の大画面で、モンスターが登場し終わった(ここで初めてスマホにも絵を見せる)
-      if (pendingResult && msg.photo_id === pendingResult.photoId) revealResult();
+      if (pendingResult && msg.photo_id === pendingResult.photoId) revealResult(msg.name);
     } else if (msg.type === "progress") {
       // 生成の進み具合(ローディングと名前えらび。下の showProgress を参照)
       showProgress(msg);
@@ -132,29 +132,27 @@ loadAnimals().catch((e) => {
 connectPhone();
 
 // ----------------------------------------------------------------------
-// 生成中のローディングと、名前えらび
+// 生成中のローディングと、できあがりの絵
 // ----------------------------------------------------------------------
-// PCで「つくる!」が押されると、サーバーから進み具合(progress)が届く。
+// 名前は PC の大画面で、3つのボタンから選ぶ(2026年11月9日。それまではスマホで選んでいたが、
+// スマホ → PC → スマホ と行き来するのが分かりにくかった。元は archive/20261109_before_pc_naming/)。
+// スマホは写真と動物を送るまで。そのあとは進み具合を出すだけ。
+// PCで「がったい!」が押されると、サーバーから進み具合(progress)が届く。
 //   naming :なまえを かんがえているよ
-//   drawing:え を かいているよ(詳しいプロンプトでは、このとき名前の候補も届くので、名前えらびを出す)
-//   names  :名前の候補(短いプロンプトでは、絵を作っているあいだに届く。名前えらびを出す)
+//   drawing:え を かいているよ
+//   names  :名前の候補が届いた(PC で選んでいる)→「おおきい がめんで なまえを えらんでね」
 //   partial:途中の絵(スマホでは使わない)
-//   done のあと、PC で誕生の演出が終わると revealed(type)が届くので、そこで絵を見せる
-//   done   :できたよ!(モンスターの絵を見せる。まだ名前を選んでいなければ、少し待ってから今の名前に決める)
+//   done   :できたよ!(絵はまだ見せない。PC で誕生の演出が終わると revealed が届くので、そこで絵と決まった名前を見せる)
 //   retake / error:とりなおし・しっぱい
-const AUTO_DECIDE_SECONDS = 60;   // できてから、この秒数たっても選ばなければ、今の名前に決める(2026年11月2日:20秒では短すぎたので60秒に)
-const BACK_TO_WAIT_SECONDS = 6;   // 名前が決まってから、待機中に戻るまでの秒数
+const BACK_TO_WAIT_SECONDS = 6;   // 撮り直し・失敗のあと、待機中に戻るまでの秒数
 
-let nameChoices = [];
-let nameIndex = 0;
-let namePhotoId = "";
-let nameDecided = false;
 let barTimer = null;
-let autoDecideTimer = null;
 let backTimer = null;   // 少ししてから待機中に戻すタイマー(撮影の合図・次の生成が来たら取り消す)
 let pendingResult = null;        // できあがったが、まだ見せていない絵(PC の登場が終わるのを待っている)
 let revealFallbackTimer = null;
-const REVEAL_FALLBACK_SECONDS = 15;   // PC から登場の知らせが来なくても、この秒数たったら絵を見せる
+// PC から登場の知らせが来なくても、この秒数たったら絵を見せる。
+// PC で名前を選ぶまで誕生を待つので、PC の自動決定(core.js の AUTO_NAME_SECONDS = 60秒)より長くする
+const REVEAL_FALLBACK_SECONDS = 90;
 
 function setStage(html) { el("ph-stage").innerHTML = html; }
 function setBar(percent) { el("ph-bar-fill").style.width = Math.max(0, Math.min(100, percent)) + "%"; }
@@ -175,7 +173,7 @@ function hideResult() {
   el("ph-result-img").removeAttribute("src");
 }
 
-function isShowingResult() { return !el("ph-result").classList.contains("hidden"); }
+function hideNote() { el("ph-name-decided").classList.add("hidden"); }
 
 function showProgress(msg) {
   const stage = msg.stage;
@@ -183,7 +181,7 @@ function showProgress(msg) {
   if (stage === "naming") {
     cancelBackToWait();
     clearPendingResult();
-    resetNameChooser();
+    hideNote();
     hideResult();
     showView("view-progress");
     setStage("なまえを<br>かんがえているよ");
@@ -199,14 +197,11 @@ function showProgress(msg) {
     barTimer = setInterval(() => {
       const ratio = (Date.now() - started) / 1000 / expected;
       setBar(30 + Math.min(ratio, 1) * 65);
-      if (ratio >= 0.7) setStage("もうすぐ!");
     }, 500);
-    // 名前えらびを出す(詳しいプロンプトでは、名前の候補はここで届く)
-    if (msg.name_choices || msg.monster_name) startNameChooser(msg);
+    if (nameChoicesOf(msg).length) askToLookAtPc();
 
   } else if (stage === "names") {
-    // 短いプロンプトでは、名前の候補は絵を作っているあいだに届く
-    startNameChooser(msg);
+    askToLookAtPc();
 
   } else if (stage === "done") {
     stopBarTimer();
@@ -215,21 +210,16 @@ function showProgress(msg) {
     // ※ 2026年11月2日:(当時の)たまごのテーマで、たまごが割れる前にスマホにモンスターが出てしまったため
     setStage("できたよ!<br>おおきい がめんを みてね");
     if (msg.image_url) {
-      pendingResult = { photoId: msg.photo_id || namePhotoId, imageUrl: msg.image_url, monsterName: msg.monster_name };
+      pendingResult = { photoId: msg.photo_id || "", imageUrl: msg.image_url, monsterName: msg.monster_name };
       // PC から知らせが来ないとき(PC の画面を読みこみ直したときなど)も、少し待てば見せる
-      revealFallbackTimer = setTimeout(revealResult, REVEAL_FALLBACK_SECONDS * 1000);
-    }
-    if (nameDecided || !nameChoices.length) {
-      if (!msg.image_url) backToWaitLater();
+      revealFallbackTimer = setTimeout(() => revealResult(), REVEAL_FALLBACK_SECONDS * 1000);
     } else {
-      // しばらく選ばなければ、今出ている名前に決める
-      autoDecideTimer = setTimeout(decideName, AUTO_DECIDE_SECONDS * 1000);
+      backToWaitLater();
     }
 
   } else if (stage === "retake") {
     stopBarTimer();
     showView("view-progress");
-    resetNameChooser();
     hideResult();
     setStage("もういちど<br>とってね");
     el("ph-name-decided").textContent = msg.reason || "";
@@ -238,88 +228,26 @@ function showProgress(msg) {
 
   } else if (stage === "error") {
     stopBarTimer();
-    resetNameChooser();
+    hideNote();
     hideResult();
     setStage("うまく できなかったよ…");
     backToWaitLater();
   }
 }
 
-function startNameChooser(msg) {
-  nameChoices = nameChoicesOf(msg);
-  namePhotoId = msg.photo_id || "";
-  nameIndex = 0;
-  if (nameChoices.length) {
-    showName();
-    el("name-chooser").classList.remove("hidden");
-  }
+// 名前の候補が届いた:PC の大画面で選んでもらう
+function askToLookAtPc() {
+  showView("view-progress");
+  setStage("おおきい がめんで<br>なまえを えらんでね");
 }
 
-function showName() {
-  el("ph-name").textContent = nameChoices[nameIndex];
-  replayAnimation(el("ph-name"), "ph-name-pop");
-  el("ph-name-count").textContent = nameChoices.length > 1
-    ? "(" + (nameIndex + 1) + " / " + nameChoices.length + ")" : "";
-  // 候補が1つしかないときは「ほかに さがす」を出さない
-  el("btn-name-next").classList.toggle("hidden", nameChoices.length <= 1);
-  // 絵ができていれば、絵の上の名前も今の候補にそろえる
-  if (isShowingResult()) el("ph-result-name").textContent = nameChoices[nameIndex];
-}
-
-function resetNameChooser() {
-  nameChoices = [];
-  nameIndex = 0;
-  nameDecided = false;
-  if (autoDecideTimer) clearTimeout(autoDecideTimer);
-  autoDecideTimer = null;
-  el("name-chooser").classList.add("hidden");
-  el("ph-name-decided").classList.add("hidden");
-  el("btn-name-ok").disabled = false;
-  el("btn-name-next").disabled = false;
-}
-
-// 「ほかに さがす」:次の候補を見せる(最後まで行ったら最初に戻る)
-el("btn-name-next").addEventListener("click", () => {
-  if (!nameChoices.length) return;
-  nameIndex = (nameIndex + 1) % nameChoices.length;
-  showName();
-});
-
-// 「この なまえに する!」
-el("btn-name-ok").addEventListener("click", decideName);
-
-async function decideName() {
-  if (nameDecided || !nameChoices.length) return;
-  nameDecided = true;
-  if (autoDecideTimer) clearTimeout(autoDecideTimer);
-  el("btn-name-ok").disabled = true;
-  el("btn-name-next").disabled = true;
-
-  const name = nameChoices[nameIndex];
-  try {
-    await postForm("/api/choose-name", { photo_id: namePhotoId, name });
-  } catch (e) {
-    // 送れなくても、ゲームは止めない(最初の名前のまま進む)
-  }
-  el("name-chooser").classList.add("hidden");
-  el("ph-name-decided").textContent = "「" + name + "」に けってい!";
-  el("ph-name-decided").classList.remove("hidden");
-
-  // もう絵ができていれば、絵の上の名前を決めた名前にする(絵を見せたまま、待機中には戻さない)
-  if (isShowingResult()) {
-    el("ph-result-name").textContent = name;
-  } else if (el("ph-bar-fill").style.width === "100%" && !pendingResult) {
-    backToWaitLater();
-  }
-}
-
-// PC で登場し終わったら、スマホにもモンスターの絵を見せる
-function revealResult() {
+// PC で登場し終わったら、スマホにもモンスターの絵を見せる。name は PC で決めた名前(revealed に入っている)
+function revealResult(name) {
   if (!pendingResult) return;
   const result = pendingResult;
   clearPendingResult();
   setStage("できたよ!");
-  showResult(result.imageUrl, nameChoices.length ? nameChoices[nameIndex] : result.monsterName);
+  showResult(result.imageUrl, name || result.monsterName);
 }
 
 function clearPendingResult() {
@@ -332,7 +260,7 @@ function backToWaitLater() {
   cancelBackToWait();
   backTimer = setTimeout(() => {
     backTimer = null;
-    resetNameChooser();
+    hideNote();
     showView("view-wait");
   }, BACK_TO_WAIT_SECONDS * 1000);
 }

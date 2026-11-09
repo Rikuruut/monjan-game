@@ -75,7 +75,7 @@ document.body.insertAdjacentHTML("beforeend", `
       <p class="dev-row">
         <button id="demo-birth" title="割れる直前から、誕生の演出を最後まで">誕生の演出</button>
         <button id="demo-partial" title="がったい中のうずの中心に出る、途中の絵(押すたびに 1枚目 → 2枚目)">途中の絵(がったい中)</button>
-        <button id="demo-name" title="スマホで名前が選ばれたときの動き(押すたびに次の候補)">名前が選ばれた</button>
+        <button id="demo-name" title="下のボタンで名前が選ばれたときの動き(押すたびに次の候補)">名前が選ばれた</button>
         <button id="demo-retake" title="人が写っていたときの「もういちど とってね」">撮り直しの表示</button>
       </p>
     </section>
@@ -414,8 +414,9 @@ function playTestRun(onDone) {
     // 途中の絵(うずの中心に透けて見える)
     afterSeconds(3 + draw * 0.4, () => onProgress({ stage: "partial", image_url: img, index: 1, total: 2, photo_id: photoId }));
     afterSeconds(3 + draw * 0.75, () => onProgress({ stage: "partial", image_url: img, index: 2, total: 2, photo_id: photoId }));
-    // 子供がスマホで名前を選んだことにする(2つ目の候補)
-    afterSeconds(3 + draw * 0.55, () => onNameChosen({ name: names[1] }));
+    // 子供が下の3つのボタンで名前を選んだことにする(中のボタン = 2つ目の候補)。
+    // 絵ができる前に選ぶ(選ばないと誕生が待つので、通しの自動プレイが止まらないように)
+    afterSeconds(3 + draw * 0.55, () => press("center"));
     // できあがり → 誕生
     afterSeconds(3 + draw, () => {
       onProgress({ stage: "done", photo_id: photoId, image_url: img });
@@ -440,7 +441,7 @@ el("demo-progress").addEventListener("input", () => {
 });
 el("demo-birth").addEventListener("click", playBirthDemo);
 el("demo-name").addEventListener("click", () => {
-  // 名前の候補を順番に「選ばれた」ことにする(スマホで名前を選んだときと同じ動き)
+  // 名前の候補を順番に「選ばれた」ことにする(下のボタンで選んだときと同じ動き。決めたあとでも選び直せる)
   const names = state.nameChoices.length ? state.nameChoices : [demoName(), ...DEMO_OTHER_NAMES];
   const current = state.chosenName || names[0];   // まだ選ばれていなければ、いまの名前(先頭)の次から
   const next = names[(names.indexOf(current) + 1) % names.length];

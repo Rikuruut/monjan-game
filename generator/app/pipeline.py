@@ -169,7 +169,7 @@ async def _generate_detailed(run: _Run) -> JSONResponse:
         expected_seconds=round(last_generate_seconds, 1),
         monster_name=monster.get("monster_name", ""),
         photo_id=run.photo_id,
-        # 名前の候補(スマホの「ほかに さがす」で順番に見せる)。採用した名前を先頭にする
+        # 名前の候補(PC の3つのボタンに出す)。採用した名前を先頭にする
         name_choices=session.remember_name_choices(run.photo_id, monster),
     )
     try:

@@ -176,46 +176,6 @@ body.phone .view {
   animation: bar-stripes 0.8s linear infinite;
   transition: width 0.5s linear;
 }
-.name-chooser {
-  width: 88vw;
-  max-width: 420px;
-  padding: 16px 16px 12px;
-  background: var(--paper);
-  border: 5px solid var(--ink);
-  border-radius: 22px;
-  box-shadow: 0 8px 0 var(--ink-shadow);
-}
-.name-lead { margin: 0; font-size: 20px; font-weight: 800; color: var(--ink); }
-.ph-name {
-  margin: 6px 0;
-  font-family: var(--font-logo);
-  font-size: 44px;
-  color: var(--yellow);
-  -webkit-text-stroke: 3px var(--ink);
-  paint-order: stroke fill;
-  text-shadow: 0 5px 0 var(--pink);
-  word-break: keep-all;
-}
-.ph-name-pop { animation: mc-name-pop 0.5s cubic-bezier(.2, 1.6, .4, 1); }
-.name-btn {
-  display: block;
-  width: 100%;
-  margin-top: 12px;
-  padding: 14px 10px;
-  font-family: var(--font-main);
-  font-weight: 800;
-  font-size: 24px;
-  color: var(--ink);
-  border: 4px solid var(--ink);
-  border-radius: 999px;
-  box-shadow: 0 6px 0 var(--ink-shadow);
-  -webkit-tap-highlight-color: transparent;
-}
-.name-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--ink-shadow); }
-.name-btn:disabled { opacity: 0.5; }
-.name-btn-ok   { background: linear-gradient(180deg, var(--yellow), var(--orange)); }
-.name-btn-next { background: #fff; font-size: 20px; }
-.name-count { margin: 8px 0 0; color: var(--muted); font-weight: 800; }
 .name-decided {
   margin-top: 16px;
   font-size: 26px;

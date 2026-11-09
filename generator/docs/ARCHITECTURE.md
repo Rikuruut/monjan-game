@@ -94,16 +94,19 @@ sequenceDiagram
         S->>O: 名前・説明(写真 + 物の名前)
         O-->>S: タイプ・名前の候補・説明文(JSON)
         Note over S: validator でチェック・補正
-        S-->>M: WS progress: names(名前の候補)
+        S-->>P: WS progress: names(名前の候補。下の3つのボタンが名前になる)
+        S-->>M: WS progress: names(スマホは「おおきい がめんで なまえを えらんでね」)
     end
-    M->>S: POST /api/choose-name(子供が選んだ名前)
+    P->>S: POST /api/choose-name(子供が PC の3つのボタンで選んだ名前)
     S-->>P: WS name_chosen
     O-->>S: できあがりの画像(base64)
     Note over S: outputs/ に保存
     S-->>P: WS progress: done(画像URL)
     S-->>M: WS progress: done
     S-->>P: /api/generate の返事(モンスター情報・画像URL・時間・料金)
-    Note over P: s4 たんじょう → カードを表示
+    Note over P: 名前が決まるまで待つ(60秒で1つ目に自動)→ s4 たんじょう → カードを表示
+    P->>S: POST /api/revealed
+    S-->>M: WS revealed(絵と決まった名前)
     P->>P: 「たたかう!」→ じゅんびちゅう(バトルは未実装)
 ```
 
@@ -112,7 +115,7 @@ sequenceDiagram
 - **動物を選ぶのはスマホ**。写真と動物は一緒に送り、サーバーが `photo_id` に紐づけて覚える。動物名は一覧(10種類)から選ぶが、サーバーは一覧にない名前でも受け付ける(製品版で自由入力にする予定のため)
 - 写真はスマホ側で canvas を使って**長辺1024pxの JPEG** にしてから送る(容量を減らすのと、iPhone の HEIC 対策)。サーバーは Pillow で開けるかを確かめる
 - **撮り直し**(人が写っている・物がはっきりしない・子供にふさわしくない物。判定の返答を読めないときも)と判定されたら、画像生成は呼ばずに終わる
-- **名前は子供がスマホで選ぶ**。判定で作った候補(チェックに合格したもの)を順に見せる。画像ができてから60秒選ばなければ、出ている名前に決まる
+- **名前は子供が PC の3つのボタンで選ぶ**(2026年11月9日まではスマホ)。判定で作った候補(チェックに合格したもの。最大3つ)が、がったい中に下の ← / Enter / → のボタンになる。選ぶまで誕生は待ち、画像ができてから60秒選ばなければ1つ目に決まる
 - 上の図は短いプロンプト(`IMAGE_PROMPT_STYLE=simple`)の流れ。詳しいプロンプト(`detailed`)では、1回の判定で設計図まで作ってから画像生成を始め、名前の候補は `drawing` で届く
 - 画像ができるまで:simple では、すぐ要る判定 + max(名前・説明, 画像生成)。分ける前は 判定 14〜31秒 + 画像生成 18〜21秒(sunburst・medium)。**要確認**:分けたあとの実測
 - バトルへの受け渡しは**未実装**(**要確認**)
@@ -247,8 +250,8 @@ monjan-prototype/
 | PC | `phone_status` | `connected`。スマホがつながっているか |
 | PC | `photo_received` | `photo_id`、`photo_url`、`animal` |
 | PC・スマホ | `progress` | `stage`:`naming` / `drawing` / `names` / `partial` / `done` / `retake` / `error`。`drawing` には `expected_seconds`(detailed では `name_choices` も)、`names` には `name_choices`(simple)、`partial` には `image_url`・`index`・`total`(スマホは使わない)、`done` には `image_url` |
-| PC | `name_chosen` | `photo_id`、`name` |
-| スマホ | `revealed` | `photo_id`、`image_url`。PC で誕生の演出が終わった(スマホはここで絵を見せる。届かなくても15秒後に見せる) |
+| PC | `name_chosen` | `photo_id`、`name`(PC が自分で選んだ名前も返ってくる) |
+| スマホ | `revealed` | `photo_id`、`image_url`、`name`(PC で決めた名前)。PC で誕生の演出が終わった(スマホはここで絵と名前を見せる。届かなくても90秒後に見せる) |
 
 ---
 

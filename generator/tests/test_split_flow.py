@@ -243,15 +243,36 @@ def test_revealed_tells_phone_after_pc_birth(client, monkeypatch):
     # スマホは、PC の誕生の演出が終わった知らせ(revealed)が届いてから絵を見せる
     sent = []
 
-    async def record(photo_id, image_url):
-        sent.append((photo_id, image_url))
+    async def record(photo_id, image_url, name=""):
+        sent.append((photo_id, image_url, name))
 
     photo_id = upload(client)["photo_id"]
-    client.post("/api/generate", data={"photo_id": photo_id})
+    data = client.post("/api/generate", data={"photo_id": photo_id}).json()
     monkeypatch.setattr(ws_manager, "notify_revealed", record)
     res = client.post("/api/revealed", data={"photo_id": photo_id})
     assert res.status_code == 200
-    assert sent == [(photo_id, f"/api/monster-image/{photo_id}")]
+    # 名前を選んでいなければ、判定が採用した名前
+    assert sent == [(photo_id, f"/api/monster-image/{photo_id}", data["monster"]["monster_name"])]
+
+
+def test_revealed_sends_name_chosen_on_pc(client, monkeypatch):
+    # PC の3つのボタンで選んだ名前が、スマホにも届く
+    sent = []
+
+    async def record(photo_id, image_url, name=""):
+        sent.append(name)
+
+    async def ignore(*args, **kwargs):
+        pass
+
+    photo_id = upload(client)["photo_id"]
+    data = client.post("/api/generate", data={"photo_id": photo_id}).json()
+    other = [c["name"] for c in data["monster"]["name_candidates"] if c.get("ok")][-1]
+    monkeypatch.setattr(ws_manager, "notify_name_chosen", ignore)
+    assert client.post("/api/choose-name", data={"photo_id": photo_id, "name": other}).status_code == 200
+    monkeypatch.setattr(ws_manager, "notify_revealed", record)
+    client.post("/api/revealed", data={"photo_id": photo_id})
+    assert sent == [other]
 
 
 def test_revealed_unknown_or_bad_id(client):

@@ -792,3 +792,6 @@ html:not(.fx) [data-scene="s4"] .card { animation: card-born 0.8s cubic-bezier(.
   .warp, .drift { display: none; }
   .arms, .orb-ring, .orbit-x, .orbit-y { animation: none !important; }
 }
+
+/* がったい中の名前えらび(core.js が #stage に naming を付ける):3つのボタンの名前を、どれも同じ大きさ・色にする */
+.stage.naming .knob-label { font-family: var(--font-title); font-weight: 400; font-size: 32px; color: var(--sun); }

@@ -46,11 +46,13 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 2. スマホで撮影(`<input type="file" accept="image/*" capture="environment">`。`getUserMedia` は HTTPS が要るので使わない。カメラはスマホでのタップが必要)
 3. スマホが canvas で**長辺1024pxの JPEG** にして、動物と一緒に `POST /api/upload`(HEIC 対策)。サーバーは Pillow で開けるか確かめ、動物を `photo_id` に紐づける
 4. PC の「がったい!」→ `POST /api/generate`:判定 → チェック → (撮り直しなら理由を出して終了)→ 画像生成 → 保存(simple は 6. のとおり分けて同時に)
-5. 画像を作っているあいだ、スマホで子供が名前を選ぶ(`POST /api/choose-name`)
+5. 画像を作っているあいだ、PC で子供が名前を選ぶ:候補(最大3つ)が届くと、下の3つのボタン(← / Enter / →)がそのまま3つの名前になり、押すと `POST /api/choose-name`。
+   選ぶまで誕生は待ち(見出し「なまえを えらんでね!」)、絵ができてから60秒で1つ目に自動で決める(`core.js` の `chooseName`・`waitForName`・`AUTO_NAME_SECONDS`)。
+   2026年11月9日まではスマホで選んでいた(スマホ → PC → スマホ と行き来するのが分かりにくかった。元は `archive/20261109_before_pc_naming/`)
 
 - WebSocket は `/ws?role=pc|phone`。メッセージ:`capture_request` / `photo_received` / `phone_status` / `upload_done` /
   `progress`(`stage`:naming・drawing・names・partial・done・retake・error。drawing に `expected_seconds`(detailed では `name_choices` も)、
-  names に `name_choices`(simple。絵を作っているあいだに届く)、partial に途中の絵の `image_url`・`index`・`total`、done に `image_url`)/ `name_chosen` / `revealed`(PC の誕生の演出が終わった。スマホはここで絵を見せる。PC が `POST /api/revealed` で知らせる)
+  names に `name_choices`(simple。絵を作っているあいだに届く)、partial に途中の絵の `image_url`・`index`・`total`、done に `image_url`)/ `name_chosen` / `revealed`(PC の誕生の演出が終わった。スマホはここで絵と決まった名前 `name` を見せる。PC が `POST /api/revealed` で知らせる)
 - バトルとの受け渡し(`/api/battle-monster/{id}`・`/api/recent-monsters`・`/api/output-image/{フォルダ名}`)は `../CLAUDE.md`
 - そのほかの API:`/api/photo/{photo_id}`・`/api/monster-image/{photo_id}`・`/api/partial-image/{photo_id}/{index}`(写真と絵と途中の絵。`uploads/`・`outputs/` は公開しない)・`/api/capture-request`・`/api/name-test`(名前だけを作る。1回0.1円以下)・`/api/themes`・`/api/qr`・`/api/info`
 - 動物は一覧(`animals.py`:ライオン・ゾウ・ウサギ・ペンギン・ネコ・鷹・ワニ・ゴリラ・サメ・ティラノサウルス)から選ぶが、
@@ -73,7 +75,8 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 
 ### スマホ(`/phone`)
 - 子供が触るので文字は大きく、ボタンは押しやすく。動物を選ぶのはスマホだけ(最初から1つ選んでおく)
-- 待機中「PCの ボタンを まってね」→ 撮影待ち → 送信中「おくっているよ…」→「おくったよ!」→ 名前を選ぶ(「この なまえに する! / ほかに さがす」)→ できあがり(名前と絵。次の合図まで出したまま)
+- 待機中「PCの ボタンを まってね」→ 撮影待ち → 送信中「おくっているよ…」→「おくったよ! おおきい がめんを みてね」→ 進み具合(名前の候補が届くと「おおきい がめんで なまえを えらんでね」)→ できあがり(PC で決めた名前と絵。次の合図まで出したまま)
+- スマホで操作するのは撮影と動物えらびだけ(名前は PC で選ぶ。`../CLAUDE.md` の要件)
 - 見た目は `phone.css` に分けてある(大画面の変更の影響を受けないように)
 
 ## 6. 判定(テキスト用モデル)
@@ -101,7 +104,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 | JSON 全体 | 辞書 | すべて既定値 |
 
 ### モンスター名(`prompts.NAME_RULES`)
-- 子供が最初に目にする「当たり外れ」なので、しっかり組んである。名前は子供がスマホで、判定の候補から選ぶ(作り直しはしない。画像ができて60秒で自動で決定。`phone.js` の `AUTO_DECIDE_SECONDS`)
+- 子供が最初に目にする「当たり外れ」なので、しっかり組んである。名前は子供が PC の3つのボタンで、判定の候補から選ぶ(作り直しはしない。画像ができて60秒で自動で決定。`core.js` の `AUTO_NAME_SECONDS`)。ボタンに出すので、10文字までに収める
 - 2語を並べず音を混ぜて1語に。少なくとも片方の材料が分かる。カタカナ3〜8文字。物は言いかえてよい(はさみ → シザー・チョキ)
 - 3つの作り方を1つずつ:A 重ね合わせ / B 言いかえ合体 / C 怪獣ネーム(両方の音をまぜてから強い語尾)
 - 分かっている失敗:頭を2文字ずつつなげただけ(タカサミ)・物の飾りことば(カイネコ)・部位の言葉(〜テイル)・片方に語尾だけ(ウサギドン)。

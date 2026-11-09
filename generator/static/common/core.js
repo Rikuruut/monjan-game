@@ -10,7 +10,8 @@
 // 場面は4つ。#stage の data-scene で切りかえる。
 //   s1 しゃしんを とろう      … 中ボタンでスマホに撮影の合図。写真が届いたら s2 へ
 //   s2 しゃしん × どうぶつ = ? … 中ボタン「がったい!」で生成を始めて s3 へ。左ボタンで撮り直し
-//   s3 がったい中            … サーバーからの progress に合わせて、進み具合を画面に渡す。結果が届いたら s4 へ
+//   s3 がったい中            … サーバーからの progress に合わせて、進み具合を画面に渡す。名前の候補が届いたら
+//                              3つのボタンが候補になり、押して名前を決める。結果が届き、名前が決まったら s4 へ
 //   s4 たんじょう            … カードを見せる。左「もう一回」/中「たたかう!」(じゃんけんバトル /battle/ へ)/右「いんさつ」
 // 操作は3つのボタン。キーボードの ← / Enter(Space)/ → でも押せる(USB の大きなボタンはキーとして届く)。
 // 開発者メニューは右下のボタンか D キーで開く(このファイルが画面に足す)。
@@ -22,6 +23,7 @@
 //   #btn-left / #btn-center / #btn-right(中に .knob-label。押せないときは disabled、出さないときは class="empty")、
 //   #toast(class="show" が付く)、#tip、#name-help、#name-list、#st-naming / #st-drawing / #st-soon、
 //   #card-name、#card-element、#card-recipe、#card-desc、#card-img
+//   (なくてもよい)#stage.naming:がったい中に3つのボタンが名前の候補になっているあいだ付く(名前を同じ見た目にするため)
 //   (なくてもよい)#partial-img:画像生成の途中の絵。届くと src が入り、#stage に data-partial(何枚目か。1から)が付く
 // ── 進み具合の見せ方 ──
 //   #stage に CSS 変数 --progress(0〜1)と data-level(0〜5)を付ける。
@@ -74,8 +76,24 @@ const SCENES = ["s1", "s2", "s3", "s4"];
 function headlineFor(scene) {
   if (scene === "s1") return "スマホで しゃしんを とってね";
   if (scene === "s2") return "しゃしん × " + (state.animal || "どうぶつ") + " = ?";
-  if (scene === "s3") return "なにが うまれるかな...?";
+  if (scene === "s3") {
+    if (state.chosenName) return "「" + state.chosenName + "」に けってい!";
+    if (state.nameChoices.length) return "なまえを えらんでね!";
+    return "なにが うまれるかな...?";
+  }
   return "たんじょう!";
+}
+
+// がったい中の名前えらび:候補が届いて まだ決めていなければ、左・中・右のボタンが そのまま候補1〜3になる
+// (2026年11月9日。それまではスマホで選んでいた。元は archive/20261109_before_pc_naming/)
+const NAME_BUTTON_POSITIONS = ["left", "center", "right"];
+function nameButtons() {
+  if (state.chosenName || !state.nameChoices.length) return null;
+  const buttons = { left: null, center: null, right: null };
+  state.nameChoices.slice(0, NAME_BUTTON_POSITIONS.length).forEach((name, i) => {
+    buttons[NAME_BUTTON_POSITIONS[i]] = { label: name, action: () => chooseName(name) };
+  });
+  return buttons;
 }
 
 // ボタンの中身。null は「ボタンを出さない」、disabled は「出すが押せない」
@@ -86,7 +104,7 @@ function buttonsFor(scene) {
     center: { label: "がったい!", action: startFusion },
     right: null,
   };
-  if (scene === "s3") return { left: null, center: { label: "まってね", disabled: true }, right: null };
+  if (scene === "s3") return nameButtons() || { left: null, center: { label: "まってね", disabled: true }, right: null };
   return {
     left: { label: "もう一回", action: restart },
     center: { label: "たたかう!", action: goBattle },
@@ -187,7 +205,6 @@ let currentButtons = buttonsFor("s1");
 function renderScene(scene) {
   state.scene = scene;
   stage.dataset.scene = scene;
-  el("headline").textContent = headlineFor(scene);
   fusionBgm(scene === "s3");   // がったい中の BGM(sound.js)
 
   // 段階のランプ
@@ -198,8 +215,16 @@ function renderScene(scene) {
     li.classList.toggle("now", i === index);
   });
 
-  // 操作盤
+  renderControls();
+}
+
+// 見出しと操作盤だけを、いまの場面・状態に合わせて描き直す(場面はそのまま。名前の候補が届いた・決まったときにも使う)
+function renderControls() {
+  const scene = state.scene;
+  el("headline").textContent = headlineFor(scene);
   currentButtons = buttonsFor(scene);
+  // 名前えらびのあいだは、3つの名前を同じ見た目にする(テーマの CSS が #stage.naming で見せ方を変える)
+  stage.classList.toggle("naming", scene === "s3" && !!nameButtons());
   ["left", "center", "right"].forEach((pos) => {
     const btn = el("btn-" + pos);
     const conf = currentButtons[pos];
@@ -344,6 +369,12 @@ async function startFusion() {
     } else if (data.needs_retake) {
       endWithMessage("もういちど とってね", data.retake_reason || "");
     } else {
+      // 名前の候補が WebSocket で届かなかったとき(つなぎ直しの最中など)は、結果の候補を使う
+      if (!state.nameChoices.length) setNameChoices(nameChoicesFromMonster(data.monster));
+      // 名前を選ぶまで誕生を待つ(画面の下で選んでいる途中にカードが出ないように)
+      const run = fusionRun;
+      await waitForName();
+      if (run !== fusionRun) return;   // 待っているあいだに「はじめに もどす」などで取り消された
       await birth(data);
       reportRevealed(state.photoId);   // スマホにも絵を見せてよい(誕生の演出が終わった)
     }
@@ -372,6 +403,10 @@ let endTimer = null;
 function endWithMessage(headline, detail) {
   state.generating = false;
   stopTimers();
+  stopNameWait();
+  // 名前のボタンが出ていたら、ふつうのボタンに戻す(撮り直し・失敗のあとに名前を選べないように)
+  state.nameChoices = [];
+  renderControls();
   fusionBgm(false);   // 撮り直し・エラーの表示のあいだは、がったい中の BGM を止める
   el("headline").textContent = headline;
   if (detail) toast(detail, 4.5);
@@ -459,6 +494,8 @@ function cancelRunning() {
   clearTimeout(endTimer);
   stopTestPlay();
   stopTimers();
+  stopNameWait();
+  fusionRun += 1;   // 名前を待っている「がったい!」の続き(誕生)を動かさない
   state.generating = false;
 }
 
@@ -487,6 +524,7 @@ const TIPS = [
   "モンスターは 3つの ボタンで たたかうよ",
   "せいしつは 6しゅるい 🔥💧⚡🪨🗡️☁️",
   "いろんな ものを とると ちがう モンスターに なるよ",
+  "なまえは したの 3つの ボタンで えらぶよ",
   "うまれた モンスターは カードに なるよ",
 ];
 
@@ -534,7 +572,8 @@ function onProgress(msg) {
     startNaming();
   } else if (msg.stage === "drawing") {
     setSteps("drawing");
-    setNameChoices(nameChoicesOf(msg));
+    // 詳しいプロンプトでは、名前の候補はここで届く(短いプロンプトでは届かないので、空で上書きしない)
+    if (nameChoicesOf(msg).length) setNameChoices(nameChoicesOf(msg));
     // 画像生成の目安の時間にあわせて、30% → 95% まで進める(目安を過ぎても 95% で止める)
     const expected = Math.max(5, msg.expected_seconds || 30);
     const started = Date.now();
@@ -570,27 +609,89 @@ function clearPartial() {
   if (img) { img.onload = null; img.removeAttribute("src"); }
 }
 
+// 名前の候補(ボタンの数 = 3つまで)を受け取り、がったい中なら見出しとボタンを名前えらびにする
 function setNameChoices(names) {
-  state.nameChoices = names;
+  state.nameChoices = (names || []).slice(0, NAME_BUTTON_POSITIONS.length);
   const ul = el("name-list");
   ul.innerHTML = "";
-  names.forEach((n) => {
+  state.nameChoices.forEach((n) => {
     const li = document.createElement("li");
     li.textContent = n;
     li.classList.toggle("chosen", n === state.chosenName);
     ul.appendChild(li);
   });
-  el("name-help").textContent = state.chosenName ? "けってい!" : "スマホで えらんでね";
+  el("name-help").textContent = state.chosenName ? "けってい!" : "したの ボタンで えらんでね";
+  if (state.scene === "s3") renderControls();
 }
 
-// 子供がスマホで名前を選んだ
+// 生成の結果(monster)から名前の候補を作る(サーバーの session.remember_name_choices と同じ並び:採用した名前 → 合格した候補)
+function nameChoicesFromMonster(monster) {
+  const m = monster || {};
+  const names = [m.monster_name];
+  (m.name_candidates || []).forEach((c) => {
+    if (c && c.ok && c.name && !names.includes(c.name)) names.push(c.name);
+  });
+  return names.filter(Boolean);
+}
+
+// 名前が決まった(PC のボタン・サーバーからの知らせ・開発者メニュー)
+function applyChosenName(name) {
+  state.chosenName = name;
+  setNameChoices(state.nameChoices.length ? state.nameChoices : [name]);
+  renderControls();
+  const card = el("card-name");
+  card.textContent = name;
+  replayAnimation(card, "pop");
+  if (state.scene === "s4") toast("なまえは「" + name + "」に けってい!");
+  finishNameWait();
+}
+
+// 子供が下の3つのボタンで名前を選んだ。サーバーに送って、保存する名前にする(バトル・カードもこの名前)。
+// テストプレイ・見本(写真の ID がない)は送らない。送れなくても止めない(最初の名前のまま進む)
+function chooseName(name) {
+  if (state.chosenName || !name) return;
+  applyChosenName(name);
+  if (cardId() !== "demo") {
+    postForm("/api/choose-name", { photo_id: state.photoId, name }).catch(() => {});
+  }
+}
+
+// サーバーからの知らせ(自分で選んだ名前が返ってくる・開発者が別の画面から選んだ)
 function onNameChosen(msg) {
-  state.chosenName = msg.name;
-  setNameChoices(state.nameChoices.length ? state.nameChoices : [msg.name]);
-  const name = el("card-name");
-  name.textContent = msg.name;
-  replayAnimation(name, "pop");
-  if (state.scene === "s4") toast("なまえは「" + msg.name + "」に けってい!");
+  if (msg.photo_id && state.photoId && msg.photo_id !== state.photoId) return;
+  if (msg.name && msg.name !== state.chosenName) applyChosenName(msg.name);
+}
+
+// 絵ができても名前を選んでいなければ、選ぶまで誕生を待つ。
+// 子供がいなくなったときのために、AUTO_NAME_SECONDS たったら1つ目の名前に決める(2026年11月2日にスマホで 60秒にしたのと同じ)
+const AUTO_NAME_SECONDS = 60;
+let nameWaiter = null;      // 名前を待っている Promise を終わらせる関数
+let autoNameTimer = null;
+let fusionRun = 0;          // 何回目の「がったい!」か(取り消したあとに、待っていた誕生が動かないように見分ける)
+
+function waitForName() {
+  if (state.chosenName || !state.nameChoices.length) return Promise.resolve();
+  renderControls();
+  return new Promise((resolve) => {
+    nameWaiter = resolve;
+    clearTimeout(autoNameTimer);
+    autoNameTimer = setTimeout(() => chooseName(state.nameChoices[0]), AUTO_NAME_SECONDS * 1000);
+  });
+}
+
+function finishNameWait() {
+  clearTimeout(autoNameTimer);
+  autoNameTimer = null;
+  const resolve = nameWaiter;
+  nameWaiter = null;
+  if (resolve) resolve();
+}
+
+// 待つのをやめる(誕生には進まない)
+function stopNameWait() {
+  clearTimeout(autoNameTimer);
+  autoNameTimer = null;
+  nameWaiter = null;
 }
 
 function startTips() {
@@ -614,7 +715,7 @@ function resetMachine() {
   state.nameChoices = [];
   state.chosenName = "";
   el("name-list").innerHTML = "";
-  el("name-help").textContent = "スマホで えらんでね";
+  el("name-help").textContent = "したの ボタンで えらんでね";
   el("card-name").textContent = "???";
   clearPartial();
 }

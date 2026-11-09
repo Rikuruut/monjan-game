@@ -90,13 +90,15 @@ async def api_revealed(photo_id: str = Form(...)) -> JSONResponse:
     """
     if check_photo_id(photo_id) not in session.photo_outputs:
         raise HTTPException(status_code=404, detail="その写真のモンスターは見つかりませんでした")
-    await ws_manager.notify_revealed(photo_id, monster_image_url(photo_id))
+    choices = session.name_choices.get(photo_id) or [""]
+    name = session.chosen_names.get(photo_id) or choices[0]
+    await ws_manager.notify_revealed(photo_id, monster_image_url(photo_id), name)
     return JSONResponse({"ok": True})
 
 
 @router.post("/api/choose-name")
 async def api_choose_name(photo_id: str = Form(...), name: str = Form(...)) -> JSONResponse:
-    """子供がスマホで選んだ名前を受け取る(スマホの「この なまえに する / ほかに さがす」)。
+    """子供が PC の3つのボタンで選んだ名前を受け取る(core.js の chooseName。2026年11月9日まではスマホで選んでいた)。
 
     画像を作っている途中なら、保存のときにその名前にする。
     画像ができたあとなら、保存した result.json の名前を書きかえる。

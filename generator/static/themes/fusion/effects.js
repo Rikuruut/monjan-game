@@ -285,7 +285,7 @@
         split = SplitText.create(nameEl, { type: "chars" });
         gsap.from(split.chars, {
           y: -70, scale: 0.3, autoAlpha: 0, duration: 0.55, ease: "back.out(3)", stagger: 0.07,
-          // 途中でスマホから名前が選ばれて書きかわっていたら、元に戻さない
+          // 途中で名前が選ばれて書きかわっていたら、元に戻さない
           onComplete: () => { if (nameEl.contains(split.chars[0])) split.revert(); },
         });
       }, "pop+=1.1");
