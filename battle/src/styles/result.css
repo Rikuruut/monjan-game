@@ -243,15 +243,3 @@
   font-weight: 800;
   line-height: 1.5;
 }
-
-/* 勝ち・負けの画面の、実際に刷ったカード(ありがとうの画面の .printed-card と同じ 63:88)。
-   見出しと下の操作盤のあいだに収まる大きさにし、動きは これまでのカード(.result-monster--*)と同じ */
-.result-card__visual--printed { top: 320px; display: flex; justify-content: center; }
-.printed-card.printed-card--result { width: 400px; height: 559px; border-radius: 22px; }
-.printed-card--result .printed-card__frame { border-radius: 22px; }
-.printed-card.printed-card--victory,
-.printed-card.printed-card--practice { animation: victoryCard 0.9s cubic-bezier(.2, 1.4, .4, 1) 0.2s both, victoryHop 1.6s ease-in-out 1.2s infinite; }
-.printed-card.printed-card--defeat {
-  box-shadow: 0 0 0 4px var(--ink), 0 0 50px 10px #d6e8ff99;
-  animation: victoryCard 0.9s ease-out 0.2s both, defeatSway 3s ease-in-out 1.2s infinite alternate;
-}

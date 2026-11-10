@@ -1,7 +1,6 @@
 import { HandIcon } from '../components/HandIcon';
 import { MonsterCard } from '../components/MonsterCard';
 import { Backdrop, Logo } from '../components/Scenery';
-import { cx } from '../cx';
 import { Deck } from '../Deck';
 import { HANDS, type Monster } from '../types';
 
@@ -38,23 +37,17 @@ const CONTINUE_LABEL: Record<ResultKind, string> = {
   practice: 'ほんばん スタート！',
 };
 
-// 勝ち・負け・引き分け・れんしゅうクリア。
-// 撮影のモンスター(cardUrl あり)は、ありがとうの画面と同じく 実際に刷ったカード(generator の /card)を見せる
-// (2026年11月10日。それまではバトルのカードで、モンじゃん!のカードの形になっていなかった)。
-// バトルの見本・単体の開発用は、刷ったカードがないので、これまでのカード
+// 勝ち・負け・引き分け・れんしゅうクリア
 export function ResultScreen({
   kind,
   monster,
-  cardUrl = null,
   onContinue,
 }: {
   kind: ResultKind;
   monster: Monster;
-  cardUrl?: string | null;
   onContinue: () => void;
 }) {
   const copy = RESULT_COPY[kind];
-  const printed = kind !== 'draw' && Boolean(cardUrl);
   return (
     <main className={`screen result-screen result-screen--${kind}`}>
       <Backdrop rays />
@@ -67,18 +60,13 @@ export function ResultScreen({
           <h1>{copy.title}</h1>
           <p className="result-message">{copy.message}</p>
         </div>
-        <div className={cx('result-card__visual', printed && 'result-card__visual--printed')}>
+        <div className="result-card__visual">
           {kind === 'draw' ? (
             <div className="real-janken">
               <div className="real-janken__hands">
                 {HANDS.map((hand) => <span key={hand} aria-hidden="true"><HandIcon hand={hand} alt="" /></span>)}
               </div>
               <p>かいじょうの おとなと<br />じゃんけんしてね！</p>
-            </div>
-          ) : printed ? (
-            <div className={`printed-card printed-card--result printed-card--${kind}`}>
-              {/* フォーカスを取らない(会場の3つのボタンは、このページで受ける) */}
-              <iframe className="printed-card__frame" src={cardUrl ?? undefined} title="モンスターカード" tabIndex={-1} />
             </div>
           ) : (
             <MonsterCard monster={monster} className={`result-monster result-monster--${kind}`} />
