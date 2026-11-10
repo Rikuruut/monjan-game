@@ -566,9 +566,9 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   } else if (screen === 'thanks') {
     content = <ThanksScreen monster={data.player} cardUrl={cardPreviewUrl(launch)} onTitle={returnToTitle} />;
   } else if (screen === 'practice-clear') {
-    content = <ResultScreen kind="practice" monster={data.player} onContinue={startBattle} />;
+    content = <ResultScreen kind="practice" monster={data.player} cardUrl={cardPreviewUrl(launch)} onContinue={startBattle} />;
   } else if (screen !== 'battle') {
-    content = <ResultScreen kind={screen} monster={data.player} onContinue={finishGame} />;
+    content = <ResultScreen kind={screen} monster={data.player} cardUrl={cardPreviewUrl(launch)} onContinue={finishGame} />;
   } else {
     content = (
       <BattleScreen

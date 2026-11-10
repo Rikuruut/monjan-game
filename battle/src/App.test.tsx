@@ -760,6 +760,32 @@ describe('撮影・合体の画面とのつなぎと、会場の3つのボタン
     expect(screen.getByTitle('もらえるカード')).toHaveAttribute('src', '/card?id=abc&embed=1');
   });
 
+  it('勝ち・負けの画面でも、生まれたモンスターの実際に刷ったカードを出す(引き分けは本物のじゃんけん)', async () => {
+    render(<App launch={{ photoId: 'abc', skipTitle: true, toGenerator: true }} />);
+    await screen.findByText('れんしゅう');
+    fireEvent.keyDown(window, { key: 'd' });
+    const menu = screen.getByRole('complementary', { name: '開発者メニュー' });
+    fireEvent.click(within(menu).getByRole('tab', { name: '画面・勝ち負け' }));
+    for (const jump of ['まけ', 'かち', 'れんしゅうクリア']) {
+      fireEvent.click(within(menu).getByRole('button', { name: jump }));
+      expect(screen.getByTitle('モンスターカード')).toHaveAttribute('src', '/card?id=abc&embed=1');
+      expect(document.querySelector('.result-monster')).toBeNull();
+    }
+    fireEvent.click(within(menu).getByRole('button', { name: 'ひきわけ' }));
+    expect(screen.queryByTitle('モンスターカード')).toBeNull();
+  });
+
+  it('バトルの見本では、勝ち・負けの画面は これまでのカード', async () => {
+    render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
+    await screen.findByRole('button', { name: /スタート！/ });
+    fireEvent.keyDown(window, { key: 'd' });
+    const menu = screen.getByRole('complementary', { name: '開発者メニュー' });
+    fireEvent.click(within(menu).getByRole('tab', { name: '画面・勝ち負け' }));
+    fireEvent.click(within(menu).getByRole('button', { name: 'まけ' }));
+    expect(screen.queryByTitle('モンスターカード')).toBeNull();
+    expect(document.querySelector('.result-monster--defeat')).not.toBeNull();
+  });
+
   it('← / Enter / → だけで、スタートから練習ラウンド・本番のじゃんけんまで遊べる', async () => {
     render(<App launch={{ photoId: null, skipTitle: false, toGenerator: false }} />);
     await screen.findByRole('button', { name: /スタート！/ });
