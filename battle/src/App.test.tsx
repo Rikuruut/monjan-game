@@ -9,6 +9,7 @@ import {
   IMPACT_DISPLAY_MS,
   JANKEN_BEAT_MS,
   NEXT_ROUND_DISPLAY_MS,
+  PRACTICE_COACH_PAGE_MS,
   MASH_DUEL_MS,
   MASH_RESULT_MS,
   RESULT_DISPLAY_MS,
@@ -99,6 +100,9 @@ function mockDataFetch() {
   stubFetch(byPath);
 }
 
+// 練習の はじめの説明(2ページ。時間で進み、終わるまで手は選べない)
+const PRACTICE_INTRO_MS = PRACTICE_COACH_PAGE_MS * 2;
+
 async function advance(milliseconds: number) {
   await act(async () => {
     vi.advanceTimersByTime(milliseconds);
@@ -115,7 +119,7 @@ async function startToPractice() {
 
 // 練習ラウンドを、結果で止まるところまで進める(グーを出す。練習は必ず勝つ)
 async function playPractice() {
-  await advance(SUMMON_DISPLAY_MS);
+  await advance(SUMMON_DISPLAY_MS + PRACTICE_INTRO_MS);
   fireEvent.click(screen.getByRole('button', { name: 'グー' }));
   await advanceSelectedToReveal();
   await advanceRevealToAttack(false);
@@ -204,16 +208,34 @@ describe('画面上のゲーム進行と演出', () => {
     expect(screen.getByRole('status')).toHaveTextContent('れんしゅう スタート');
 
     await advance(SUMMON_DISPLAY_MS);
-    // 吹き出し①:手をえらぶまで待つ
+    // 説明1:時間で進む。のこり時間のバーが出て、説明のあいだは手を選べない
     expect(screen.getByText('れんしゅうだよ！')).toBeInTheDocument();
-    expect(screen.getByText(/れんだ しょうぶ/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'のこり時間' })).toBeInTheDocument();
+    expect(screen.getByLabelText('せつめい 1 / 2')).toBeInTheDocument();
     expect(document.querySelector('.star-badge')).toBeNull();
-    await advance(RESULT_DISPLAY_MS * 2);
+    expect(screen.getByRole('button', { name: 'チョキ' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'チョキ' }));
+    expect(screen.queryByRole('button', { name: 'チョキ' })).not.toHaveClass('hand-button--selected');
+    await advance(PRACTICE_COACH_PAGE_MS - 1);
     expect(screen.getByText('れんしゅうだよ！')).toBeInTheDocument();
+
+    // 説明2:あいこの連打勝負
+    await advance(1);
+    expect(screen.queryByText('れんしゅうだよ！')).not.toBeInTheDocument();
+    expect(screen.getByText('あいこなら れんだ しょうぶ！')).toBeInTheDocument();
+    expect(screen.getByLabelText('せつめい 2 / 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'チョキ' })).toBeDisabled();
+
+    // 説明がおわると消えて、手を選べる
+    await advance(PRACTICE_COACH_PAGE_MS);
+    expect(screen.queryByText('あいこなら れんだ しょうぶ！')).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'チョキ' })).toBeEnabled();
+    await advance(RESULT_DISPLAY_MS * 2);
+    expect(screen.getByRole('button', { name: 'チョキ' })).toBeEnabled();
 
     // どの手を出しても勝つ(練習)。⚔の数だけ相手の♡がへる
     fireEvent.click(screen.getByRole('button', { name: 'チョキ' }));
-    expect(screen.queryByText('れんしゅうだよ！')).not.toBeInTheDocument();
     await advanceSelectedToReveal();
     await advanceRevealToAttack(false);
     await advance(ATTACK_DISPLAY_MS);
@@ -345,8 +367,9 @@ describe('画面上のゲーム進行と演出', () => {
     expect(screen.getByRole('status')).toHaveTextContent('れんしゅう スタート');
     await advance(1);
 
-    // 星はなくなった(レア度抽選もない)。召喚のあと すぐ選べる
+    // 星はなくなった(レア度抽選もない)。練習は はじめの説明のあとに選べる
     expect(screen.queryByText(/レア度抽選/)).not.toBeInTheDocument();
+    await advance(PRACTICE_INTRO_MS);
     const paper = screen.getByRole('button', { name: 'パー' });
     expect(paper).toBeEnabled();
     expect(paper.querySelector('.star-badge')).toBeNull();
@@ -616,7 +639,7 @@ describe('画面上のゲーム進行と演出', () => {
     stubFetch(byPath);
 
     await startToPractice();
-    await advance(SUMMON_DISPLAY_MS);
+    await advance(SUMMON_DISPLAY_MS + PRACTICE_INTRO_MS);
     // 練習では とどめのチャンスにしない
     expect(document.querySelector('.finish-notice')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'グー' }));
@@ -769,6 +792,12 @@ describe('撮影・合体の画面とのつなぎと、会場の3つのボタン
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await advance(SUMMON_DISPLAY_MS);
     expect(screen.getByText('れんしゅうだよ！')).toBeInTheDocument();
+    // 説明のあいだは、3つのボタンを押しても手を選ばない
+    press('ArrowRight');
+    press('Enter');
+    expect(screen.getByRole('button', { name: 'パー' })).not.toHaveClass('hand-button--selected');
+    await advance(PRACTICE_INTRO_MS);
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
 
     press('ArrowRight');  // → はパー(練習は必ず勝つ)
     expect(screen.getByRole('button', { name: 'パー' })).toHaveClass('hand-button--selected');
@@ -889,6 +918,10 @@ describe('開発者メニュー(D キー)', () => {
     await advance(AUTOPLAY_TITLE_MS);
     expect(screen.getByText('れんしゅう')).toBeInTheDocument();
     await advance(SUMMON_DISPLAY_MS);
+    // 説明のあいだは自動プレイも手を選ばない
+    await advance(PRACTICE_INTRO_MS - 1);
+    expect(screen.getByRole('button', { name: 'グー' })).toBeDisabled();
+    await advance(1);
     await advance(AUTOPLAY_HAND_MS);
     await advanceSelectedToReveal();
     await advanceRevealToAttack(false);

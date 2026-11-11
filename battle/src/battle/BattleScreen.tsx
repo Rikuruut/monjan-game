@@ -13,6 +13,7 @@ import { MashDuel } from './MashDuel';
 import { MonsterPanel } from './MonsterPanel';
 import { DECIDED_PHASES, FINISH_CHANCE_PHASES, phaseIn, SPECIAL_PHASES, type BattlePhase, type HandWinner, type TutorialMode } from './phases';
 import type { BattleData } from './practice';
+import { PracticeIntro } from './PracticeIntro';
 import { RoundFeedback } from './RoundFeedback';
 import { Tutorial } from './Tutorial';
 
@@ -67,25 +68,15 @@ function NextRoundNotice({ round }: { round: number }) {
   );
 }
 
-// 練習ラウンドの吹き出し。手をえらぶ前(choose)と、結果で止まっているとき(result)。見た目は battle.css の .coach
-function PracticeCoach({ step }: { step: 'choose' | 'result' }) {
+// 練習ラウンドの結果で止まっているときの吹き出し(中ボタン「つぎへ」で進む)。
+// 手をえらぶ前の説明は PracticeIntro.tsx(時間で進む)。見た目は battle.css の .coach
+function PracticeResultCoach() {
   return (
-    <aside className={`coach coach--${step}`} aria-live="polite">
-      {step === 'choose' ? (
-        <>
-          <p className="coach-title">れんしゅうだよ！</p>
-          <p>グー・チョキ・パーから <strong>1つ えらぼう！</strong></p>
-          <p className="coach-sub">◀ ● ▶ の ボタンでも えらべるよ</p>
-          <p className="coach-stars">同じ手(あいこ)のときは <strong>ボタン れんだ しょうぶ！</strong></p>
-        </>
-      ) : (
-        <>
-          <p className="coach-title">かったね！</p>
-          <p>かつと <strong>⚔の数だけ</strong> 相手の♡が へるよ！</p>
-          <p><strong>相手の♡を ぜんぶなくしたら かち！</strong></p>
-          <p className="coach-sub">れんしゅうは これで おしまい！</p>
-        </>
-      )}
+    <aside className="coach coach--result" aria-live="polite">
+      <p className="coach-title">かったね！</p>
+      <p>かつと <strong>⚔の数だけ</strong> 相手の♡が へるよ！</p>
+      <p><strong>相手の♡を ぜんぶなくしたら かち！</strong></p>
+      <p className="coach-sub">れんしゅうは これで おしまい！</p>
     </aside>
   );
 }
@@ -158,6 +149,7 @@ export function BattleScreen({
   cpuHand,
   result,
   practice,
+  introPage = null,
   onCloseTutorial,
   onOpenRules,
   onEndPractice,
@@ -178,6 +170,8 @@ export function BattleScreen({
   cpuHand: Hand | null;
   result: RoundResult | null;
   practice: boolean;
+  // 練習の はじめの説明で見せているページ(null は説明なし。説明中は手を選べない)
+  introPage?: number | null;
   onCloseTutorial: () => void;
   onOpenRules: () => void;
   onEndPractice: () => void;
@@ -189,6 +183,7 @@ export function BattleScreen({
   fxLabel?: string;
 }) {
   const tutorialOpen = tutorialMode !== null;
+  const introOpen = practice && phase === 'choosing' && introPage !== null;
   // とどめのチャンス(相手の♡が1):手を選んでから攻撃までのあいだ、相手のカードを光らせる
   const finishChance = !practice && isFinishChance(cpuHp) && phaseIn(phase, FINISH_CHANCE_PHASES);
   // 必殺技の攻撃(とどめのチャンスに じゃんけんで勝った):ためを長く、飛び道具も命中も特大にする
@@ -292,9 +287,10 @@ export function BattleScreen({
       </div>
       {(phase === 'choosing' || phase === 'selected') ? (
         <ChoiceButtons
-          disabled={phase !== 'choosing' || tutorialOpen}
+          disabled={phase !== 'choosing' || tutorialOpen || introOpen}
           selected={playerHand}
-          coach={practice && phase === 'choosing'}
+          coach={practice && phase === 'choosing' && !introOpen}
+          prompt={introOpen ? 'せつめいを よもう！' : undefined}
           onSelect={onSelect}
         />
       ) : handWinner && playerHand && cpuHand ? (
@@ -338,10 +334,10 @@ export function BattleScreen({
       {phase === 'impact' && <div className="hit-flash" aria-hidden="true" />}
       <ParticleLayer ref={canvasRef} />
       {fxLabel && <p className="fx-preview-label" aria-hidden="true">{fxLabel}</p>}
-      {practice && phase === 'choosing' && <PracticeCoach step="choose" />}
+      {introOpen && introPage !== null && <PracticeIntro page={introPage} />}
       {practice && phase === 'result' && (
         <>
-          <PracticeCoach step="result" />
+          <PracticeResultCoach />
           <Deck knobs={{ center: { label: 'つぎへ', onClick: onEndPractice, call: true } }} />
         </>
       )}

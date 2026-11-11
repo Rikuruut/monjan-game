@@ -3,6 +3,7 @@ import { getAttributeTheme } from './attributes';
 import { BattleScreen } from './battle/BattleScreen';
 import type { BattlePhase, HandWinner, Screen, TutorialMode } from './battle/phases';
 import { practiceData, type BattleData } from './battle/practice';
+import { PRACTICE_INTRO_PAGES } from './battle/PracticeIntro';
 import { statCount } from './components/MonsterCard';
 import { SoundControls } from './components/SoundControls';
 import { loadGameData, type GameData } from './data/loadGameData';
@@ -51,6 +52,7 @@ import {
   MASH_DUEL_MS,
   MASH_RESULT_MS,
   NEXT_ROUND_DISPLAY_MS,
+  PRACTICE_COACH_PAGE_MS,
   PRACTICE_SUMMON_SOUND_MS,
   RESULT_DISPLAY_MS,
   REVEAL_DISPLAY_MS,
@@ -81,6 +83,7 @@ export {
   MASH_DUEL_MS,
   MASH_RESULT_MS,
   NEXT_ROUND_DISPLAY_MS,
+  PRACTICE_COACH_PAGE_MS,
   RESULT_DISPLAY_MS,
   REVEAL_DISPLAY_MS,
   SELECTED_DISPLAY_MS,
@@ -99,6 +102,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [tutorialMode, setTutorialMode] = useState<TutorialMode | null>(null);
   // 練習ラウンド(最初のスタートのあと、本物のバトル画面で1回だけ。必ず勝つ。♡は本番の前にもどす)
   const [practice, setPractice] = useState(false);
+  // 練習の はじめの説明で見せているページ(0 から。null は説明なし)。時間で進み、終わるまで手は選べない
+  const [introPage, setIntroPage] = useState<number | null>(null);
   const [playerHp, setPlayerHp] = useState(0);
   const [cpuHp, setCpuHp] = useState(0);
   const [round, setRound] = useState(1);
@@ -183,6 +188,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     clearTimers();
     setTutorialMode(null);
     setPractice(nextPractice);
+    setIntroPage(null);
   };
 
   // 手を選べるようにする(召喚・次のラウンドのあと)
@@ -208,7 +214,22 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setScreen('battle');
     sound.playStart();
     schedule(() => playSound('summon'), PRACTICE_SUMMON_SOUND_MS);
-    schedule(startChoosing, SUMMON_DISPLAY_MS);
+    schedule(isPractice ? startPracticeIntro : startChoosing, SUMMON_DISPLAY_MS);
+  };
+
+  // 練習の はじめの説明(PRACTICE_INTRO_PAGES ページ。1ページ PRACTICE_COACH_PAGE_MS で進む)。
+  // 手えらびの画面のまま、説明が終わるまで手は選べない(lockRef は true のまま)
+  const startPracticeIntro = () => {
+    clearHands();
+    setPhase('choosing');
+    setIntroPage(0);
+    for (let page = 1; page < PRACTICE_INTRO_PAGES; page += 1) {
+      schedule(() => setIntroPage(page), page * PRACTICE_COACH_PAGE_MS);
+    }
+    schedule(() => {
+      setIntroPage(null);
+      lockRef.current = false;
+    }, PRACTICE_INTRO_PAGES * PRACTICE_COACH_PAGE_MS);
   };
 
   // 最初のスタート:練習ラウンドから
@@ -258,7 +279,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
   // 1ラウンド:手を選ぶ → じゃん・けん・ぽん → 手を見せる →(あいこなら連打勝負)→(必殺技)→ 攻撃 → 命中 → 結果
   const chooseHand = (hand: Hand) => {
-    if (!data || !battleData || lockRef.current || tutorialOpen || phase !== 'choosing') return;
+    if (!data || !battleData || lockRef.current || tutorialOpen || introPage !== null || phase !== 'choosing') return;
     lockRef.current = true;
     const { player: playerMonster, cpu: cpuMonster } = battleData;
     // 練習は必ず勝つ。開発者メニューで勝ち負けを決めているときは、その結果になる手にする(あいこは連打勝負になる)
@@ -514,7 +535,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         // あいこの連打勝負:勝ったり負けたりする回数を、まとめて押したことにする
         action = () => addMash(Math.floor(Math.random() * (CPU_MASH_MAX + 4)));
         delay = AUTOPLAY_MASH_MS;
-      } else if (!tutorialOpen && phase === 'choosing') {
+      } else if (!tutorialOpen && introPage === null && phase === 'choosing') {
         action = () => chooseHand(HANDS[Math.floor(Math.random() * HANDS.length)]);
         delay = AUTOPLAY_HAND_MS;
       }
@@ -532,7 +553,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     if (!action) return;
     const timer = window.setTimeout(action, delay);
     return () => window.clearTimeout(timer);
-  }, [autoplay, data, devOpen, screen, phase, tutorialMode, practice]);
+  }, [autoplay, data, devOpen, screen, phase, tutorialMode, practice, introPage]);
 
   // 「攻撃エフェクトを見る」のあいだは、攻撃する側(あいこは両方)のタイプを選んだものにする
   const shownData = useMemo<BattleData | null>(() => {
@@ -583,6 +604,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         cpuHand={cpuHand}
         result={result}
         practice={practice}
+        introPage={introPage}
         onCloseTutorial={closeTutorial}
         onOpenRules={openRules}
         onEndPractice={finishPractice}

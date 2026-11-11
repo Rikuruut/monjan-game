@@ -7,16 +7,19 @@ export function ChoiceButtons({
   disabled,
   selected,
   coach = false,
+  prompt,
   onSelect,
 }: {
   disabled: boolean;
   selected: Hand | null;
   coach?: boolean;
+  // 上の ひとことを置きかえる(練習の説明中など)
+  prompt?: string;
   onSelect: (hand: Hand) => void;
 }) {
   return (
     <div className={cx('choice-area', disabled && 'choice-area--locked', coach && 'choice-area--coach')}>
-      <p className="choice-prompt">{disabled ? 'しょうぶの けっかは…' : 'どの手にする？'}</p>
+      <p className="choice-prompt">{prompt ?? (disabled ? 'しょうぶの けっかは…' : 'どの手にする？')}</p>
       <div className="choice-buttons">
         {HANDS.map((hand) => (
           <button

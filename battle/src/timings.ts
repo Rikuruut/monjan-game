@@ -34,3 +34,5 @@ export const AUTOPLAY_RULES_MS = 800;
 export const AUTOPLAY_HAND_MS = 1000;
 export const AUTOPLAY_WAIT_MS = 3000;
 export const AUTOPLAY_MASH_MS = 300;
+// 練習ラウンドの はじめの説明:1ページを見せる時間(時間で次へ進む。2ページ。終わるまで手は選べない)
+export const PRACTICE_COACH_PAGE_MS = 6000;

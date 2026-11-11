@@ -472,28 +472,92 @@
   animation: practiceChip 1.4s ease-in-out infinite alternate;
 }
 @keyframes practiceChip { to { transform: translateY(-4px); } }
+/* 練習の吹き出し:緑の背景の上でも読めるよう、クリーム色の不透明な板 + 濃い字(2026年11月11日) */
 .coach {
   position: absolute;
   z-index: 22;
   left: 50%;
-  top: 270px;
-  width: 1080px;
-  padding: 26px 50px 30px;
-  background: var(--panel);
-  border: 4px solid var(--sun);
-  border-radius: 28px;
-  box-shadow: 0 10px 0 var(--forest-deep), 0 0 60px #0d2219;
+  top: 230px;
+  width: 1160px;
+  padding: 30px 56px 30px;
+  background: linear-gradient(165deg, var(--cream), #f3ead0);
+  border: 6px solid var(--ink);
+  border-radius: 32px;
+  box-shadow: 0 0 0 6px var(--sun), 0 14px 0 6px var(--forest-deep), 0 24px 60px #000a;
+  color: var(--ink);
   text-align: center;
   transform: translateX(-50%);
   pointer-events: none;
   animation: coachIn 0.35s cubic-bezier(.2, 1.4, .4, 1) both;
 }
 @keyframes coachIn { from { opacity: 0; transform: translateX(-50%) translateY(30px) scale(0.9); } }
-.coach p { margin: 8px 0 0; font-size: 42px; font-weight: 800; line-height: 1.4; }
-.coach strong { color: var(--sun); }
-.coach .coach-title { margin: 0 0 6px; font-family: var(--font-title); font-size: 68px; font-weight: 400; color: var(--sun); text-shadow: var(--ink-outline); }
-.coach .coach-sub { font-size: 32px; color: #bcd8c8; }
-.coach .coach-stars { margin-top: 14px; font-size: 38px; }
+.coach p { margin: 8px 0 0; font-size: 44px; font-weight: 800; line-height: 1.4; }
+.coach strong { color: #d4500f; }
+.coach .coach-title { margin: 0 0 10px; font-family: var(--font-title); font-size: 72px; font-weight: 400; line-height: 1.2; color: var(--forest); }
+.coach .coach-sub { margin-top: 12px; font-size: 34px; font-weight: 700; color: var(--moss); }
+/* 説明中は、うしろを暗くして板を浮かせる */
+.coach-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 21;
+  background: #061510a6;
+  animation: coachVeilIn 0.3s ease-out both;
+}
+@keyframes coachVeilIn { from { opacity: 0; } }
+/* ページが変わるたびに中身が ふわっと入れかわる(key で作り直す) */
+.coach-page { animation: coachPageIn 0.4s cubic-bezier(.2, 1.2, .4, 1) both; }
+@keyframes coachPageIn { from { opacity: 0; transform: translateX(60px); } }
+/* 説明の絵:手のアイコンと ◀ ● ▶ / あいこ(✊=✊)→ れんだ */
+.coach-figure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 48px;
+  margin: 18px 0 4px;
+}
+.coach-figure img { width: 112px; height: 112px; object-fit: contain; }
+.coach-figure--hands span { display: grid; justify-items: center; gap: 6px; }
+.coach-figure--hands b,
+.coach-mash b {
+  display: inline-grid;
+  place-items: center;
+  min-width: 64px;
+  height: 52px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--forest);
+  color: var(--sun);
+  font-size: 30px;
+}
+.coach-tie { display: flex; align-items: center; gap: 10px; }
+.coach-tie i,
+.coach-arrow { font-style: normal; font-size: 64px; font-weight: 800; color: var(--forest); }
+.coach-mash { display: grid; justify-items: center; gap: 10px; animation: coachMash 0.24s steps(2) infinite; }
+.coach-mash b { height: 72px; padding: 0 28px; font-size: 40px; letter-spacing: 0.1em; }
+.coach-mash small { font-size: 32px; font-weight: 800; color: #d4500f; }
+@keyframes coachMash { 50% { transform: translateY(5px) scale(0.96); } }
+/* のこり時間:ページ番号の点と、減っていくバー */
+.coach-foot { display: flex; align-items: center; gap: 24px; margin-top: 24px; }
+.coach-dots { display: flex; gap: 10px; }
+.coach-dots span { width: 22px; height: 22px; border-radius: 50%; background: #c9c2a6; border: 3px solid var(--ink); }
+.coach-dots .is-done { background: var(--moss); }
+.coach-dots .is-current { background: var(--gold); }
+.coach-timer {
+  flex: 1;
+  height: 24px;
+  overflow: hidden;
+  border: 4px solid var(--ink);
+  border-radius: 999px;
+  background: #d9d0b2;
+}
+.coach-timer span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff9d2e, var(--gold));
+  transform-origin: left center;
+  animation: coachTimer linear both;
+}
+@keyframes coachTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 /* ①のあいだ、手のボタンを光らせて指す */
 .choice-area--coach .hand-button { box-shadow: 0 0 0 4px var(--sun), 0 9px 0 4px #061510, 0 0 40px 10px #ffe9a8aa; }
 /* 結果で止まっているあいだは、下の操作盤が「バトルスタート!」を出すので、絵の下のひとことは隠す */
