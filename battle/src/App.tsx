@@ -48,6 +48,10 @@ import {
   FX_PREVIEW_LEAD_MS,
   FX_PREVIEW_STEP_MS,
   IMPACT_DISPLAY_MS,
+  INTRO_CPU_MS,
+  INTRO_PLAYER_MS,
+  INTRO_TOTAL_MS,
+  INTRO_VS_MS,
   JANKEN_BEAT_MS,
   MASH_DUEL_MS,
   MASH_RESULT_MS,
@@ -79,6 +83,9 @@ export {
   FX_PREVIEW_LEAD_MS,
   FX_PREVIEW_STEP_MS,
   IMPACT_DISPLAY_MS,
+  INTRO_CPU_MS,
+  INTRO_PLAYER_MS,
+  INTRO_TOTAL_MS,
   JANKEN_BEAT_MS,
   MASH_DUEL_MS,
   MASH_RESULT_MS,
@@ -213,8 +220,23 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     resetRound();
     setScreen('battle');
     sound.playStart();
+    if (isPractice) {
+      schedule(() => playSound('summon'), PRACTICE_SUMMON_SOUND_MS);
+      schedule(startPracticeIntro, SUMMON_DISPLAY_MS);
+      return;
+    }
+    // 本番:登場シーン(相手があらわれる → 自分が出る → VS)のあと手えらびへ
+    setPhase('intro-cpu');
     schedule(() => playSound('summon'), PRACTICE_SUMMON_SOUND_MS);
-    schedule(isPractice ? startPracticeIntro : startChoosing, SUMMON_DISPLAY_MS);
+    schedule(() => {
+      setPhase('intro-player');
+      playSound('select');
+    }, INTRO_CPU_MS);
+    schedule(() => {
+      setPhase('intro-vs');
+      playSound('reveal');
+    }, INTRO_CPU_MS + INTRO_PLAYER_MS);
+    schedule(startChoosing, INTRO_TOTAL_MS);
   };
 
   // 練習の はじめの説明(PRACTICE_INTRO_PAGES ページ。1ページ PRACTICE_COACH_PAGE_MS で進む)。

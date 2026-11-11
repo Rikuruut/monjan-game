@@ -7,6 +7,10 @@ export type TutorialMode = 'review';
 
 export type BattlePhase =
   | 'summon'
+  // 本番のはじまりの登場シーン:相手があらわれる → 自分が出る → VS(練習は summon だけ)
+  | 'intro-cpu'
+  | 'intro-player'
+  | 'intro-vs'
   | 'choosing'
   | 'selected'
   | 'janken-jan'
@@ -42,3 +46,5 @@ export const FINISH_CHANCE_PHASES: readonly BattlePhase[] = [
 ];
 // 必殺技の演出(カットイン・ため・命中)
 export const SPECIAL_PHASES: readonly BattlePhase[] = ['special', 'attack', 'impact'];
+// 本番のはじまりの登場シーン
+export const INTRO_PHASES: readonly BattlePhase[] = ['intro-cpu', 'intro-player', 'intro-vs'];

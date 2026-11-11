@@ -11,7 +11,7 @@ import type { Hand, Monster, RoundResult } from '../types';
 import { ChoiceButtons } from './ChoiceButtons';
 import { MashDuel } from './MashDuel';
 import { MonsterPanel } from './MonsterPanel';
-import { DECIDED_PHASES, FINISH_CHANCE_PHASES, phaseIn, SPECIAL_PHASES, type BattlePhase, type HandWinner, type TutorialMode } from './phases';
+import { DECIDED_PHASES, FINISH_CHANCE_PHASES, INTRO_PHASES, phaseIn, SPECIAL_PHASES, type BattlePhase, type HandWinner, type TutorialMode } from './phases';
 import type { BattleData } from './practice';
 import { PracticeIntro } from './PracticeIntro';
 import { RoundFeedback } from './RoundFeedback';
@@ -55,6 +55,13 @@ function SpecialCutin({ monster, theme }: { monster: Monster; theme: AttributeTh
       <span className="special-cutin__flash" aria-hidden="true" />
     </div>
   );
+}
+
+// 本番のはじまりの登場シーンで、下の帯に出す ひとこと(相手があらわれる → 自分が出る → VS)
+function introCopy(phase: BattlePhase, data: BattleData): string {
+  if (phase === 'intro-cpu') return `${data.cpu.name}が あらわれた！`;
+  if (phase === 'intro-player') return `いけっ！ ${data.player.name}！`;
+  return 'バトル スタート！';
 }
 
 function NextRoundNotice({ round }: { round: number }) {
@@ -183,6 +190,7 @@ export function BattleScreen({
   fxLabel?: string;
 }) {
   const tutorialOpen = tutorialMode !== null;
+  const inIntro = phaseIn(phase, INTRO_PHASES);
   const introOpen = practice && phase === 'choosing' && introPage !== null;
   // とどめのチャンス(相手の♡が1):手を選んでから攻撃までのあいだ、相手のカードを光らせる
   const finishChance = !practice && isFinishChance(cpuHp) && phaseIn(phase, FINISH_CHANCE_PHASES);
@@ -251,7 +259,7 @@ export function BattleScreen({
           result={result}
           isHit={phase === 'impact' && Boolean(result?.playerDamage)}
         />
-        <div className="versus" aria-label="バーサス">
+        <div className={cx('versus', phase === 'intro-vs' && 'versus--intro')} aria-label="バーサス">
           <span>V</span><span>S</span>
         </div>
         <MonsterPanel
@@ -301,6 +309,11 @@ export function BattleScreen({
           playerHand={playerHand}
           cpuHand={cpuHand}
         />
+      ) : inIntro ? (
+        <div className="choice-area choice-area--waiting choice-area--intro" role="status" aria-live="assertive">
+          {/* key で phase ごとに出しなおし、文字が1回ずつ はねて出る */}
+          <p key={phase} className="choice-prompt intro-copy">{introCopy(phase, data)}</p>
+        </div>
       ) : (
         <div className="choice-area choice-area--waiting">
           <p className="choice-prompt">
@@ -315,6 +328,7 @@ export function BattleScreen({
           </div>
         </div>
       )}
+      {phase === 'intro-cpu' && <div className="intro-flash" aria-hidden="true" />}
       {finishChance && phase === 'choosing' && !tutorialOpen && (
         <p className="finish-notice" role="status">あと1！ じゃんけんで かてば <strong>ひっさつわざ！</strong></p>
       )}

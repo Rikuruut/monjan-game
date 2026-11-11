@@ -112,6 +112,51 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* 本番の登場シーン:白く光る → 相手が右から → 自分が左から → VS がはずむ      */
+/* ------------------------------------------------------------------ */
+.monster-panel--intro-hidden { visibility: hidden; }
+.monster-panel--intro-enter .monster-card-motion { animation: introEnterCpu 0.75s cubic-bezier(.2, 1.3, .4, 1) both; }
+.monster-panel--player.monster-panel--intro-enter .monster-card-motion { animation-name: introEnterPlayer; }
+@keyframes introEnterCpu {
+  0%   { opacity: 0; transform: translateX(900px) scale(0.9); filter: brightness(2.5); }
+  65%  { opacity: 1; transform: translateX(-24px) scale(1.04); filter: brightness(1.3); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@keyframes introEnterPlayer {
+  0%   { opacity: 0; transform: translateX(-900px) scale(0.9); filter: brightness(2.5); }
+  65%  { opacity: 1; transform: translateX(24px) scale(1.04); filter: brightness(1.3); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+/* はじめの白い光(2回 ちかっと光る) */
+.intro-flash {
+  position: absolute;
+  z-index: 40;
+  inset: 0;
+  background: #fff;
+  pointer-events: none;
+  animation: introFlash 0.45s ease-out both;
+}
+@keyframes introFlash {
+  0%   { opacity: 1; }
+  30%  { opacity: 0.15; }
+  50%  { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+/* VS:大きく出て はずむ */
+.versus--intro { animation: introVersus 0.7s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes introVersus {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(-6deg) scale(3); }
+  55%  { opacity: 1; transform: translate(-50%, -50%) rotate(-6deg) scale(0.85); }
+  100% { opacity: 1; transform: translate(-50%, -50%) rotate(-6deg) scale(1); }
+}
+/* 下の帯の ひとこと(phase ごとに出しなおす) */
+.intro-copy { white-space: nowrap; animation: introCopy 0.35s cubic-bezier(.2, 1.4, .4, 1) both; }
+@keyframes introCopy {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ------------------------------------------------------------------ */
 /* 攻撃:カードが前へ出る(ためる → とびだす → もどる)                     */
 /* ------------------------------------------------------------------ */
 .monster-panel--attacking .monster-card-motion { animation: lungePlayer 0.7s ease-in-out both; }

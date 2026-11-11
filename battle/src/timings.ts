@@ -1,6 +1,11 @@
 // バトルの進み方の時間(ミリ秒)。テストは App.tsx から読む(App.tsx が出し直している)
 
 export const SUMMON_DISPLAY_MS = 1200;
+// 本番のはじまりの登場シーン(2026年11月11日):相手があらわれる → 自分が出る → VS。練習は SUMMON_DISPLAY_MS の召喚のまま
+export const INTRO_CPU_MS = 1000;
+export const INTRO_PLAYER_MS = 1000;
+export const INTRO_VS_MS = 900;
+export const INTRO_TOTAL_MS = INTRO_CPU_MS + INTRO_PLAYER_MS + INTRO_VS_MS;
 // 最後の一撃のときは、この間に 倒れたカードが沈む演出を見せる
 export const RESULT_DISPLAY_MS = 2000;
 export const NEXT_ROUND_DISPLAY_MS = 700;

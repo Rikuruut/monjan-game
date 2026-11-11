@@ -28,6 +28,9 @@ export const MonsterPanel = memo(function MonsterPanel({
   const damage = side === 'player' ? result?.playerDamage ?? 0 : result?.cpuDamage ?? 0;
   const isAttacking = phase === 'attack' && (result?.winner === side || result?.winner === 'none');
   const isSummoning = phase === 'summon';
+  // 本番の登場シーン:相手が先にすべりこみ、自分はそのあと(相手のあいだは隠しておく)
+  const isEntering = side === 'cpu' ? phase === 'intro-cpu' : phase === 'intro-player';
+  const isHiddenForIntro = side === 'player' && phase === 'intro-cpu';
   const showDamage = phase === 'impact' && damage > 0;
   // そのラウンドで勝った側は金に光り、負けた側は少し暗くなる
   const roundDecided = result && result.winner !== 'none' && phaseIn(phase, DECIDED_PHASES);
@@ -48,6 +51,8 @@ export const MonsterPanel = memo(function MonsterPanel({
         isHit && 'monster-panel--hit',
         isAttacking && 'monster-panel--attacking',
         isSummoning && 'monster-panel--summoning',
+        isEntering && 'monster-panel--intro-enter',
+        isHiddenForIntro && 'monster-panel--intro-hidden',
         isRoundWinner && 'monster-panel--round-winner',
         isRoundLoser && 'monster-panel--round-loser',
         isDefeated && 'monster-panel--defeated',
