@@ -1,8 +1,11 @@
+import { useRef } from 'react';
 import { getAttributeTheme } from '../attributes';
 import { Hearts, MonsterCard, Swords, statCount } from '../components/MonsterCard';
 import { Backdrop } from '../components/Scenery';
 import { cx } from '../cx';
 import { Deck } from '../Deck';
+import { landFromAbove, popIn, slamChars } from '../fx/entrance';
+import { useGSAP } from '../fx/gsap';
 import type { Monster } from '../types';
 
 // ありがとう:もらえるカード(左)と、ことば(右)。
@@ -11,8 +14,19 @@ import type { Monster } from '../types';
 // バトルの見本・単体の開発用は、刷ったカードがないので、これまでのカード
 export function ThanksScreen({ monster, cardUrl, onTitle }: { monster: Monster; cardUrl: string | null; onTitle: () => void }) {
   const theme = getAttributeTheme(monster.attribute);
+  const rootRef = useRef<HTMLElement>(null);
+  // もらえるカードが 上から落ちて はずみ、「ゲット!」が1文字ずつ たたきつけられ、ことばが ポンと出る
+  useGSAP(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const visual = root.querySelector('.thanks-card__visual');
+    if (visual) landFromAbove(visual, 0.1);
+    popIn(root.querySelectorAll('.acquisition-kicker, .thanks-message'), 0.35);
+    const get = root.querySelector('.thanks-card__side h1 span');
+    if (get) slamChars(get, 0.55, 0.08);
+  }, { scope: rootRef });
   return (
-    <main className="screen thanks-screen">
+    <main ref={rootRef} className="screen thanks-screen">
       <Backdrop rays />
       <section className="thanks-card">
         <div className={cx('thanks-card__visual', cardUrl && 'thanks-card__visual--printed')}>

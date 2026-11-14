@@ -67,10 +67,14 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
 - UI の調整3回目(2026年11月14日):手札は**扇形**(`CardBattle.tsx` の `FAN_ANGLE`・`FAN_DROP`。えらんだカードは まっすぐ起きて手前に)。相手のターンは 考える(1.4秒)→ ふせる(1.0秒。裏向きのカードが飛んでくる)。じゃんけんの1拍は 750ms。HP が3割以下は バーと数字が 赤く点滅(字は出さない。1秒に約1回・HP の段だけ)。こうげきは カードの下の2段目(自分も相手も同じ)。**開発者メニューの「カードバトル」タブ**で 必殺技・回復・封じ手を手札に足す / HP を変える / ため技を予告させる(`card/cardDev.ts` の CustomEvent。自分のターンだけ効く)
 - UI の調整4回目(2026年11月14日):場は 自分 = 緑の枠・相手 = ピンクの枠(相手の裏向きのカードは ピンクの しま模様。見せ場も同じ)と「あなた / あいて」の札。手札のうしろに **ゾーン**(暗くして囲む。ぼかしは使わない)と、その上のふちに **案内の1行**(`card/HandGuide.tsx`。いま押すボタン。説明パネルの操作の行・「▼」はやめた)。こうげきの横のヒントはやめた。HP は バーの色だけ変える(3割以下は バーが赤く点滅。数字は点滅させない)
 - 回復の演出(2026年11月14日):自分の回復カード・相手の回復で、1.8秒(`CARD_HEAL_MS`)。カードが緑に光る・足もとから光の輪と ✚ が立ちのぼる・大きな「+○○」・HP の数字が数え上がり(`FighterPanel.tsx` の `useCountUp`)バーに光が走る・粒(`attackParticles.ts` の `healAt`)・専用の音(`gameAudio.ts` の `heal`)
+- 演出の作り直し(2026年11月15日。`.claude/skills/` の game-feel・gsap-* を当てはめた):`gsap` 3.15.0・`@gsap/react` 2.1.2 を入れた。**進行のタイミングは これまでどおり `useTimers` + `timings.ts`、GSAP は見た目だけ**(動きの終わりを待って進めない。fake timers のテストがそのまま通る)。テストが見る class(`battlefield--shake-*`・`cb-clash__slot--won` など)は残し、同じ要素の CSS の transform の動きは止めて GSAP に替えた
+  - `battle/src/fx/`:`gsap.ts`(プラグインの登録。Flip・SplitText・CustomEase・CustomWiggle)・`feedback.ts`(**強さの段 small / medium / large を1か所で決める**。命中は ダメージ6〜14 で medium の中で強くなり、ため技・とどめ・必殺技は large)・`shake.ts`(trauma² の揺れ。実時間で弱まり、かならず元の位置で止まる)・`hitStop.ts`(0.05〜0.15秒止める。CSS は `.fx-hitstop` で、GSAP は globalTimeline。重なっても新しい呼び出しだけが戻す)・`entrance.ts`(登場の動き)
+  - `card/useCardFx.ts`:命中(止める → 揺れ・少し寄る・のけぞる・数字がはずむ・HP がゆれる)・必殺技の揺れ・相手がふせるカードの弧・回復/封じ手/ため技の予告・ターンの札。`ClashStage.tsx` はすべりこむ → はねる → めくる → 勝ち負け を GSAP で。手札は Flip(`.cb-hand__cell` が並びの位置、中の `.cb-hand__slot` が扇形の傾き)。必殺技の名前・結果とありがとうの見出しは SplitText で1文字ずつ。タイトル・結果・ありがとうは 登場の動き
+  - 光の点滅は 1秒に3回以下(WCAG 2.3.1):命中の白(1回)+ 必殺技の命中(2回。同時)・カットイン(0.9秒で2回)・HP の赤(1秒に1回)。「動きを減らす」の設定では 揺れ3割・ヒットストップなし
 - これから(依頼者の方針:カードの機能・UI・ゲームデザインを先に固めて、通し(2b)は そのあと):UI・レベルデザイン・ゲーム性の調整(つづき)→ 2b パック選び・3ラウンド・リザルト・練習の吹き出し・ボスの読みこみ(直前の来場者)→ 2e 開発者メニュー・自動プレイ・これまでのバトルと入れかえ → 段階3 演出 → 段階4 生成側・カード印刷・`POST /api/battle-result`
 
 ## エージェントのスキル
-`.claude/skills/` に GSAP の公式スキル(`gsap-*`)と `game-feel` を入れてある(出どころとライセンスは `.claude/skills/README.md`)。**バトルの演出・手ざわり(攻撃・回復・揺れ・ヒットストップ・ポンと出る動き など)を作るときは `game-feel` を、GSAP を書くときは `gsap-*` を読んでから作る**(`game-feel` の例は Godot / Unity 向けなので、考え方だけを CSS・GSAP に当てはめる)
+`.claude/skills/` に GSAP の公式スキル(`gsap-*`)と `game-feel` を入れてある(出どころとライセンスは `.claude/skills/README.md`)。**バトルの演出・手ざわり(攻撃・回復・揺れ・ヒットストップ・ポンと出る動き など)を作るときは `game-feel` を、GSAP を書くときは `gsap-*` を読んでから作る**(`game-feel` の例は Godot / Unity 向けなので、考え方だけを CSS・GSAP に当てはめる)。当てはめた部品は `battle/src/fx/`(上の「演出の作り直し」)。新しい演出の強さは `fx/feedback.ts` の段から選ぶ
 
 ## 開発者メニュー
 D キーか右下の ⚙ で開く(会場の3つのボタンでは開かない)。撮影・合体(`generator/static/common/dev.js`)とバトル(`battle/src/DevMenu.tsx`)で同じ見た目で、上の3つは共通。

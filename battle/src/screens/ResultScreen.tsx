@@ -1,7 +1,10 @@
+import { useRef } from 'react';
 import { HandIcon } from '../components/HandIcon';
 import { MonsterCard } from '../components/MonsterCard';
 import { Backdrop, Logo } from '../components/Scenery';
 import { Deck } from '../Deck';
+import { landFromAbove, popIn, slamChars } from '../fx/entrance';
+import { useGSAP } from '../fx/gsap';
 import { HANDS, type Monster } from '../types';
 
 export type ResultKind = 'victory' | 'defeat' | 'draw' | 'practice';
@@ -48,8 +51,20 @@ export function ResultScreen({
   onContinue: () => void;
 }) {
   const copy = RESULT_COPY[kind];
+  const rootRef = useRef<HTMLElement>(null);
+  // 見出しが1文字ずつ たたきつけられ、ことばが ポンと出て、カードが 上から落ちて はずむ(負けは ふわっと降りる)。
+  // カードの はねる・ゆれる(victoryHop・defeatSway)は CSS のまま(動かす要素を分けている)
+  useGSAP(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const title = root.querySelector('.result-card__header h1');
+    if (title) slamChars(title, 0.05);
+    popIn(root.querySelectorAll('.result-eyebrow, .result-message'), 0.45);
+    const visual = root.querySelector('.result-card__visual');
+    if (visual) landFromAbove(visual, 0.3, kind === 'defeat');
+  }, { scope: rootRef, dependencies: [kind], revertOnUpdate: true });
   return (
-    <main className={`screen result-screen result-screen--${kind}`}>
+    <main ref={rootRef} className={`screen result-screen result-screen--${kind}`}>
       <Backdrop rays />
       <div className="signboard result-signboard">
         <Logo className="result-brand" />
