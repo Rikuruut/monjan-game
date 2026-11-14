@@ -52,6 +52,8 @@ export interface Launch {
   skipTitle: boolean;
   /** スタートで撮影の画面へ進むか。false なら、これまでどおり見本のモンスターでバトルへ */
   toGenerator: boolean;
+  /** 作りかけのカードバトル(card/)を開く(`?card=1`。できあがったら これまでのバトルと入れかえる) */
+  card?: boolean;
 }
 
 /**
@@ -71,6 +73,8 @@ export function readLaunch(search: string = window.location.search, integrated: 
     playerName: demo ? params.get('name') : null,
     skipTitle: photoId !== null || params.get('play') === 'sample',
     toGenerator: integrated && !params.has('standalone'),
+    // 作りかけのカードバトルを開く(`?photo=` などと一緒に使える)
+    ...(params.has('card') ? { card: true } : {}),
   };
 }
 

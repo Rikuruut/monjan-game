@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getAttributeTheme } from './attributes';
 import { BattleScreen } from './battle/BattleScreen';
+import { CardBattleEntry } from './card/CardBattle';
 import type { BattlePhase, HandWinner, Screen, TutorialMode } from './battle/phases';
 import { practiceData, type BattleData } from './battle/practice';
 import { PRACTICE_INTRO_PAGES } from './battle/PracticeIntro';
@@ -155,7 +156,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
 
   // 撮影・合体の画面の「たたかう!」から来たときは、タイトルを飛ばしてバトル(ルール説明)から始める
   useEffect(() => {
-    if (!data || !launch.skipTitle || autoStartedRef.current) return;
+    if (!data || !launch.skipTitle || launch.card || autoStartedRef.current) return;
     autoStartedRef.current = true;
     startGame();
   }, [data]);
@@ -444,7 +445,8 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   // 会場の3つのボタン。手は左からグー・チョキ・パー(画面のボタンの並びと同じ)。
   // 見直しのルール説明のあいだはチュートリアルが受け取る。練習の結果では 中ボタンで「れんしゅうクリア」へ、そこから中ボタンで本番へ
   const pressPad = (button: PadButton) => {
-    if (!data) return;
+    // カードバトル(?card=1)は 自分でボタンを受け取る
+    if (!data || launch.card) return;
     if (screen === 'title') {
       if (button === 'center') pressStart();
     } else if (screen === 'battle') {
@@ -604,7 +606,10 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   }
 
   let content: ReactNode;
-  if (screen === 'title') {
+  if (launch.card) {
+    // 作りかけのカードバトル(?card=1)。できあがったら これまでのバトルと入れかえる
+    content = <CardBattleEntry player={data.player} cpu={data.cpu} playSound={playSound} />;
+  } else if (screen === 'title') {
     content = <TitleScreen onStart={pressStart} />;
   } else if (screen === 'thanks') {
     content = <ThanksScreen monster={data.player} cardUrl={cardPreviewUrl(launch)} onTitle={returnToTitle} />;

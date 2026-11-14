@@ -1,0 +1,258 @@
+/* ==================================================================
+   カードバトルの画面(card/。1920×1080)
+   ------------------------------------------------------------------
+     上 … 立て札・ターン                      (これまでのバトルの .battle-topbar)
+     左右 … 自分と相手のカード・HP バー       (.monster-panel を 0.8倍。自分 x 258〜762 / 相手 x 1158〜1662)
+     真ん中 … 相手の手札(マークだけ)と 場    (x 775〜1145)
+     下 … 自分の手札                          (y 770〜1080)
+   動かすのは 位置・大きさ・透明度だけ(内蔵 GPU のため)。演出は このあと(段階3)
+   ================================================================== */
+
+/* ---- 左右のモンスター ---- */
+.cb-screen .monster-panel { scale: 0.8; transform-origin: top center; }
+.cb-fighter--hit .monster-card { animation: cbHit 0.5s ease-out; }
+@keyframes cbHit {
+  20% { transform: translateX(-16px); }
+  40% { transform: translateX(14px); }
+  60% { transform: translateX(-8px); }
+  80% { transform: translateX(4px); }
+}
+.cb-fighter--defeated .monster-card { filter: grayscale(1) brightness(0.6); transition: filter 0.4s 0.4s; }
+
+/* カードの下の段:HP バーと数字・こうげき */
+.cb-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--ink), var(--moss));
+  color: var(--white);
+}
+.cb-stats__label {
+  padding: 1px 10px 3px;
+  border: 3px solid var(--gold);
+  border-radius: 10px;
+  font-family: var(--font-title);
+  font-size: 24px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.cb-stats__label--hp { border-color: var(--heart); }
+.cb-stats__attack { font-family: var(--font-title); font-size: 44px; font-weight: 400; line-height: 1; color: var(--sun); }
+
+.cb-hp { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cb-hp__bar {
+  position: relative;
+  flex: 1;
+  height: 30px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: #0d2219;
+  overflow: hidden;
+}
+.cb-hp__fill,
+.cb-hp__ghost {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  border-radius: 999px;
+}
+.cb-hp__fill { background: linear-gradient(180deg, #a6ec7c, var(--leaf)); transition: transform 0.35s ease-out; }
+/* 減った分:うすい色で少し残ってから縮む */
+.cb-hp__ghost { background: #ffffffb0; transition: transform 0.5s ease-in 0.55s; }
+.cb-hp--mid .cb-hp__fill { background: linear-gradient(180deg, #ffe58a, var(--gold)); }
+.cb-hp--low .cb-hp__fill { background: linear-gradient(180deg, #ff8fa3, var(--heart)); }
+.cb-hp__number { font-family: var(--font-title); font-size: 26px; white-space: nowrap; }
+.cb-hp__number b { font-size: 40px; font-weight: 400; color: var(--sun); }
+
+/* ---- カード ---- */
+.cb-card {
+  --card-color: var(--leaf);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  width: 168px;
+  height: 226px;
+  padding: 8px 6px 10px;
+  border: 5px solid var(--ink);
+  border-radius: 18px;
+  background: linear-gradient(170deg, var(--cream), #f0e8c8);
+  box-shadow: inset 0 0 0 5px var(--card-color), 0 8px 0 var(--forest-deep);
+  color: var(--ink);
+  font-family: var(--font-title);
+  user-select: none;
+}
+.cb-card--rock     { --card-color: #ef8354; }
+.cb-card--scissors { --card-color: #5aa9e6; }
+.cb-card--paper    { --card-color: #7bc950; }
+.cb-card--skill    { --card-color: #b388eb; }
+.cb-card--finisher { --card-color: var(--gold); background: linear-gradient(170deg, #fff6cf, #ffd75e); }
+/* ★3 は枠が金色 */
+.cb-card--star3 { --card-color: var(--gold); background: linear-gradient(170deg, #fffbe6, #ffe9a8); }
+.cb-card__stars { font-size: 30px; line-height: 1; color: #d99a12; -webkit-text-stroke: 1px var(--ink); letter-spacing: 2px; }
+.cb-card__icon { font-size: 78px; line-height: 1; }
+.cb-card__icon--emoji { font-size: 84px; }
+.cb-card__name { font-size: 30px; line-height: 1.1; white-space: nowrap; }
+
+.cb-card--small { width: 104px; height: 132px; padding: 5px 4px 6px; border-width: 4px; border-radius: 12px; box-shadow: inset 0 0 0 4px var(--card-color), 0 5px 0 var(--forest-deep); }
+.cb-card--small .cb-card__stars { font-size: 20px; }
+.cb-card--small .cb-card__icon { font-size: 46px; }
+.cb-card--small .cb-card__name { font-size: 20px; }
+.cb-card--used { opacity: 0.35; }
+
+/* 裏向き */
+.cb-card--back {
+  justify-content: center;
+  background: repeating-linear-gradient(45deg, var(--moss) 0 14px, var(--forest) 14px 28px);
+  box-shadow: inset 0 0 0 5px var(--sun), 0 8px 0 var(--forest-deep);
+}
+.cb-card__back { font-size: 96px; line-height: 1; color: var(--sun); text-shadow: 0 5px 0 var(--ink); }
+
+/* ---- 真ん中:相手の手札と 場 ---- */
+.cb-center {
+  position: absolute;
+  z-index: 4;
+  left: 775px;
+  top: 150px;
+  width: 370px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  pointer-events: none;
+}
+.cb-cpu-hand { width: 100%; padding: 8px 10px 14px; border: 3px solid var(--petal); border-radius: 18px; background: var(--panel); }
+.cb-cpu-hand__title { margin: 0 0 8px; font-family: var(--font-title); font-size: 24px; text-align: center; color: var(--petal); }
+.cb-cpu-hand__cards { display: flex; justify-content: center; gap: 10px; min-height: 137px; }
+
+.cb-field { display: flex; justify-content: center; gap: 14px; }
+.cb-field__slot { width: 168px; height: 234px; transition: scale 0.25s, filter 0.25s, opacity 0.25s; }
+.cb-field__empty { display: block; width: 168px; height: 226px; border: 5px dashed #ffffff80; border-radius: 18px; }
+/* じゃん・けん・ぽん:かけ声に合わせて 2枚がはねる */
+.cb-field--beat1 .cb-field__slot,
+.cb-field--beat3 .cb-field__slot { animation: cbBeatA 0.3s ease-out; }
+.cb-field--beat2 .cb-field__slot { animation: cbBeatB 0.3s ease-out; }
+@keyframes cbBeatA { 40% { transform: translateY(-34px); } }
+@keyframes cbBeatB { 40% { transform: translateY(-34px); } }
+/* 勝ったほうが大きく、負けたほうは小さく暗く */
+.cb-field__slot--won { scale: 1.12; }
+.cb-field__slot--lost { scale: 0.86; filter: brightness(0.55); }
+.cb-field__copy {
+  margin: 0;
+  width: 560px;
+  font-family: var(--font-title);
+  font-size: 44px;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--sun);
+  text-shadow: var(--ink-outline);
+  animation: cbCopyIn 0.3s cubic-bezier(.2, 1.5, .4, 1) both;
+}
+@keyframes cbCopyIn { from { opacity: 0; transform: scale(0.6); } }
+
+/* ---- 下:自分の手札 ---- */
+.cb-hand {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.cb-hand__prompt {
+  margin: 0;
+  min-height: 52px;
+  padding: 4px 34px 6px;
+  border: 3px solid var(--sun);
+  border-radius: 999px;
+  background: var(--panel);
+  font-family: var(--font-title);
+  font-size: 30px;
+  color: var(--white);
+  white-space: nowrap;
+}
+.cb-hand__prompt:empty { visibility: hidden; }
+.cb-hand__cards { display: flex; justify-content: center; gap: 16px; height: 236px; }
+.cb-hand__slot { position: relative; transition: transform 0.15s ease-out, opacity 0.2s; }
+/* カーソル:えらんでいるカードを少し上げて、金のふちで囲む */
+.cb-hand__slot--selected { transform: translateY(-14px); }
+.cb-hand__slot--selected::after {
+  position: absolute;
+  inset: -9px;
+  border: 6px solid var(--sun);
+  border-radius: 26px;
+  content: '';
+  pointer-events: none;
+}
+/* 決定の1回目:カードが浮く */
+.cb-hand__slot--armed { transform: translateY(-46px) scale(1.08); }
+.cb-hand--locked .cb-hand__slot { opacity: 0.55; }
+.cb-hand__keys {
+  position: absolute;
+  right: 60px;
+  bottom: 6px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-title);
+  font-size: 26px;
+  color: var(--white);
+  text-shadow: 0 3px 0 var(--ink);
+}
+.cb-hand__keys i {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--leaf);
+  color: var(--ink);
+  font-style: normal;
+  font-size: 22px;
+  text-shadow: none;
+}
+.cb-hand__keys .cb-hand__key-main { margin-left: 16px; background: var(--sun); }
+.cb-hand--locked .cb-hand__keys { visibility: hidden; }
+
+/* ---- ラウンドの終わり ---- */
+.cb-round-end {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  background: #0d2219b0;
+  animation: cbFade 0.3s ease-out both;
+}
+@keyframes cbFade { from { opacity: 0; } }
+.cb-round-end strong {
+  font-family: var(--font-title);
+  font-size: 170px;
+  font-weight: 400;
+  color: var(--sun);
+  text-shadow: var(--ink-outline);
+}
+.cb-round-end--lose strong { color: #cfe3ff; }
+.cb-round-end__again {
+  padding: 14px 60px 18px;
+  border: 5px solid var(--ink);
+  border-radius: 999px;
+  background: var(--leaf);
+  box-shadow: 0 8px 0 var(--forest-deep);
+  color: var(--ink);
+  font-family: var(--font-title);
+  font-size: 48px;
+  cursor: pointer;
+}

@@ -1,0 +1,38 @@
+/* ==================================================================
+   タイトル:草原の背景に、友人のロゴを大きく。スタートは下の操作盤の中ボタン(光って呼びかける)
+   ================================================================== */
+/* タイトルだけ、専用の背景(fantasy-title.png)。ほかの画面は base.css の .screen::before の草原 */
+.title-screen::before { background-image: url('/backgrounds/fantasy-title.png'); }
+
+.title-copy {
+  position: absolute;
+  z-index: 2;
+  top: 60px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.title-logo {
+  display: block;
+  width: 1260px;
+  height: auto;
+  user-select: none;
+  filter: drop-shadow(0 14px 0 #0d221944);
+  animation: logoFloat 4s ease-in-out infinite alternate;
+}
+@keyframes logoFloat { to { transform: translateY(-14px); } }
+.title-hint {
+  margin: 10px 0 0;
+  padding: 8px 40px 10px;
+  background: var(--panel);
+  border: 3px solid var(--leaf);
+  border-radius: 999px;
+  box-shadow: 0 6px 0 var(--forest-deep);
+  font-family: var(--font-title);
+  font-size: 34px;
+  color: var(--white);
+  animation: hintBlink 1.4s ease-in-out infinite;
+}
+@keyframes hintBlink { 50% { color: var(--sun); } }

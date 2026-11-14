@@ -41,3 +41,13 @@ export const AUTOPLAY_WAIT_MS = 3000;
 export const AUTOPLAY_MASH_MS = 300;
 // 練習ラウンドの はじめの説明:1ページを見せる時間(時間で次へ進む。2ページ。終わるまで手は選べない)
 export const PRACTICE_COACH_PAGE_MS = 6000;
+
+// ---- カードバトル(card/。戦闘システム設計書 8章の長さの目安に合わせる) ----
+// じゃん・けん・ぽん の1拍(3拍 + めくり で 約2秒)
+export const CARD_JANKEN_BEAT_MS = 350;
+// めくって、どちらが勝ったかを見せる
+export const CARD_REVEAL_MS = 1000;
+// ダメージ:数字が飛び出して HP バーが減る
+export const CARD_DAMAGE_MS = 1400;
+// ドロー:引いたカードを見せる
+export const CARD_DRAW_MS = 800;

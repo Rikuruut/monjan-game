@@ -6,6 +6,7 @@ import './styles/title.css';
 import './styles/battle.css';
 import './styles/effects.css';
 import './styles/result.css';
+import './styles/cardbattle.css';
 import './styles/devmenu.css';
 
 // 字体は撮影・合体の画面と同じもの(Dela Gothic One・M PLUS Rounded 1c)を、サーバー(generator)の static/vendor/fonts/ から読む。
