@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { burstAt, chargeAt, createParticleFire, stopParticleFire, type ParticleFire } from '../attackParticles';
+import { burstAt, chargeAt, createParticleFire, healAt, stopParticleFire, type ParticleFire } from '../attackParticles';
 import { getAttributeTheme, type AttributeTheme } from '../attributes';
 import type { GameSound, GameSoundOptions } from '../audio/gameAudio';
 import { SpecialCutin } from '../battle/BattleScreen';
@@ -200,7 +200,12 @@ function CpuHand({ state, clash, revealed }: { state: BattleState; clash: CardBa
 // ---- 攻撃の粒(main の BattleScreen.tsx の useParticleFx と同じ作り) ----
 
 /** 攻撃で 攻撃する側に粒をため、命中で当たった側に はじけさせる。粒を描く canvas の ref を返す */
-function useCardParticles(view: CardBattleApi['view'], damage: DamageShown | null, themes: Record<Side, AttributeTheme>) {
+function useCardParticles(
+  view: CardBattleApi['view'],
+  damage: DamageShown | null,
+  themes: Record<Side, AttributeTheme>,
+  notice: Notice | null,
+) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fireRef = useRef<ParticleFire | null>(null);
   useEffect(() => {
@@ -225,6 +230,11 @@ function useCardParticles(view: CardBattleApi['view'], damage: DamageShown | nul
       if (damage.finisher) burstAt(fire, 'center', theme, { power: 3, final: true });
     }
   }, [view, damage]);
+  // 回復:回復した側の足もとから 粒が立ちのぼる
+  useEffect(() => {
+    if (notice?.type === 'heal') healAt(fireRef.current, 'player');
+    else if (notice?.type === 'cpu-heal') healAt(fireRef.current, 'cpu');
+  }, [notice]);
   return canvasRef;
 }
 
@@ -260,7 +270,7 @@ export function CardBattle({
   usePadButtons(battle.press);
 
   const themes: Record<Side, AttributeTheme> = { player: getAttributeTheme(player.attribute), cpu: getAttributeTheme(cpu.attribute) };
-  const canvasRef = useCardParticles(view, damage, themes);
+  const canvasRef = useCardParticles(view, damage, themes, notice);
   const striking = view === 'attack' || view === 'damage';
   const attacker: Side | null = damage ? (damage.target === 'cpu' ? 'player' : 'cpu') : null;
   // 相手のカードが おもてになっている(ぽん!のあと)
@@ -329,7 +339,7 @@ export function CardBattle({
           damage={view === 'damage' ? damage : null}
           attacking={view === 'attack' && attacker === 'player'}
           striking={striking && attacker === 'player'}
-          healed={notice?.type === 'heal'}
+          healed={notice?.type === 'heal' ? notice.amount : null}
           defeated={state.player.hp <= 0}
         />
         <FighterPanel
@@ -341,7 +351,7 @@ export function CardBattle({
           damage={view === 'damage' ? damage : null}
           attacking={view === 'attack' && attacker === 'cpu'}
           striking={striking && attacker === 'cpu'}
-          healed={notice?.type === 'cpu-heal'}
+          healed={notice?.type === 'cpu-heal' ? notice.amount : null}
           charging={charging}
           defeated={state.cpu.hp <= 0}
         />

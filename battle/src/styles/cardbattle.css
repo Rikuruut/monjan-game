@@ -742,3 +742,96 @@
   animation: cbCopyIn 0.3s cubic-bezier(.2, 1.5, .4, 1) both;
 }
 .cb-hand-zone--armed .cb-guide { color: #ffb070; }
+
+/* ==================================================================
+   回復の演出(自分の回復カード・相手の回復)。CARD_HEAL_MS(1.8秒)のあいだ
+     カード:一瞬明るくなって 緑のふちで光る / 足もとから光の輪が2つ広がる / 緑の ✚ が立ちのぼる
+     数字:カードの上に 大きな「+○○」が はねて出て 上へ消える
+     HP:数字が数え上がり(FighterPanel.tsx の useCountUp)、バーが ゆっくり伸びて 光が走る
+     粒:足もとから 緑の光の粒と 💚✨(attackParticles.ts の healAt)
+   画面全体は光らせない。動かすのは 位置・大きさ・透明度(カードの明るさだけ 一度だけ短く)
+   ================================================================== */
+.cb-fighter--healed .monster-card {
+  box-shadow: 0 0 0 4px var(--ink), 0 0 0 10px #6cf08a, 0 0 0 13px var(--ink), 0 0 60px 20px #6cf08acc;
+  animation: cbHealCard 1.2s ease-out;
+}
+@keyframes cbHealCard {
+  25%  { filter: brightness(1.35) saturate(1.2); }
+  100% { filter: none; }
+}
+.cb-heal-fx { position: absolute; z-index: 3; inset: 0; pointer-events: none; overflow: visible; }
+/* 足もとの光の輪(だ円が広がって 上へ消える) */
+.cb-heal-fx__ring {
+  position: absolute;
+  left: 50%;
+  bottom: 110px;
+  width: 560px;
+  height: 130px;
+  margin-left: -280px;
+  border: 8px solid #8dff9e;
+  border-radius: 50%;
+  box-shadow: 0 0 24px 6px #6cf08a, inset 0 0 24px 6px #6cf08a;
+  animation: cbHealRing 1.1s ease-out both;
+}
+.cb-heal-fx__ring--late { animation-delay: 0.35s; }
+@keyframes cbHealRing {
+  0%   { opacity: 0; transform: translateY(0) scale(0.25); }
+  25%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-60px) scale(1.15); }
+}
+/* 立ちのぼる ✚ */
+.cb-heal-fx__plus {
+  position: absolute;
+  left: var(--x);
+  bottom: 130px;
+  font-size: 60px;
+  line-height: 1;
+  color: #b8ff9e;
+  text-shadow: 0 0 14px #3dff6a, 0 4px 0 #145c2a;
+  animation: cbHealPlus 1.3s ease-out both;
+  animation-delay: calc(var(--i) * 0.11s);
+}
+@keyframes cbHealPlus {
+  0%   { opacity: 0; transform: translateY(0) scale(0.4); }
+  20%  { opacity: 1; transform: translateY(-40px) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-400px) scale(0.8); }
+}
+/* 「+○○」:ダメージの数字(.damage-burst)と同じ場所に、緑で */
+.cb-heal-burst {
+  position: absolute;
+  z-index: 14;
+  left: 50%;
+  top: 200px;
+  font-family: var(--font-title);
+  font-size: 160px;
+  line-height: 1;
+  color: #d6ffc4;
+  text-shadow:
+    -5px -5px 0 #1f8a3a, 5px -5px 0 #1f8a3a, -5px 5px 0 #1f8a3a, 5px 5px 0 #1f8a3a,
+    0 10px 0 var(--ink), 0 0 40px #6cf08a;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: cbHealBurst 1.5s cubic-bezier(.2, 1.4, .4, 1) 0.15s both;
+}
+@keyframes cbHealBurst {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(50px) scale(0.3); }
+  22%  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.15); }
+  35%  { transform: translateX(-50%) translateY(0) scale(1); }
+  75%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-110px) scale(1); }
+}
+/* HP:バーが ゆっくり伸びて、光が バーの上を走る。数字は緑で はずむ */
+.cb-hp--healing .cb-hp__bar { box-shadow: 0 0 18px 5px #6cf08a; }
+.cb-hp--healing .cb-hp__fill { transition: transform 0.8s cubic-bezier(.2, .8, .2, 1); }
+.cb-hp--healing .cb-hp__bar::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, #ffffffd0 50%, transparent 70%);
+  content: '';
+  transform: translateX(-100%);
+  animation: cbHpShine 0.9s ease-out 0.2s both;
+}
+@keyframes cbHpShine { to { transform: translateX(100%); } }
+.cb-hp--healing .cb-hp__number b { color: #a6ec7c; }
+.cb-hp--healing .cb-hp__number { animation: cbHpNumber 0.8s ease-out; }
+@keyframes cbHpNumber { 30% { transform: scale(1.18); } }

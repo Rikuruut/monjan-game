@@ -61,6 +61,10 @@ export const CARD_DAMAGE_MS = 1400;
 export const CARD_DRAW_MS = 800;
 // 合成・スキル(回復・封じ手)を使ったあと、結果を見せる
 export const CARD_SKILL_MS = 1200;
+// 回復(自分の回復カード・相手の回復):粒・✚・「+○○」・HP が数え上がる のを見せる
+export const CARD_HEAL_MS = 1800;
+// 回復で HP の数字が 数え上がる時間
+export const CARD_HP_COUNT_MS = 800;
 // ドローで必殺技のカードが来たときは、長めに見せる
 export const CARD_FINISHER_DRAW_MS = 1400;
 // カードバトルの攻撃:勝った側が前へ出て、飛び道具が飛ぶ(main の攻撃と同じ長さ)。必殺技は ためを長く

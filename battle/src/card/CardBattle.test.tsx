@@ -13,6 +13,7 @@ import {
   CARD_DAMAGE_MS,
   CARD_DRAW_MS,
   CARD_FINISHER_ATTACK_MS,
+  CARD_HEAL_MS,
   CARD_JANKEN_BEAT_MS,
   CARD_PLAYER_TURN_BANNER_MS,
   CARD_REVEAL_MS,
@@ -326,7 +327,7 @@ describe('カードバトル:スキル', () => {
   it('回復:説明に もどる量が出て、決定2回で HP が満タンに。そのターンは もうスキルを使えない', () => {
     const hand = [heal, seal, janken('a', 'rock', 1)];
     const cpu = [janken('x', 'rock', 1), janken('y', 'paper', 2)];
-    renderBattle({ setup: withHands(hand, cpu, (state) => ({ ...state, player: { ...state.player, hp: 40 } })) });
+    const { playSound } = renderBattle({ setup: withHands(hand, cpu, (state) => ({ ...state, player: { ...state.player, hp: 40 } })) });
     expect(hpOf(0)).toBe('HP 40 / 100');
     press('ArrowLeft');
     press('ArrowLeft');
@@ -336,7 +337,18 @@ describe('カードバトル:スキル', () => {
     expect(screen.getByText('かいふく！')).toBeInTheDocument();
     expect(screen.getByText('HPが 60 もどった')).toBeInTheDocument();
     expect(hpOf(0)).toBe('HP 100 / 100');
+    // 回復の演出:「+60」・足もとの光の輪と ✚・HP の段が光る・専用の音
+    expect(screen.getByLabelText('60かいふく')).toBeInTheDocument();
+    const [playerPanel] = document.querySelectorAll('.monster-panel');
+    expect(playerPanel.querySelectorAll('.cb-heal-fx__plus').length).toBeGreaterThan(3);
+    expect(playerPanel.querySelector('.cb-heal-fx__ring')).not.toBeNull();
+    expect(playerPanel.querySelector('.cb-hp--healing')).not.toBeNull();
+    expect(playSound).toHaveBeenCalledWith('heal');
+    // 回復は 少し長めに見せる
     wait(CARD_SKILL_MS);
+    expect(screen.getByText('HPが 60 もどった')).toBeInTheDocument();
+    wait(CARD_HEAL_MS - CARD_SKILL_MS);
+    expect(screen.queryByLabelText('60かいふく')).not.toBeInTheDocument();
 
     expect(screen.getByLabelText('スキルは しようずみ')).toBeInTheDocument();
     // 封じ手は 暗くなって 浮かない(理由が説明パネルに出る)
@@ -444,7 +456,10 @@ describe('カードバトル:相手のスキル(ボス)', () => {
     expect(hpOf(1)).toBe('HP 50 / 60');
     // 相手のスキルは 相手のターンのうち
     expect(screen.getByText('あいての ターン')).toBeInTheDocument();
-    wait(CARD_SKILL_MS + CARD_CPU_TURN_MS);
+    // 相手の回復も 同じ演出(相手の側)
+    expect(screen.getByLabelText('30かいふく')).toBeInTheDocument();
+    expect(document.querySelectorAll('.monster-panel')[1].querySelector('.cb-heal-fx')).not.toBeNull();
+    wait(CARD_HEAL_MS + CARD_CPU_TURN_MS);
     expect(guide()).toBe(GUIDE_PICK);
   });
 

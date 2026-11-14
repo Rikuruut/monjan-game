@@ -90,8 +90,9 @@ function emojiShape(text: string, scalar: number) {
 // 発射台ごとの、カードの絵の中心の高さ(カードバトルは カードを小さくしているので ちがう。なければ CENTER_Y)
 const centerYs = new WeakMap<ParticleFire, number>();
 
-function origin(fire: ParticleFire, at: BurstAt) {
-  return { x: CENTER_X[at] / STAGE.width, y: (centerYs.get(fire) ?? CENTER_Y) / STAGE.height };
+// yOffset:カードの絵の中心から 下へずらす(回復は 足もとから出す)
+function origin(fire: ParticleFire, at: BurstAt, yOffset = 0) {
+  return { x: CENTER_X[at] / STAGE.width, y: ((centerYs.get(fire) ?? CENTER_Y) + yOffset) / STAGE.height };
 }
 
 // テスト(jsdom)には canvas がないので、粒は出さない
@@ -107,10 +108,10 @@ export function createParticleFire(canvas: HTMLCanvasElement, { centerY }: { cen
   return fire;
 }
 
-function fireShot(fire: ParticleFire, shot: Shot, at: BurstAt, dir: number, multiplier: number) {
+function fireShot(fire: ParticleFire, shot: Shot, at: BurstAt, dir: number, multiplier: number, yOffset = 0) {
   void fire({
     particleCount: Math.round(shot.count * multiplier),
-    origin: origin(fire, at),
+    origin: origin(fire, at, yOffset),
     spread: shot.spread ?? 360,
     angle: 90,
     startVelocity: shot.velocity * SPEED,
@@ -168,4 +169,19 @@ export function chargeAt(fire: ParticleFire | null, at: BurstAt, theme: Attribut
   if (!fire) return;
   const [main] = IMPACT[theme];
   fireShot(fire, { ...main, count: 22, velocity: 18, decay: 0.9, ticks: 45, scalar: main.scalar * 0.7 }, at, 0, 1);
+}
+
+// 回復の粒:足もとから ふわっと上がる(spread をせまく、重さはマイナス)
+const HEAL: Shot[] = [
+  { count: 46, colors: ['#a6ec7c', '#6cf08a', '#ffffff', '#d6ffb8'], shapes: ['circle'], spread: 70, velocity: 26, gravity: -0.45, decay: 0.93, ticks: 150, scalar: 1.3 },
+  { count: 10, emoji: ['💚', '✨'], spread: 80, velocity: 22, gravity: -0.3, decay: 0.94, ticks: 160, scalar: 3, flat: true },
+];
+// 回復の粒を出す高さ:カードの絵の中心から 下へ(カードの足もと)
+const HEAL_FOOT_Y = 150;
+
+/** 回復:回復した側のカードの足もとから、緑の光の粒と 💚✨ が 上へ立ちのぼる(少しおいて もう1回 小さく) */
+export function healAt(fire: ParticleFire | null, at: BurstAt) {
+  if (!fire) return;
+  HEAL.forEach((shot) => fireShot(fire, shot, at, 0, 1, HEAL_FOOT_Y));
+  later(fire, () => HEAL.forEach((shot) => fireShot(fire, shot, at, 0, 0.6, HEAL_FOOT_Y)), 380);
 }

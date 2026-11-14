@@ -29,6 +29,7 @@ import {
   CARD_DRAW_MS,
   CARD_FINISHER_ATTACK_MS,
   CARD_FINISHER_DRAW_MS,
+  CARD_HEAL_MS,
   CARD_JANKEN_BEAT_MS,
   CARD_PLAYER_TURN_BANNER_MS,
   CARD_REVEAL_MS,
@@ -225,8 +226,8 @@ export function useCardBattle({
     }
     setNotice(first);
     setView('notice');
-    playSound(first.type === 'cpu-heal' ? 'summon' : 'star-showdown');
-    schedule(() => showCpuNotices(rest), CARD_SKILL_MS);
+    playSound(first.type === 'cpu-heal' ? 'heal' : 'star-showdown');
+    schedule(() => showCpuNotices(rest), first.type === 'cpu-heal' ? CARD_HEAL_MS : CARD_SKILL_MS);
   };
 
   // 勝負がついたあと:攻撃(勝った側が前へ出て 飛び道具)→ 命中(showImpact)
@@ -359,6 +360,7 @@ export function useCardBattle({
   };
 
   // 合成・スキルの結果を少し見せて、手札えらびにもどる(focusId のカードにカーソルを置く)
+  // 回復は 粒・✚・「+○○」・HP の数え上がりを見せるので 長め(CARD_HEAL_MS)
   const showNotice = (next: BattleState, shown: Notice, focusId?: string) => {
     setState(next);
     setArmed(false);
@@ -369,7 +371,7 @@ export function useCardBattle({
     schedule(() => {
       setNotice(null);
       setView('player');
-    }, CARD_SKILL_MS);
+    }, shown.type === 'heal' ? CARD_HEAL_MS : CARD_SKILL_MS);
   };
 
   // 合成:同じ手・同じ★の2枚を、★が1つ上の1枚に(スキルの枠は使わない)
@@ -386,7 +388,7 @@ export function useCardBattle({
     const step = useSkill(state, card.id, random);
     const event = step.events[0];
     if (event?.type === 'heal') {
-      playSound('summon');
+      playSound('heal');
       showNotice(step.state, { type: 'heal', amount: event.amount });
     } else if (event?.type === 'seal') {
       playSound('reveal');

@@ -17,6 +17,8 @@ export type GameSound =
   | 'draw'
   | 'tie'
   | 'card-get'
+  // 回復:下から上へ すべり上がる音 + キラキラ(カードバトルの回復カード・相手の回復)
+  | 'heal'
   | 'toggle';
 
 export type GameSoundOptions = {
@@ -264,6 +266,11 @@ function scheduleGameSound(context: AudioContext, kind: GameSound, options: Game
     case 'card-get':
       [523.25, 659.25, 783.99, 987.77, 1046.5].forEach((frequency, index) =>
         scheduleTone(context, now + index * 0.1, frequency, index === 4 ? 0.5 : 0.2, 0.065, 'sine'));
+      break;
+    case 'heal':
+      scheduleTone(context, now, 392, 0.5, 0.06, 'sine', 1046.5);
+      [1318.51, 1567.98, 2093].forEach((frequency, index) =>
+        scheduleTone(context, now + 0.28 + index * 0.09, frequency, 0.22, 0.035, 'sine'));
       break;
     case 'toggle':
       scheduleTone(context, now, 660, 0.12, 0.045, 'sine', 820);

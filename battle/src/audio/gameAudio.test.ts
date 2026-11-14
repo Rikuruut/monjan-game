@@ -47,6 +47,7 @@ const ALL_SOUNDS: GameSound[] = [
   'draw',
   'tie',
   'card-get',
+  'heal',
   'toggle',
 ];
 
@@ -160,6 +161,7 @@ describe('会場用効果音', () => {
       ['star-showdown', 3],
       ['tie', 2],
       ['card-get', 5],
+      ['heal', 4],
     ];
 
     soundLengths.forEach(([sound, expectedLength]) => {
