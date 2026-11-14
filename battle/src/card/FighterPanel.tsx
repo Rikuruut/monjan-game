@@ -28,6 +28,7 @@ export function FighterPanel({
   maxHp,
   attack,
   damage,
+  healed = false,
   defeated,
 }: {
   monster: Monster;
@@ -36,6 +37,8 @@ export function FighterPanel({
   maxHp: number;
   attack: number;
   damage: DamageShown | null;
+  /** 回復したところ(足元から緑の光) */
+  healed?: boolean;
   defeated: boolean;
 }) {
   const theme = getAttributeTheme(monster.attribute);
@@ -49,6 +52,7 @@ export function FighterPanel({
         `monster-panel--element-${theme}`,
         'cb-fighter',
         hit && 'cb-fighter--hit',
+        healed && 'cb-fighter--healed',
         defeated && 'cb-fighter--defeated',
       )}
     >

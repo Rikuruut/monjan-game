@@ -51,3 +51,5 @@ export const CARD_REVEAL_MS = 1000;
 export const CARD_DAMAGE_MS = 1400;
 // ドロー:引いたカードを見せる
 export const CARD_DRAW_MS = 800;
+// 合成・スキル(回復・封じ手)を使ったあと、結果を見せる
+export const CARD_SKILL_MS = 1200;

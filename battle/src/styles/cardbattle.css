@@ -256,3 +256,119 @@
   font-size: 48px;
   cursor: pointer;
 }
+
+/* ==================================================================
+   合成・スキル(段階2c)。演出は最小で、くわしい動きは段階3
+   ================================================================== */
+
+/* 「がったい!」の枠(合成できるペアがあるときだけ、手札の左はし) */
+.cb-merge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 150px;
+  height: 226px;
+  border: 5px solid var(--ink);
+  border-radius: 18px;
+  background: radial-gradient(circle at 50% 35%, #fffbe6, #ffd75e 70%, #e9a920);
+  box-shadow: 0 8px 0 var(--forest-deep);
+  color: var(--ink);
+  font-family: var(--font-title);
+}
+.cb-merge__icon { font-size: 64px; line-height: 1; }
+.cb-merge__label { font-size: 32px; line-height: 1.1; }
+.cb-merge__count { padding: 0 12px 2px; border-radius: 999px; background: var(--ink); color: var(--sun); font-size: 22px; }
+
+/* 合成のペア:カーソルが「がったい!」の枠にあるとき・ペアをえらんでいるとき */
+.cb-hand__slot--pair { transform: translateY(-18px); }
+.cb-hand__slot--pair::before {
+  position: absolute;
+  inset: -9px;
+  border: 6px dashed var(--sun);
+  border-radius: 26px;
+  content: '';
+  pointer-events: none;
+  animation: cbPairBlink 0.9s ease-in-out infinite alternate;
+}
+@keyframes cbPairBlink { from { opacity: 0.4; } }
+/* 合成でできたカード */
+.cb-hand__slot--new { animation: cbNewCard 0.6s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes cbNewCard { from { transform: translateY(-60px) scale(1.3); } }
+
+/* ペアが2組以上のときの えらぶ欄 */
+.cb-merge-pick {
+  position: absolute;
+  bottom: 322px;
+  display: flex;
+  gap: 14px;
+}
+.cb-merge-pick__option {
+  padding: 6px 26px 8px;
+  border: 4px solid var(--ink);
+  border-radius: 999px;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-title);
+  font-size: 30px;
+  white-space: nowrap;
+}
+.cb-merge-pick__option.is-current { background: var(--sun); transform: translateY(-6px) scale(1.08); box-shadow: 0 0 0 5px var(--sun); }
+.cb-merge-pick__option--cancel { background: #d9d9d9; }
+
+/* 使えないスキル(このターンは使った・相手の手が全部同じ) */
+.cb-hand__slot--blocked .cb-card { filter: grayscale(0.85) brightness(0.65); }
+
+/* スキルを使ったターンの置き場所 */
+.cb-used {
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 226px;
+  border: 5px dashed #ffffffa0;
+  border-radius: 18px;
+  background: #173a2e99;
+  color: #ffffffd0;
+  font-family: var(--font-title);
+  font-size: 24px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* 封じ手:封じた手のカードに鎖がかかって暗くなる(ターンの終わりに解ける) */
+.cb-cpu-hand__slot { position: relative; }
+.cb-cpu-hand__slot--sealed .cb-card { filter: grayscale(1) brightness(0.5); }
+.cb-chain {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-size: 64px;
+  line-height: 1;
+  translate: -50% -50%;
+  animation: cbChain 0.4s cubic-bezier(.2, 1.6, .4, 1) both;
+}
+@keyframes cbChain { from { opacity: 0; scale: 2; } }
+/* 出し直した ふせたカードが はずんで置かれる */
+.cb-field__slot--replaced { animation: cbReplace 0.5s ease-out; }
+@keyframes cbReplace {
+  30% { transform: translateY(-90px) rotate(-8deg); opacity: 0.3; }
+  100% { transform: none; opacity: 1; }
+}
+
+/* 回復:足元から緑の光が上がる */
+.cb-fighter--healed .monster-card::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  background: linear-gradient(0deg, #6cf08acc, transparent 70%);
+  content: '';
+  pointer-events: none;
+  animation: cbHeal 1.1s ease-out both;
+}
+@keyframes cbHeal {
+  0% { opacity: 0; transform: translateY(40%); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-20%); }
+}
+.cb-screen--notice-heal .cb-field__copy { color: #a6ec7c; }
