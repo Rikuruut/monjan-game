@@ -20,6 +20,7 @@ import { FighterPanel } from './FighterPanel';
 import { HandZone } from './HandGuide';
 import { HandInfo } from './HandInfo';
 import { useCardFx } from './useCardFx';
+import { Flip, gsap, useGSAP } from '../fx/gsap';
 import {
   skillBlockedReason,
   useCardBattle,
@@ -123,12 +124,67 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
   };
   const usedOffset = skillUsed ? 1 : 0;
 
+  // ---- 動き(GSAP の Flip):並びが変わったら(出した・ドロー・合成)、のこりのカードが すべって つめる。
+  // 新しく来たカードは 右下(山札のほう)から飛んでくる。合成でできたカードは その場で ポンと出る。最初の手札は 1枚ずつ配る ----
+  const sectionRef = useRef<HTMLElement>(null);
+  const layoutKey = [skillUsed ? 'used' : '', ...shown.map(({ item }) => (item.kind === 'card' ? item.card.id : 'merge'))].join('|');
+  const committedKeyRef = useRef<string | null>(null);
+  const flipStateRef = useRef<Flip.FlipState | null>(null);
+  // 描きかえる前(DOM が まだ前の並び)に、並びが変わるときだけ 位置を控える
+  if (sectionRef.current && committedKeyRef.current !== null && committedKeyRef.current !== layoutKey && !flipStateRef.current) {
+    flipStateRef.current = Flip.getState(sectionRef.current.querySelectorAll('.cb-hand__cell'));
+  }
+  useGSAP(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const cells = section.querySelectorAll('.cb-hand__cell');
+    const first = committedKeyRef.current === null;
+    committedKeyRef.current = layoutKey;
+    if (first) {
+      gsap.from(cells, { y: 260, rotation: gsap.utils.wrap([-16, 16]), opacity: 0, duration: 0.5, ease: 'back.out(1.6)', stagger: 0.07 });
+      return;
+    }
+    const state = flipStateRef.current;
+    flipStateRef.current = null;
+    if (!state) return;
+    Flip.from(state, {
+      targets: cells,
+      duration: 0.4,
+      ease: 'power3.out',
+      onEnter: (entered) => {
+        const made = entered.filter((cell) => cell.querySelector('.cb-hand__slot--new'));
+        const drawn = entered.filter((cell) => !made.includes(cell));
+        if (made.length) {
+          gsap.fromTo(made, { y: -90, scale: 1.6, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.55, ease: 'back.out(2.4)' });
+        }
+        if (drawn.length) {
+          gsap.fromTo(
+            drawn,
+            { x: 260, y: 240, rotation: 28, opacity: 0 },
+            { x: 0, y: 0, rotation: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.5)', stagger: 0.08 },
+          );
+        }
+      },
+    });
+  }, { scope: sectionRef, dependencies: [layoutKey] });
+
+  // カーソルを動かした・決定の1回目:えらんだカードが 少し つぶれて はずむ(small の段。揺れは なし)
+  useGSAP(() => {
+    if (!choosing) return;
+    const card = sectionRef.current?.querySelector('.cb-hand__slot--selected .cb-card, .cb-hand__slot--selected .cb-merge');
+    if (!card) return;
+    const squash = armed ? { scaleX: 1.12, scaleY: 0.86 } : { scaleX: 1.06, scaleY: 0.94 };
+    gsap.fromTo(card, squash, { scaleX: 1, scaleY: 1, duration: armed ? 0.5 : 0.35, ease: 'elastic.out(1, 0.4)' });
+  }, { scope: sectionRef, dependencies: [cursor, armed, choosing] });
+
   const slotFor = ({ item, index }: { item: HandItem; index: number }, position: number) => {
     const selected = choosing && mergePick === null && index === cursor;
     const card = item.kind === 'card' ? item.card : null;
+    const key = card ? card.id : 'merge';
     return (
+      // 外の枠(.cb-hand__cell)は 並びの位置だけ(Flip が動かす)。中の .cb-hand__slot が 扇形の傾き・持ち上げ(CSS)
+      <div key={key} className="cb-hand__cell" data-flip-id={key}>
       <div
-        key={card ? card.id : 'merge'}
         style={fan(position + usedOffset)}
         className={cx(
           'cb-hand__slot',
@@ -152,15 +208,18 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
           </div>
         )}
       </div>
+      </div>
     );
   };
 
   return (
-    <section className={cx('cb-hand', choosing ? 'cb-hand--choosing' : 'cb-hand--locked')} aria-label="じぶんの てふだ">
+    <section ref={sectionRef} className={cx('cb-hand', choosing ? 'cb-hand--choosing' : 'cb-hand--locked')} aria-label="じぶんの てふだ">
       {/* スキルを使ったターンは、置き場所が「しようずみ」になる */}
       {skillUsed && (
-        <div className="cb-hand__slot cb-hand__slot--used" style={fan(0)} aria-label="スキルは しようずみ">
-          <span className="cb-used">スキル<br />しようずみ</span>
+        <div className="cb-hand__cell" data-flip-id="used">
+          <div className="cb-hand__slot cb-hand__slot--used" style={fan(0)} aria-label="スキルは しようずみ">
+            <span className="cb-used">スキル<br />しようずみ</span>
+          </div>
         </div>
       )}
       {shown.map((entry, position) => slotFor(entry, position))}

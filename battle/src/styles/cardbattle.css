@@ -325,12 +325,16 @@
   height: 236px;
 }
 /* 扇形:となりと少し重ね、真ん中からの位置で傾けて はしほど下げる(--fan-angle・--fan-drop は CardBattle.tsx の HandRow が決める) */
-.cb-hand__slot + .cb-hand__slot { margin-left: -28px; }
+.cb-hand__cell + .cb-hand__cell { margin-left: -28px; }
+/* 並びの位置の枠(CardBattle.tsx の HandRow。Flip が動かす)。手前に出すカードは 枠ごと前へ */
+.cb-hand__cell { position: relative; }
+.cb-hand__cell:has(.cb-hand__slot--pair) { z-index: 2; }
+.cb-hand__cell:has(.cb-hand__slot--selected) { z-index: 3; }
 .cb-hand__slot {
   position: relative;
   transform-origin: 50% 100%;
   transform: translateY(var(--fan-drop, 0px)) rotate(var(--fan-angle, 0deg));
-  transition: transform 0.18s ease-out, filter 0.15s, opacity 0.2s;
+  transition: transform 0.22s cubic-bezier(.3, 1.5, .5, 1), filter 0.15s, opacity 0.2s;
 }
 /* えらんでいないカードは 少し暗く(えらんでいるカードを目立たせる) */
 .cb-hand--choosing .cb-hand__slot:not(.cb-hand__slot--selected):not(.cb-hand__slot--pair) { filter: brightness(0.75) saturate(0.85); }
@@ -392,7 +396,7 @@
 }
 @keyframes cbPairBlink { from { opacity: 0.4; } }
 /* 合成でできたカード */
-.cb-hand__slot--new { animation: cbNewCard 0.6s cubic-bezier(.2, 1.6, .4, 1); }
+/* 合成でできたカード:出かたは HandRow(GSAP の Flip の onEnter) */
 @keyframes cbNewCard { from { transform: translateY(-60px) scale(1.3); } }
 
 /* 使えないスキル(このターンは使った・相手の手が全部同じ) */
@@ -600,11 +604,10 @@
   text-shadow:
     -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
     0 9px 0 var(--ink);
-  animation: cbShout 0.35s cubic-bezier(.2, 1.6, .4, 1) both;
+  /* 出かたは ClashStage.tsx(GSAP) */
 }
 .cb-clash__shout:empty { visibility: hidden; }
 .cb-clash__shout--result { font-size: 88px; line-height: 1.45; }
-@keyframes cbShout { from { opacity: 0; transform: scale(0.4); } }
 .cb-clash__row { display: flex; align-items: center; gap: 60px; }
 .cb-clash__slot {
   display: flex;
@@ -612,13 +615,9 @@
   align-items: center;
   gap: 10px;
   perspective: 900px;
-  transition: scale 0.3s ease-out 0.35s, filter 0.3s ease-out 0.35s;
+  transition: filter 0.3s ease-out 0.35s;
 }
-/* 左右から すべりこむ */
-.cb-clash__slot--player { animation: cbSlideL 0.3s ease-out both; }
-.cb-clash__slot--cpu { animation: cbSlideR 0.3s ease-out both; }
-@keyframes cbSlideL { from { opacity: 0; transform: translateX(-460px) rotate(-14deg); } }
-@keyframes cbSlideR { from { opacity: 0; transform: translateX(460px) rotate(14deg); } }
+/* すべりこむ・はねる・めくる・勝ち負けの大きさは ClashStage.tsx(GSAP の timeline) */
 .cb-clash__who {
   padding: 4px 22px 6px;
   border: 3px solid var(--ink);
@@ -630,19 +629,10 @@
   line-height: 1.1;
 }
 .cb-clash__slot--cpu .cb-clash__who { background: var(--petal); }
-/* かけ声に合わせて はねる(名前を交互に変えて、毎回やり直す) */
-.cb-clash--beat1 .cb-clash__card,
-.cb-clash--beat3 .cb-clash__card { animation: cbHopA 0.5s ease-out; }
-.cb-clash--beat2 .cb-clash__card { animation: cbHopB 0.5s ease-out; }
-@keyframes cbHopA { 35% { transform: translateY(-56px) rotate(-4deg); } }
-@keyframes cbHopB { 35% { transform: translateY(-56px) rotate(4deg); } }
-/* 「ぽん!」のあと:くるっと めくれる */
-.cb-clash--reveal .cb-clash__card { animation: cbFlip 0.35s ease-out both; }
-@keyframes cbFlip { from { transform: rotateY(90deg); } }
 /* 勝ったほうが大きく タイプの色で光り、負けたほうは小さく暗く。あいこ(★も同じ)は 2枚とも金に光る */
-.cb-clash__slot--won { scale: 1.15; }
+.cb-clash__card { will-change: transform; }
 .cb-clash__slot--won .cb-card { box-shadow: inset 0 0 0 6px var(--card-color), 0 0 44px 18px var(--type-color); }
-.cb-clash__slot--lost { scale: 0.82; filter: brightness(0.5) saturate(0.6); }
+.cb-clash__slot--lost { filter: brightness(0.5) saturate(0.6); }
 .cb-clash__slot--even .cb-card { box-shadow: inset 0 0 0 6px var(--card-color), 0 0 34px 12px #ffe27a; }
 .cb-clash__vs {
   font-family: var(--font-title);
