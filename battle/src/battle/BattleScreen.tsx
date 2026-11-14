@@ -5,8 +5,10 @@ import { AttackProjectile, ImpactBurst, ParticleLayer } from '../BattleEffects';
 import { MonsterImage } from '../components/MonsterCard';
 import { Backdrop, Logo } from '../components/Scenery';
 import { cx } from '../cx';
+import { gsap, SplitText, useGSAP } from '../fx/gsap';
 import { Deck } from '../Deck';
 import { getGameOutcome, isFinishChance } from '../game/logic';
+import { SPECIAL_CUTIN_SLAM_MS } from '../timings';
 import type { Hand, Monster, RoundResult } from '../types';
 import { ChoiceButtons } from './ChoiceButtons';
 import { MashDuel } from './MashDuel';
@@ -40,8 +42,26 @@ function SpecialMoveTitle({ monster }: { monster: Monster }) {
 
 // 必殺技のカットイン(自分のモンスターの絵 + 技の名前)。カードバトル(card/)でも使う
 export function SpecialCutin({ monster, theme }: { monster: Monster; theme: AttributeTheme }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  // 技の名前:1文字ずつ 大きく回りながら たたきつけられる(SplitText。名前の行ごとに分ける)。
+  // 名前の塊の ふくらむ脈(namePulse)は CSS のまま
+  useGSAP(() => {
+    const lines = rootRef.current?.querySelectorAll('.special-cutin__copy strong > span');
+    if (!lines?.length) return;
+    const split = SplitText.create([...lines], { type: 'chars' });
+    gsap.from(split.chars, {
+      opacity: 0,
+      scale: 3.2,
+      y: -40,
+      rotation: () => gsap.utils.random(-30, 30),
+      duration: 0.32,
+      ease: 'back.out(2.2)',
+      stagger: 0.045,
+      delay: SPECIAL_CUTIN_SLAM_MS / 1000,
+    });
+  }, { scope: rootRef });
   return (
-    <div className={`special-cutin special-cutin--${theme}`} role="status" aria-live="assertive">
+    <div ref={rootRef} className={`special-cutin special-cutin--${theme}`} role="status" aria-live="assertive">
       <span className="special-cutin__lines" aria-hidden="true" />
       <span className="special-cutin__band" aria-hidden="true" />
       <div className="special-cutin__monster" aria-hidden="true">

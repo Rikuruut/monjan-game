@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { getAttributeTheme } from '../attributes';
 import { MonsterCard } from '../components/MonsterCard';
 import { cx } from '../cx';
+import { gsap } from '../fx/gsap';
 import type { Side } from '../game/engine';
 import { CARD_HP_COUNT_MS } from '../timings';
 import type { Monster } from '../types';
@@ -17,23 +18,25 @@ function useCountUp(value: number, ms: number): number {
   const shownRef = useRef(value);
   useEffect(() => {
     const from = shownRef.current;
-    if (value <= from || typeof requestAnimationFrame === 'undefined') {
+    if (value <= from) {
       shownRef.current = value;
       setShown(value);
       return;
     }
-    let frame = 0;
-    const start = performance.now();
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / ms);
-      // はじめ速く、おわり ゆっくり
-      const next = Math.round(from + (value - from) * (1 - (1 - t) ** 3));
-      shownRef.current = next;
-      setShown(next);
-      if (t < 1) frame = requestAnimationFrame(step);
-    };
-    frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
+    // はじめ速く、おわり ゆっくり(GSAP の tween で 数を動かし、整数が変わったときだけ描きなおす)
+    const counter = { value: from };
+    const tween = gsap.to(counter, {
+      value,
+      duration: ms / 1000,
+      ease: 'power3.out',
+      onUpdate: () => {
+        const next = Math.round(counter.value);
+        if (next === shownRef.current) return;
+        shownRef.current = next;
+        setShown(next);
+      },
+    });
+    return () => { tween.kill(); };
   }, [value, ms]);
   return shown;
 }

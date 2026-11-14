@@ -20,7 +20,7 @@ export function useCardFx(
   /** 立て札の横の ターンの札(変わったら はずませる) */
   turnSide: string | null,
 ) {
-  const { view, damage, cpuStep } = battle;
+  const { view, damage, cpuStep, notice } = battle;
   const shakerRef = useRef<Shaker | null>(null);
 
   // 揺らすのは 左右のモンスターと 真ん中の列(手札は 揺らさない:読んでいる字が ぶれないように)
@@ -116,6 +116,36 @@ export function useCardFx(
       .call(() => shakerRef.current?.add(TIERS.small.trauma[1]))
       .to(fly, { scaleX: 1, scaleY: 1, duration: 0.4, ease: 'elastic.out(1, 0.4)' });
   }, { scope: rootRef, dependencies: [view, cpuStep] });
+
+  // ---- スキル・相手のスキル(notice) ----
+  // 回復:回復した側のカードが ふわっと ふくらんで もどる(うれしいことは 揺らさない)
+  // 封じ手:鎖が 上から たたきつけられて、少し揺れる / ため技の予告:相手のカードが ぶるぶる ふるえる
+  // 合成は 手札(HandRow)が ポンと出す
+  useGSAP(() => {
+    const root = rootRef.current;
+    if (view !== 'notice' || !notice || !root) return;
+    if (notice.type === 'heal' || notice.type === 'cpu-heal') {
+      const card = root.querySelector(`.monster-panel--${notice.type === 'heal' ? 'player' : 'cpu'} .monster-card`);
+      if (card) {
+        gsap.timeline()
+          .to(card, { scale: 1.07, y: -10, duration: 0.35, ease: 'power2.out' })
+          .to(card, { scale: 1, y: 0, duration: 0.9, ease: 'elastic.out(1, 0.35)' });
+      }
+    } else if (notice.type === 'seal') {
+      const chain = root.querySelector('.cb-chain');
+      if (chain) {
+        gsap.timeline()
+          .fromTo(chain, { scale: 3, y: -60, rotation: -40, opacity: 0 }, { scale: 1, y: 0, rotation: 0, opacity: 1, duration: 0.3, ease: 'power3.in' })
+          .call(() => shakerRef.current?.add(TIERS.small.trauma[1]))
+          .to(chain, { scaleX: 1.25, scaleY: 0.8, duration: 0.05 })
+          .to(chain, { scaleX: 1, scaleY: 1, duration: 0.4, ease: 'elastic.out(1, 0.4)' });
+      }
+    } else if (notice.type === 'cpu-charge') {
+      const card = root.querySelector('.monster-panel--cpu .monster-card');
+      if (card) gsap.fromTo(card, { x: 0 }, { x: 8, duration: 0.9, ease: 'fx.wiggleBig', clearProps: 'x' });
+      shakerRef.current?.add(TIERS.small.trauma[0]);
+    }
+  }, { scope: rootRef, dependencies: [view, notice] });
 
   // ---- ターンの札:はずんで出る ----
   useGSAP(() => {
