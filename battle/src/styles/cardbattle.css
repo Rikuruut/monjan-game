@@ -686,12 +686,8 @@
 /* 相手の ふせたカードの置き場(空)と、置かれるとき */
 .cb-field__empty--cpu { border-color: #ffb3d1a0; }
 /* ふせる:相手の手札のパネル(上)から 裏向きのカードが くるっと回りながら飛んできて置かれる */
-.cb-field__fly { animation: cbFly 0.7s cubic-bezier(.3, 1.2, .5, 1) both; }
-@keyframes cbFly {
-  0%   { opacity: 0; transform: translate(-60px, -230px) rotate(-200deg) scale(0.6); }
-  30%  { opacity: 1; }
-  100% { transform: none; }
-}
+/* 動きは useCardFx.ts(GSAP。弧をえがいて飛んで、つぶれて着地) */
+.cb-field__fly { will-change: transform; }
 
 /* 立て札の横の ターンの札 */
 .cb-turn-chip {
@@ -705,11 +701,10 @@
   line-height: 1.2;
   color: var(--ink);
   white-space: nowrap;
-  animation: cbChipIn 0.3s cubic-bezier(.2, 1.6, .4, 1) both;
+  /* 出かたは useCardFx.ts(GSAP。はずんで出る) */
 }
 .cb-turn-chip--player { background: var(--leaf); }
 .cb-turn-chip--cpu { background: var(--petal); }
-@keyframes cbChipIn { from { opacity: 0; transform: scale(0.6); } }
 
 /* ==================================================================
    UI の調整4回目:手札のゾーン(うしろを少し暗くして囲む)と 案内の1行(HandGuide.tsx)
@@ -835,3 +830,24 @@
 .cb-hp--healing .cb-hp__number b { color: #a6ec7c; }
 .cb-hp--healing .cb-hp__number { animation: cbHpNumber 0.8s ease-out; }
 @keyframes cbHpNumber { 30% { transform: scale(1.18); } }
+
+/* ==================================================================
+   手ざわり(GSAP。src/fx/・card/useCardFx.ts)
+   動き(transform)は GSAP が出すので、同じ要素の CSS の動きは止める。光(filter)だけ CSS に残す
+   ================================================================== */
+/* ヒットストップ:止めているあいだ、CSS の動きも 当たった瞬間の形で止める(fx/hitStop.ts) */
+.fx-hitstop,
+.fx-hitstop *,
+.fx-hitstop *::before,
+.fx-hitstop *::after { animation-play-state: paused !important; }
+/* 揺れは trauma の揺れ(fx/shake.ts)。class は目印として残す */
+.cb-screen .battlefield:is(.battlefield--shake-1, .battlefield--shake-2, .battlefield--shake-3, .battlefield--shake-special) { animation: none; }
+/* 当たったカード:白く光るだけ(押される・ゆれるは GSAP) */
+.cb-screen .monster-panel--hit .monster-card { animation: cbHitFlash 0.55s linear both; }
+@keyframes cbHitFlash {
+  0%, 15% { filter: brightness(2.6) saturate(0.3); }
+  55%  { filter: brightness(1.1); }
+  100% { filter: none; }
+}
+/* ダメージの数字:位置と はずみは GSAP(横の真ん中そろえも GSAP の xPercent) */
+.cb-screen .damage-burst { animation: none; transform: none; will-change: transform; }

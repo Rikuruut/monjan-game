@@ -19,6 +19,7 @@ import { ClashStage } from './ClashStage';
 import { FighterPanel } from './FighterPanel';
 import { HandZone } from './HandGuide';
 import { HandInfo } from './HandInfo';
+import { useCardFx } from './useCardFx';
 import {
   skillBlockedReason,
   useCardBattle,
@@ -289,9 +290,13 @@ export function CardBattle({
   const staging = clash !== null && (view === 'janken' || view === 'reveal');
   // 当たりの揺れ(main と同じ 1〜3。必殺技は いちばん強い special)
   const shake = damage ? (damage.finisher ? 'special' : damage.power) : null;
+  // 手ざわり(ヒットストップ・揺れ・のけぞり・はずみ。GSAP)。揺れの class は テストと これまでの目印のため残し、動きは useCardFx が出す
+  const rootRef = useRef<HTMLElement>(null);
+  useCardFx(rootRef, battle, turnSide);
 
   return (
     <main
+      ref={rootRef}
       className={cx(
         'screen',
         'battle-screen',
