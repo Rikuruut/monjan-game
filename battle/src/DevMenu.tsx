@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { sendCardDev } from './card/cardDev';
 import { ELEMENTS } from './attributes';
 import { battleUrlFor, DEV_PAGES, loadRecentMonsters, type Autoplay, type RecentMonster } from './devTools';
 import type { GameData } from './data/loadGameData';
@@ -36,11 +37,12 @@ const FORCED: { mode: ForcedResult; label: string }[] = [
   { mode: 'tie', label: 'あいこ(連打勝負)' },
 ];
 
-type DevTab = 'common' | 'screens' | 'fx' | 'data';
+type DevTab = 'common' | 'screens' | 'card' | 'fx' | 'data';
 
 const TABS: { tab: DevTab; label: string }[] = [
   { tab: 'common', label: 'よく使う' },
   { tab: 'screens', label: '画面・勝ち負け' },
+  { tab: 'card', label: 'カードバトル' },
   { tab: 'fx', label: '攻撃エフェクト' },
   { tab: 'data', label: 'データ' },
 ];
@@ -219,6 +221,25 @@ export function DevMenu({
                   <p className="dev-row">
                     <button type="button" onClick={() => onLowHp('player')}>自分の♡を1に</button>
                     <button type="button" onClick={() => onLowHp('cpu')}>相手の♡を1に</button>
+                  </p>
+                </Section>
+              </>
+            )}
+
+            {tab === 'card' && (
+              <>
+                <Section title="カードを手札に足す" free desc="カードバトル(/battle/?card=1・「たたかう!」から)の 自分のターン(手札をえらぶとき)に押します。手札の上限(5枚)は こえます。">
+                  <p className="dev-row">
+                    <button type="button" className="dev-primary" onClick={() => sendCardDev('add-finisher')}>⚡ 必殺技を手札に足す</button>
+                    <button type="button" onClick={() => sendCardDev('add-heal')}>回復を足す</button>
+                    <button type="button" onClick={() => sendCardDev('add-seal')}>封じ手を足す</button>
+                  </p>
+                </Section>
+                <Section title="HP・ため技" free desc="自分の HP を3割にすると ピンチの点滅。相手の HP を半分にすると、ボス(&round=3)は 次のドローで必殺技が来ます。ため技は 次のターンに ためます。">
+                  <p className="dev-row">
+                    <button type="button" onClick={() => sendCardDev('player-pinch')}>自分の HP を3割に</button>
+                    <button type="button" onClick={() => sendCardDev('cpu-half')}>相手の HP を半分に</button>
+                    <button type="button" onClick={() => sendCardDev('cpu-charge')}>ため技を予告させる</button>
                   </p>
                 </Section>
               </>

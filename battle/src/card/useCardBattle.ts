@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GameSound, GameSoundOptions } from '../audio/gameAudio';
-import { canSeal, isJanken, mergeablePairs, type Card, type JankenCard } from '../game/cards';
+import { canSeal, isJanken, mergeablePairs, sortHand, type Card, type CardFace, type JankenCard } from '../game/cards';
 import type { BattleConfig } from '../game/config';
 import {
   beginNextTurn,
@@ -19,29 +19,39 @@ import { pickCpuMash, type RandomSource } from '../game/logic';
 import { useTimers } from '../hooks/useTimers';
 import type { PadButton } from '../integration';
 import type { Hand } from '../types';
+import { useCardDev, type CardDevCommand } from './cardDev';
 import {
+  CARD_ATTACK_MS,
   CARD_DAMAGE_MS,
+  CARD_CLASH_IN_MS,
+  CARD_CPU_PLACE_MS,
+  CARD_CPU_THINK_MS,
   CARD_DRAW_MS,
+  CARD_FINISHER_ATTACK_MS,
   CARD_FINISHER_DRAW_MS,
   CARD_JANKEN_BEAT_MS,
+  CARD_PLAYER_TURN_BANNER_MS,
   CARD_REVEAL_MS,
   CARD_SKILL_MS,
   MASH_DUEL_MS,
   MASH_RESULT_MS,
   SPECIAL_CUTIN_SLAM_MS,
   SPECIAL_DISPLAY_MS,
+  SPECIAL_SECOND_IMPACT_MS,
 } from '../timings';
 
 // カードバトルの画面の進み方(戦闘システム設計書 6章・7章)。
 // 勝ち負けの計算は game/engine.ts。ここは「いつ・何を見せるか」と、3つのボタン(← ・決定・→)の受け方を持つ。
 //
 // 見せる段階(view):
-//   player(手札をえらぶ。合成・スキルは ここで使い、notice で結果を少し見せて player にもどる)
-//   → janken(じゃん・けん・ぽん)→ reveal(めくる)→(rendan → rendan-result)→ damage → draw →(相手のスキルは notice)→ player …
-//   必殺技は player → finisher(カットイン)→ damage
+//   cpu-turn(相手のターン:カードを えらんで 裏向きで置く)→ player(手札をえらぶ。合成・スキルは ここで使い、notice で結果を少し見せて player にもどる)
+//   → janken(じゃん・けん・ぽん)→ reveal(めくる)→(rendan → rendan-result)→ attack(勝った側が前へ出て 飛び道具)→ damage(命中)
+//   → draw →(相手のスキルは notice)→ cpu-turn → player …
+//   必殺技は player → finisher(カットイン)→ attack → damage。攻撃と命中の見せ方は main のバトル(BattleScreen.tsx)と同じ
 //   どちらかの HP が 0 になったら round-end
 
 export type CardBattleView =
+  | 'cpu-turn'
   | 'player'
   | 'notice'
   | 'janken'
@@ -49,6 +59,7 @@ export type CardBattleView =
   | 'rendan'
   | 'rendan-result'
   | 'finisher'
+  | 'attack'
   | 'damage'
   | 'draw'
   | 'round-end';
@@ -68,6 +79,12 @@ export interface DamageShown {
   target: Side;
   amount: number;
   charged: boolean;
+  /** 当たりの強さ(揺れ・粒の大きさ):勝ったカードの★の数。ため技の2倍は 3 */
+  power: 1 | 2 | 3;
+  /** 必殺技の一撃 */
+  finisher: boolean;
+  /** とどめ(この一撃で HP が0になる) */
+  final: boolean;
 }
 
 /** 合成・スキルを使ったあとに少し見せる ひとこと */
@@ -119,12 +136,15 @@ export function useCardBattle({
   playerAttack,
   random = Math.random,
   playSound,
+  attributes = { player: '', cpu: '' },
   setup,
 }: {
   config: BattleConfig;
   playerAttack: number;
   random?: RandomSource;
   playSound: PlaySound;
+  /** 自分と相手のタイプ(攻撃の音を タイプで変える) */
+  attributes?: Record<Side, string>;
   /** パックを開けたあとの状態を差しかえる(テスト・開発者メニュー用) */
   setup?: (state: BattleState) => BattleState;
 }) {
@@ -137,7 +157,12 @@ export function useCardBattle({
 
   // 画面に見せている状態。じゃんけんの あいだは「出す前」のままにして、ダメージのところで「出したあと」に入れかえる
   const [state, setState] = useState<BattleState>(deal);
-  const [view, setView] = useState<CardBattleView>('player');
+  // ラウンドのはじめは 相手のターンから(はじめの予約は 下の useEffect)
+  const [view, setView] = useState<CardBattleView>('cpu-turn');
+  // 相手のターンの段:考える(手札がゆれる)→ ふせる(裏向きのカードが場へ)
+  const [cpuStep, setCpuStep] = useState<'think' | 'place'>('think');
+  // 自分のターンに入ったところ(「あなたの ターン!」を少し出す)
+  const [turnBanner, setTurnBanner] = useState(false);
   const [cursor, setCursor] = useState(() => itemCursor(handItems(state.player.hand)));
   // 決定の1回目で カードが浮いている(2回目で使う。←→で取り消し)
   const [armed, setArmed] = useState(false);
@@ -169,12 +194,33 @@ export function useCardBattle({
     setCursor(index >= 0 ? index : itemCursor(nextItems));
   };
 
-  // 相手のスキル(回復・ため技の予告)を1つずつ見せてから、手札えらびへ
+  // 相手のターン:考える(「カードを えらんでいる…」)→ ふせる(裏向きのカードが場へ飛んで置かれる)→ 自分のターンへ
+  const startCpuTurn = () => {
+    setView('cpu-turn');
+    setCpuStep('think');
+    schedule(() => {
+      setCpuStep('place');
+      playSound('select');
+    }, CARD_CPU_THINK_MS);
+    schedule(() => {
+      setView('player');
+      playSound('reveal');
+      setTurnBanner(true);
+      schedule(() => setTurnBanner(false), CARD_PLAYER_TURN_BANNER_MS);
+    }, CARD_CPU_THINK_MS + CARD_CPU_PLACE_MS);
+  };
+
+  // はじめのターン:相手のターンから(StrictMode で2回呼ばれても、片づけで予約は消える)
+  useEffect(() => {
+    startCpuTurn();
+  }, []);
+
+  // 相手のスキル(回復・ため技の予告)を1つずつ見せてから、相手のターンへ
   const showCpuNotices = (list: Notice[]) => {
     const [first, ...rest] = list;
     if (!first) {
       setNotice(null);
-      setView('player');
+      startCpuTurn();
       return;
     }
     setNotice(first);
@@ -183,17 +229,44 @@ export function useCardBattle({
     schedule(() => showCpuNotices(rest), CARD_SKILL_MS);
   };
 
-  // ダメージを見せる → ラウンドが終わりなら round-end、続くなら 次のターン(お互い1枚引く)
-  const showDamage = (after: BattleState, events: BattleEvent[]) => {
+  // 勝負がついたあと:攻撃(勝った側が前へ出て 飛び道具)→ 命中(showImpact)
+  const strike = (after: BattleState, events: BattleEvent[]) => {
     const hit = events.find((event) => event.type === 'damage');
-    const shown = hit && hit.type === 'damage' ? { target: hit.target, amount: hit.amount, charged: hit.charged } : null;
-    setState(after);
+    const finisher = events.some((event) => event.type === 'finisher');
+    const janken = events.find((event) => event.type === 'janken');
+    let shown: DamageShown | null = null;
+    if (hit && hit.type === 'damage') {
+      const winner: Side = hit.target === 'cpu' ? 'player' : 'cpu';
+      const card = janken && janken.type === 'janken' ? (winner === 'player' ? janken.playerCard : janken.cpuCard) : null;
+      shown = {
+        target: hit.target,
+        amount: hit.amount,
+        charged: hit.charged,
+        power: finisher || hit.charged ? 3 : card?.star ?? 1,
+        finisher,
+        final: after.phase === 'round_end',
+      };
+    }
     setDamage(shown);
     setChargeNote(shown?.charged ? 'charged' : events.some((event) => event.type === 'charge-blocked') ? 'blocked' : null);
-    setFinisherHit(events.some((event) => event.type === 'finisher'));
+    setFinisherHit(finisher);
+    if (!shown) {
+      showImpact(after, false);
+      return;
+    }
+    setView('attack');
+    playSound('attack', { attribute: attributes[shown.target === 'cpu' ? 'player' : 'cpu'] });
+    schedule(() => showImpact(after, finisher), finisher ? CARD_FINISHER_ATTACK_MS : CARD_ATTACK_MS);
+  };
+
+  // 命中:HP が減る → ラウンドが終わりなら round-end、続くなら 次のターン(お互い1枚引く)
+  const showImpact = (after: BattleState, finisher: boolean) => {
+    setState(after);
     setView('damage');
     playSound('impact');
     playSound('hp-loss');
+    // 必殺技は、命中の音を重ねる
+    if (finisher) schedule(() => playSound('impact'), SPECIAL_SECOND_IMPACT_MS);
 
     schedule(() => {
       setDamage(null);
@@ -239,7 +312,7 @@ export function useCardBattle({
       setRendanWinner(winner);
       setView('rendan-result');
       playSound(winner === 'player' ? 'victory' : 'reveal');
-      schedule(() => showDamage(step.state, step.events), MASH_RESULT_MS);
+      schedule(() => strike(step.state, step.events), MASH_RESULT_MS);
     }, MASH_DUEL_MS);
   };
 
@@ -253,29 +326,36 @@ export function useCardBattle({
       setView('finisher');
       playSound('star-showdown');
       schedule(() => playSound('impact'), SPECIAL_CUTIN_SLAM_MS);
-      schedule(() => showDamage(step.state, step.events), SPECIAL_DISPLAY_MS);
+      schedule(() => strike(step.state, step.events), SPECIAL_DISPLAY_MS);
       return;
     }
     setClash({ playerCard: janken.playerCard, cpuCard: janken.cpuCard, winner: janken.winner, by: janken.by });
+    setTurnBanner(false);
+    // 見せ場:大きなカード2枚が すべりこむ(beat 0)→ じゃん・けん・ぽん(1〜3)→ めくる
     setView('janken');
-    setBeat(1);
-    playSound('janken-jan');
+    setBeat(0);
+    playSound('select');
+    const beatAt = (beat: number) => CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * (beat - 1);
+    schedule(() => {
+      setBeat(1);
+      playSound('janken-jan');
+    }, beatAt(1));
     schedule(() => {
       setBeat(2);
       playSound('janken-ken');
-    }, CARD_JANKEN_BEAT_MS);
+    }, beatAt(2));
     schedule(() => {
       setBeat(3);
       playSound('janken-pon');
-    }, CARD_JANKEN_BEAT_MS * 2);
+    }, beatAt(3));
     schedule(() => {
       setView('reveal');
       playSound('reveal');
       schedule(() => {
         if (step.state.phase === 'rendan') startRendan(step.state);
-        else showDamage(step.state, step.events);
+        else strike(step.state, step.events);
       }, CARD_REVEAL_MS);
-    }, CARD_JANKEN_BEAT_MS * 3);
+    }, beatAt(4));
   };
 
   // 合成・スキルの結果を少し見せて、手札えらびにもどる(focusId のカードにカーソルを置く)
@@ -329,8 +409,9 @@ export function useCardBattle({
     setChargeNote(null);
     setFinisherHit(false);
     setBeat(0);
-    setView('player');
+    setTurnBanner(false);
     playSound('start');
+    startCpuTurn();
   };
 
   // 合成のペアえらび(ペアが2組以上のとき):←→でえらび、決定で合成(右はしの「やめる」で もどる)
@@ -412,6 +493,26 @@ export function useCardBattle({
     else play(item.card);
   };
 
+  // 開発者メニュー(「カードバトル」タブ)の命令。自分のターン(手札えらび)のときだけ効く
+  const addCard = (face: CardFace) => {
+    const card = { ...face, id: `c${state.cardSeq + 1}` } as Card;
+    const next: BattleState = { ...state, cardSeq: state.cardSeq + 1, player: { ...state.player, hand: sortHand([...state.player.hand, card]) } };
+    setState(next);
+    setArmed(false);
+    setMergePick(null);
+    placeCursor(next, card.id);
+  };
+  useCardDev((command: CardDevCommand) => {
+    if (view !== 'player') return;
+    if (command === 'add-finisher') addCard({ kind: 'finisher' });
+    else if (command === 'add-heal') addCard({ kind: 'skill', skill: 'heal' });
+    else if (command === 'add-seal') addCard({ kind: 'skill', skill: 'seal' });
+    else if (command === 'player-pinch') setState({ ...state, player: { ...state.player, hp: Math.floor(state.player.maxHp * 0.3) } });
+    else if (command === 'cpu-half') setState({ ...state, cpu: { ...state.cpu, hp: Math.floor(state.cpu.maxHp * 0.5) } });
+    else if (command === 'cpu-charge') setState({ ...state, cpu: { ...state.cpu, chargeAnnounced: true } });
+    playSound('toggle');
+  });
+
   /** 連打勝負の画面のゲージを押した(マウス) */
   const pressMash = () => {
     if (view === 'rendan') press('center');
@@ -433,6 +534,8 @@ export function useCardBattle({
     cpuMash,
     rendanWinner,
     drawn,
+    turnBanner,
+    cpuStep,
     chargeNote,
     finisherHit,
     press,
@@ -440,3 +543,6 @@ export function useCardBattle({
     restart,
   };
 }
+
+/** useCardBattle の返すもの(画面の部品に まとめて渡す) */
+export type CardBattleApi = ReturnType<typeof useCardBattle>;

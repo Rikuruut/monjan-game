@@ -87,8 +87,11 @@ function emojiShape(text: string, scalar: number) {
   return shape;
 }
 
-function origin(at: BurstAt) {
-  return { x: CENTER_X[at] / STAGE.width, y: CENTER_Y / STAGE.height };
+// 発射台ごとの、カードの絵の中心の高さ(カードバトルは カードを小さくしているので ちがう。なければ CENTER_Y)
+const centerYs = new WeakMap<ParticleFire, number>();
+
+function origin(fire: ParticleFire, at: BurstAt) {
+  return { x: CENTER_X[at] / STAGE.width, y: (centerYs.get(fire) ?? CENTER_Y) / STAGE.height };
 }
 
 // テスト(jsdom)には canvas がないので、粒は出さない
@@ -96,16 +99,18 @@ export function canUseParticles() {
   return typeof navigator !== 'undefined' && !/jsdom/i.test(navigator.userAgent);
 }
 
-/** 粒を描く canvas(1920×1080)を、canvas-confetti の発射台にする */
-export function createParticleFire(canvas: HTMLCanvasElement): ParticleFire | null {
+/** 粒を描く canvas(1920×1080)を、canvas-confetti の発射台にする。centerY はカードの絵の中心の高さ(省くと main のバトルの位置) */
+export function createParticleFire(canvas: HTMLCanvasElement, { centerY }: { centerY?: number } = {}): ParticleFire | null {
   if (!canUseParticles()) return null;
-  return confetti.create(canvas, { resize: false, useWorker: false });
+  const fire = confetti.create(canvas, { resize: false, useWorker: false });
+  if (centerY !== undefined) centerYs.set(fire, centerY);
+  return fire;
 }
 
 function fireShot(fire: ParticleFire, shot: Shot, at: BurstAt, dir: number, multiplier: number) {
   void fire({
     particleCount: Math.round(shot.count * multiplier),
-    origin: origin(at),
+    origin: origin(fire, at),
     spread: shot.spread ?? 360,
     angle: 90,
     startVelocity: shot.velocity * SPEED,

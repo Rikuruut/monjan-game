@@ -1,94 +1,97 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { burstAt, chargeAt, createParticleFire, stopParticleFire, type ParticleFire } from '../attackParticles';
+import { getAttributeTheme, type AttributeTheme } from '../attributes';
 import type { GameSound, GameSoundOptions } from '../audio/gameAudio';
-import { getAttributeTheme } from '../attributes';
 import { SpecialCutin } from '../battle/BattleScreen';
 import { MashDuel } from '../battle/MashDuel';
+import { AttackProjectile, ImpactBurst, ParticleLayer } from '../BattleEffects';
 import { HAND_META } from '../components/HandIcon';
 import { Backdrop, Logo } from '../components/Scenery';
 import { cx } from '../cx';
 import type { JankenCard } from '../game/cards';
 import { attackFromLegacy, loadBattleConfig, type BattleConfig } from '../game/config';
-import { cardDamage, healAmount, type BattleState } from '../game/engine';
+import type { BattleState, Side } from '../game/engine';
 import type { RandomSource } from '../game/logic';
 import { assetUrl, usePadButtons } from '../integration';
 import type { Monster } from '../types';
 import { cardLabel, CardView } from './CardView';
+import { ClashStage } from './ClashStage';
 import { FighterPanel } from './FighterPanel';
+import { HandZone } from './HandGuide';
+import { HandInfo } from './HandInfo';
 import {
   skillBlockedReason,
   useCardBattle,
-  type CardBattleView,
+  type CardBattleApi,
   type ChargeNote,
-  type Clash,
+  type DamageShown,
   type HandItem,
   type Notice,
 } from './useCardBattle';
 
 type PlaySound = (sound: GameSound, options?: GameSoundOptions) => void;
-type Battle = ReturnType<typeof useCardBattle>;
 
-// ---- 文言 ----
+// カードの絵の中心の高さ(左右のモンスターを 0.8倍にしているので、main の 490 より上。cardbattle.css の .projectile の top と同じ)
+const CARD_IMAGE_Y = 422;
 
-const BEAT_COPY = ['', 'じゃん', 'けん', 'ぽん！'];
+// ---- 場の ひとこと(1行目は短く大きく、くわしいことは2行目に小さく) ----
 
-const CHARGE_COPY: Record<ChargeNote, string> = {
-  charged: 'ためわざ！ ダメージ 2ばい！',
-  blocked: 'ふせいだ！',
+interface FieldCopy {
+  main: string;
+  sub?: string;
+}
+
+const CHARGE_COPY: Record<ChargeNote, FieldCopy> = {
+  charged: { main: 'ダメージ 2ばい！', sub: 'ためわざが きまった…' },
+  blocked: { main: 'ふせいだ！', sub: 'ためわざを はねかえした！' },
 };
 
-function noticeCopy(notice: Notice): string {
-  if (notice.type === 'merge') return `がったい！ ${cardLabel(notice.card)} に なった！`;
-  if (notice.type === 'heal') return `HPが ${notice.amount} もどった！`;
-  if (notice.type === 'cpu-heal') return `あいての かいふく！ HPが ${notice.amount} もどった`;
-  if (notice.type === 'cpu-charge') return 'あいては ちからを ためている…！';
-  return `${HAND_META[notice.hand].label}を ふうじた！ あいては カードを だしなおしたよ`;
+function noticeCopy(notice: Notice): FieldCopy {
+  if (notice.type === 'merge') return { main: 'がったい！', sub: `${cardLabel(notice.card)} に なった` };
+  if (notice.type === 'heal') return { main: 'かいふく！', sub: `HPが ${notice.amount} もどった` };
+  if (notice.type === 'seal') return { main: `${HAND_META[notice.hand].label}を ふうじた！`, sub: 'あいては カードを だしなおした' };
+  if (notice.type === 'cpu-heal') return { main: 'あいての かいふく！', sub: `HPが ${notice.amount} もどった` };
+  return { main: 'ちからを ためている…！', sub: 'つぎの ターン まけると ダメージ 2ばい' };
 }
 
-// 場の真ん中に出す ひとこと(じゃんけんの かけ声・めくった結果・合成やスキルの結果)
-function fieldCopy(battle: Battle): string {
-  const { view, beat, clash, notice, chargeNote, state } = battle;
+function fieldCopy(battle: CardBattleApi): FieldCopy | null {
+  const { view, clash, notice, chargeNote, state, turnBanner, cpuStep } = battle;
   if (view === 'notice' && notice) return noticeCopy(notice);
-  // ため技のターン:手札をえらぶあいだ 注意を出し、結果も出す
-  if (view === 'player' && state.cpu.charging) return 'ためわざ が くる！ まけると ダメージ 2ばい！';
+  if (view === 'cpu-turn') {
+    return cpuStep === 'think'
+      ? { main: 'あいての ターン', sub: 'カードを えらんでいる…' }
+      : { main: 'カードを ふせた！', sub: 'なにを だしたかな？' };
+  }
+  // ため技のターン:手札をえらぶあいだ 注意を出す(「あなたの ターン!」より さき)
+  if (view === 'player' && state.cpu.charging) return { main: 'ためわざ が くる！', sub: 'まけると ダメージ 2ばい！' };
+  if (view === 'player' && turnBanner) return { main: 'あなたの ターン！', sub: 'カードを えらぼう' };
   if (view === 'damage' && chargeNote) return CHARGE_COPY[chargeNote];
-  if (view === 'janken') return BEAT_COPY[beat] ?? '';
-  if (!clash || view === 'player' || view === 'draw' || view === 'round-end') return '';
-  if (clash.winner === 'rendan') return 'あいこ！ ★も おなじ！';
-  const who = clash.winner === 'player' ? 'あなたの かち！' : 'あいての かち…';
-  return clash.by === 'star' ? `あいこ！ ★が おおい ${clash.winner === 'player' ? 'あなた' : 'あいて'}の かち！` : who;
+  // じゃんけんと めくった結果は 見せ場(ClashStage)が出す
+  if (!clash || !['rendan-result', 'attack', 'damage'].includes(view)) return null;
+  if (clash.winner === 'rendan') return { main: 'あいこ！', sub: '★も おなじ！ れんだで しょうぶ' };
+  const main = clash.winner === 'player' ? 'あなたの かち！' : 'あいての かち…';
+  return clash.by === 'star' ? { main, sub: 'あいこ → ★が おおい ほうの かち' } : { main };
 }
 
-// 手札の上に出す案内(えらんでいるものの説明・決定の1回目で浮いたときの説明)
-function promptCopy(battle: Battle): string {
-  const { state, view, items, cursor, armed, mergePick } = battle;
-  if (view === 'draw') return battle.drawn?.kind === 'finisher' ? 'ひっさつわざ カードが きた！' : 'カードを 1まい ひいたよ！';
-  if (view !== 'player') return '';
-  if (mergePick !== null) return 'どれを がったいする？';
-  const item = items[cursor];
-  if (!item) return 'だす カードを えらぼう！';
-  if (item.kind === 'merge') {
-    return armed
-      ? 'がったい:おなじ 2まいで ★が 1つ ふえる！ もういちど けっていで がったい'
-      : 'おなじ カードが 2まい！ がったい できるよ';
-  }
-  const { card } = item;
-  const blocked = skillBlockedReason(state, card);
-  if (blocked) return `${cardLabel(card)}:${blocked}`;
-  if (!armed) return 'だす カードを えらぼう！';
-  if (card.kind === 'janken') {
-    return `${cardLabel(card)}:かつと ${cardDamage(state.config, card, state.player.attack)} ダメージ！ もういちど けっていで だす`;
-  }
-  if (card.kind === 'skill' && card.skill === 'heal') {
-    return `かいふく:HPが ${healAmount(state)} もどるよ！ もういちど けっていで つかう`;
-  }
-  if (card.kind === 'skill') return 'ふうじて:あいての 手を 1つ ふうじる！ もういちど けっていで つかう';
-  return 'ひっさつわざ:どんな 手にも かって かならず たおす！ もういちど けっていで だす';
+// 1行目の字の大きさ:真ん中の列(幅 388px)に1行で収まる大きさ(上限 46px)
+function mainCopySize(text: string): number {
+  return Math.min(46, Math.floor(360 / Math.max(1, [...text].length)));
+}
+
+function FieldCopyBand({ copy }: { copy: FieldCopy }) {
+  return (
+    // key で出しなおして、1回ずつ はねて出る
+    <div key={copy.main + (copy.sub ?? '')} className="cb-copy" role="status" aria-live="assertive">
+      <strong className="cb-copy__main" style={{ fontSize: `${mainCopySize(copy.main)}px` }}>{copy.main}</strong>
+      {copy.sub && <span className="cb-copy__sub">{copy.sub}</span>}
+    </div>
+  );
 }
 
 // ---- 手札 ----
 
 // 合成のペアに入っているカード(カーソルが「がったい!」の枠にあるときは全部、ペアをえらんでいるときは えらんだペアだけ)
-function pairCardIds(battle: Battle): Set<string> {
+function pairCardIds(battle: CardBattleApi): Set<string> {
   const { items, cursor, pairs, mergePick, view } = battle;
   if (view !== 'player') return new Set();
   if (mergePick !== null) return new Set(pairs[mergePick]?.map((card) => card.id) ?? []);
@@ -96,10 +99,14 @@ function pairCardIds(battle: Battle): Set<string> {
   return new Set(pairs.flat().map((card) => card.id));
 }
 
-function HandRow({ battle }: { battle: Battle }) {
+// 扇形の手札:1枚あたりの傾き(度)と、はしほど下げる量(真ん中からの枚数の2乗 × px)
+const FAN_ANGLE = 6;
+const FAN_DROP = 3;
+
+function HandRow({ battle }: { battle: CardBattleApi }) {
   const { state, view, items, cursor, armed, mergePick, pairs, clash, notice } = battle;
   const choosing = view === 'player';
-  // 場に出したカードは、手札からは消して見せる(状態は ダメージのところで入れかわる)。じゃんけんのあいだは「がったい!」の枠も出さない
+  // 場に出したカードは、手札からは消して見せる(状態は 命中のところで入れかわる)。じゃんけんのあいだは「がったい!」の枠も出さない
   const shown = items
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => (item.kind === 'merge' ? choosing || view === 'notice' : item.card.id !== clash?.playerCard.id));
@@ -107,83 +114,74 @@ function HandRow({ battle }: { battle: Battle }) {
   const skillUsed = state.player.skillsUsed >= state.config.skillPerTurn;
   const newCardId = notice?.type === 'merge' ? notice.card.id : null;
 
-  const slotFor = ({ item, index }: { item: HandItem; index: number }) => {
+  // 扇形:手札の並び(「しようずみ」の置き場も ふくむ)の真ん中からの位置で、少しずつ傾けて、はしほど下げる
+  const count = shown.length + (skillUsed ? 1 : 0);
+  const fan = (position: number) => {
+    const offset = position - (count - 1) / 2;
+    return { '--fan-angle': `${offset * FAN_ANGLE}deg`, '--fan-drop': `${offset * offset * FAN_DROP}px` } as CSSProperties;
+  };
+  const usedOffset = skillUsed ? 1 : 0;
+
+  const slotFor = ({ item, index }: { item: HandItem; index: number }, position: number) => {
     const selected = choosing && mergePick === null && index === cursor;
-    const className = cx(
-      'cb-hand__slot',
-      selected && 'cb-hand__slot--selected',
-      selected && armed && 'cb-hand__slot--armed',
-    );
-    if (item.kind === 'merge') {
-      return (
-        <div key="merge" className={cx(className, 'cb-hand__slot--merge')} data-testid={`hand-item-${index}`} aria-current={selected ? 'true' : undefined}>
+    const card = item.kind === 'card' ? item.card : null;
+    return (
+      <div
+        key={card ? card.id : 'merge'}
+        style={fan(position + usedOffset)}
+        className={cx(
+          'cb-hand__slot',
+          !card && 'cb-hand__slot--merge',
+          selected && 'cb-hand__slot--selected',
+          selected && armed && 'cb-hand__slot--armed',
+          card && highlighted.has(card.id) && 'cb-hand__slot--pair',
+          card && card.id === newCardId && 'cb-hand__slot--new',
+          card && skillBlockedReason(state, card) && 'cb-hand__slot--blocked',
+        )}
+        data-testid={`hand-item-${index}`}
+        aria-current={selected ? 'true' : undefined}
+      >
+        {card ? (
+          <CardView card={card} />
+        ) : (
           <div className="cb-merge" role="img" aria-label="がったい">
             <span className="cb-merge__icon" aria-hidden="true">✨</span>
             <span className="cb-merge__label">がったい！</span>
             <span className="cb-merge__count">{pairs.length}くみ</span>
           </div>
-        </div>
-      );
-    }
-    const { card } = item;
-    return (
-      <div
-        key={card.id}
-        className={cx(
-          className,
-          highlighted.has(card.id) && 'cb-hand__slot--pair',
-          card.id === newCardId && 'cb-hand__slot--new',
-          skillBlockedReason(state, card) && 'cb-hand__slot--blocked',
         )}
-        data-testid={`hand-item-${index}`}
-        aria-current={selected ? 'true' : undefined}
-      >
-        <CardView card={card} />
       </div>
     );
   };
 
   return (
-    <section className={cx('cb-hand', !choosing && 'cb-hand--locked')} aria-label="じぶんの てふだ">
-      <p className="cb-hand__prompt" role="status" aria-live="polite">{promptCopy(battle)}</p>
-      {mergePick !== null && (
-        <div className="cb-merge-pick" role="listbox" aria-label="がったいする ペア">
-          {pairs.map(([card], index) => (
-            <span key={card.id} role="option" aria-selected={index === mergePick} className={cx('cb-merge-pick__option', index === mergePick && 'is-current')}>
-              {cardLabel(card)} × 2
-            </span>
-          ))}
-          <span role="option" aria-selected={mergePick === pairs.length} className={cx('cb-merge-pick__option', 'cb-merge-pick__option--cancel', mergePick === pairs.length && 'is-current')}>
-            やめる
-          </span>
+    <section className={cx('cb-hand', choosing ? 'cb-hand--choosing' : 'cb-hand--locked')} aria-label="じぶんの てふだ">
+      {/* スキルを使ったターンは、置き場所が「しようずみ」になる */}
+      {skillUsed && (
+        <div className="cb-hand__slot cb-hand__slot--used" style={fan(0)} aria-label="スキルは しようずみ">
+          <span className="cb-used">スキル<br />しようずみ</span>
         </div>
       )}
-      <div className="cb-hand__cards">
-        {/* スキルを使ったターンは、置き場所が「しようずみ」になる */}
-        {skillUsed && (
-          <div className="cb-hand__slot cb-hand__slot--used" aria-label="スキルは しようずみ">
-            <span className="cb-used">スキル<br />しようずみ</span>
-          </div>
-        )}
-        {shown.map(slotFor)}
-      </div>
-      <p className="cb-hand__keys" aria-hidden="true">
-        <i>◀</i><i>▶</i> えらぶ <i className="cb-hand__key-main">●</i> {armed && choosing ? 'つかう' : 'けってい'}
-      </p>
+      {shown.map((entry, position) => slotFor(entry, position))}
     </section>
   );
 }
 
 // ---- 相手の手札 ----
 
-function CpuHand({ state, clash, revealed }: { state: BattleState; clash: Clash | null; revealed: boolean }) {
+function CpuHand({ state, clash, revealed }: { state: BattleState; clash: CardBattleApi['clash']; revealed: boolean }) {
   const sealed = state.cpu.sealedHand;
   return (
     <div className="cb-cpu-hand" aria-label="あいての てふだ">
       <p className="cb-cpu-hand__title">あいての てふだ</p>
       <div className="cb-cpu-hand__cards">
-        {state.cpu.hand.map((card: JankenCard) => (
-          <div key={card.id} className={cx('cb-cpu-hand__slot', card.hand === sealed && 'cb-cpu-hand__slot--sealed')}>
+        {state.cpu.hand.map((card: JankenCard, index) => (
+          // --i:相手のターンに 1枚ずつ ずらして ゆらす
+          <div
+            key={card.id}
+            className={cx('cb-cpu-hand__slot', card.hand === sealed && 'cb-cpu-hand__slot--sealed')}
+            style={{ '--i': index } as CSSProperties}
+          >
             <CardView
               card={card}
               hideStar
@@ -199,9 +197,40 @@ function CpuHand({ state, clash, revealed }: { state: BattleState; clash: Clash 
   );
 }
 
+// ---- 攻撃の粒(main の BattleScreen.tsx の useParticleFx と同じ作り) ----
+
+/** 攻撃で 攻撃する側に粒をため、命中で当たった側に はじけさせる。粒を描く canvas の ref を返す */
+function useCardParticles(view: CardBattleApi['view'], damage: DamageShown | null, themes: Record<Side, AttributeTheme>) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fireRef = useRef<ParticleFire | null>(null);
+  useEffect(() => {
+    if (canvasRef.current) fireRef.current = createParticleFire(canvasRef.current, { centerY: CARD_IMAGE_Y });
+    return () => {
+      stopParticleFire(fireRef.current);
+      fireRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    const fire = fireRef.current;
+    if (!fire || !damage) return;
+    const attacker: Side = damage.target === 'cpu' ? 'player' : 'cpu';
+    const theme = themes[attacker];
+    if (view === 'attack') {
+      chargeAt(fire, attacker, theme);
+      // 必殺技は、ためを2回重ねる
+      if (damage.finisher) chargeAt(fire, attacker, theme);
+    } else if (view === 'damage') {
+      const dir = attacker === 'player' ? 1 : -1;
+      burstAt(fire, damage.target, theme, { dir, power: damage.power, final: damage.final || damage.finisher });
+      if (damage.finisher) burstAt(fire, 'center', theme, { power: 3, final: true });
+    }
+  }, [view, damage]);
+  return canvasRef;
+}
+
 /**
- * カードバトルの画面(戦闘システム設計書 12章)。
- * いまは段階2c:1ラウンドだけ。合成・回復・封じ手まで。パック選び・3ラウンド・必殺技・演出は このあと
+ * カードバトルの画面(戦闘システム設計書 12章)。いまは1ラウンドだけ(パック選び・3ラウンドは段階2b)。
+ * 配置:左右にモンスター / 真ん中の列に 相手の手札・場・場の ひとこと・説明パネル / 下に手札(cardbattle.css)
  */
 export function CardBattle({
   player,
@@ -219,27 +248,57 @@ export function CardBattle({
   /** パックを開けたあとの状態を差しかえる(テスト・開発者メニュー用) */
   setup?: (state: BattleState) => BattleState;
 }) {
-  const battle = useCardBattle({ config, playerAttack: attackFromLegacy(player.attack, config), random, playSound, setup });
+  const battle = useCardBattle({
+    config,
+    playerAttack: attackFromLegacy(player.attack, config),
+    random,
+    playSound,
+    attributes: { player: player.attribute, cpu: cpu.attribute },
+    setup,
+  });
   const { state, view, clash, damage, mash, cpuMash, rendanWinner, notice, chargeNote, finisherHit } = battle;
   usePadButtons(battle.press);
 
+  const themes: Record<Side, AttributeTheme> = { player: getAttributeTheme(player.attribute), cpu: getAttributeTheme(cpu.attribute) };
+  const canvasRef = useCardParticles(view, damage, themes);
+  const striking = view === 'attack' || view === 'damage';
+  const attacker: Side | null = damage ? (damage.target === 'cpu' ? 'player' : 'cpu') : null;
   // 相手のカードが おもてになっている(ぽん!のあと)
   const revealed = clash !== null && view !== 'janken';
-  const decided = revealed && clash.winner !== 'rendan' ? clash.winner : view === 'rendan-result' || view === 'damage' ? rendanWinner : null;
+  const decided = revealed && clash.winner !== 'rendan'
+    ? clash.winner
+    : ['rendan-result', 'attack', 'damage'].includes(view) ? rendanWinner : null;
   const copy = fieldCopy(battle);
   // ため技:予告してから その結果が出るまで、相手にオーラ(こちらが勝ったら すぐ消す)
   const charging = (state.cpu.chargeAnnounced || state.cpu.charging) && chargeNote !== 'blocked';
+  // 立て札の横の ターンの札(相手のターン:考えている・相手のスキル / 自分のターン:えらぶ・自分のスキル)
+  const turnSide: Side | null = view === 'cpu-turn' || (view === 'notice' && notice?.type.startsWith('cpu-'))
+    ? 'cpu'
+    : view === 'player' || view === 'notice' ? 'player' : null;
+  // じゃんけんの見せ場を出しているあいだ(場の小さなカードは隠す)
+  const staging = clash !== null && (view === 'janken' || view === 'reveal');
+  // 当たりの揺れ(main と同じ 1〜3。必殺技は いちばん強い special)
+  const shake = damage ? (damage.finisher ? 'special' : damage.power) : null;
 
   return (
-    <main className={cx(
+    <main
+      className={cx(
         'screen',
         'battle-screen',
         'cb-screen',
         `cb-screen--${view}`,
+        view === 'cpu-turn' && `cb-screen--cpu-${battle.cpuStep}`,
         notice && `cb-screen--notice-${notice.type}`,
-        // 必殺技の一撃:ダメージの数字を特大に(effects.css)
-        finisherHit && 'battle-screen--special',
-      )}>
+        // main と同じ:攻撃のあいだは 画面のふちが 攻撃した側のタイプの色(effects.css)
+        view === 'attack' && 'battle-screen--attack',
+        view === 'attack' && attacker && `battle-screen--attack-${themes[attacker]}`,
+        view === 'damage' && 'battle-screen--impact',
+        striking && damage?.final && 'battle-screen--final-blow',
+        // 必殺技:飛び道具・命中・ダメージの数字を特大に
+        (view === 'finisher' || (striking && finisherHit)) && 'battle-screen--special',
+        (view === 'finisher' || (striking && finisherHit)) && `battle-screen--special-${themes.player}`,
+      )}
+    >
       <Backdrop />
       <div className="battle-topbar">
         <div className="signboard">
@@ -247,16 +306,29 @@ export function CardBattle({
           <span className="signboard__title">カード バトル</span>
         </div>
         <span className="round-chip">ターン <b>{state.turn}</b></span>
+        {turnSide && (
+          <span key={turnSide} className={`cb-turn-chip cb-turn-chip--${turnSide}`} role="status">
+            {turnSide === 'cpu' ? 'あいての ターン' : 'あなたの ターン'}
+          </span>
+        )}
       </div>
 
-      <div className="battlefield">
+      <div
+        className={cx(
+          'battlefield',
+          view === 'damage' && shake !== null && `battlefield--shake-${shake}`,
+          view === 'finisher' && 'battlefield--shake-special',
+        )}
+      >
         <FighterPanel
           monster={player}
           side="player"
           hp={state.player.hp}
           maxHp={state.player.maxHp}
           attack={state.player.attack}
-          damage={damage}
+          damage={view === 'damage' ? damage : null}
+          attacking={view === 'attack' && attacker === 'player'}
+          striking={striking && attacker === 'player'}
           healed={notice?.type === 'heal'}
           defeated={state.player.hp <= 0}
         />
@@ -266,40 +338,73 @@ export function CardBattle({
           hp={state.cpu.hp}
           maxHp={state.cpu.maxHp}
           attack={state.cpu.attack}
-          damage={damage}
+          damage={view === 'damage' ? damage : null}
+          attacking={view === 'attack' && attacker === 'cpu'}
+          striking={striking && attacker === 'cpu'}
           healed={notice?.type === 'cpu-heal'}
           charging={charging}
           defeated={state.cpu.hp <= 0}
         />
+        {view === 'attack' && attacker && <AttackProjectile from={attacker} theme={themes[attacker]} />}
+        {view === 'damage' && damage && attacker && <ImpactBurst at={damage.target} theme={themes[attacker]} />}
       </div>
 
-      {/* 真ん中:相手の手札(マークだけ)と、場(自分の出したカード・相手の ふせたカード) */}
+      {/* 真ん中の列:相手の手札(マークだけ)・場(自分の出したカード・相手の ふせたカード)・場の ひとこと・説明パネル */}
       <section className="cb-center">
         <CpuHand state={state} clash={clash} revealed={revealed} />
-        <div className={cx('cb-field', view === 'janken' && `cb-field--beat${battle.beat}`)}>
-          <div className={cx('cb-field__slot', decided === 'player' && 'cb-field__slot--won', decided === 'cpu' && 'cb-field__slot--lost')}>
-            {clash ? <CardView card={clash.playerCard} size="field" back={view === 'janken'} /> : <span className="cb-field__empty" aria-hidden="true" />}
+        {/* 場:自分(緑の枠)と 相手(ピンクの枠)。上に「あなた」「あいて」の札 */}
+        <div className={cx('cb-field', staging && 'cb-field--staging')}>
+          <div className="cb-field__side cb-field__side--player">
+            <span className="cb-field__who">あなた</span>
+            <div
+              className={cx(
+                'cb-field__slot',
+                'cb-field__slot--player',
+                `cb-type-${themes.player}`,
+                decided === 'player' && 'cb-field__slot--won',
+                decided === 'cpu' && 'cb-field__slot--lost',
+              )}
+            >
+              {clash
+                ? <CardView card={clash.playerCard} size="field" back={view === 'janken'} />
+                : <span className="cb-field__empty" aria-hidden="true" />}
+            </div>
           </div>
-          <div
-            className={cx(
-              'cb-field__slot',
-              decided === 'cpu' && 'cb-field__slot--won',
-              decided === 'player' && 'cb-field__slot--lost',
-              // 封じ手で出し直したとき、ふせたカードが はずんで置き直される(key を変えて やり直す)
-              notice?.type === 'seal' && 'cb-field__slot--replaced',
-            )}
-            key={state.cpu.placedId ?? 'none'}
-          >
-            {clash
-              ? <CardView card={clash.cpuCard} size="field" back={!revealed} />
-              : state.cpu.placedId && <CardView card={{ kind: 'finisher' }} size="field" back />}
+          <div className="cb-field__side cb-field__side--cpu">
+            <span className="cb-field__who">あいて</span>
+            <div
+              className={cx(
+                'cb-field__slot',
+                'cb-field__slot--cpu',
+                `cb-type-${themes.cpu}`,
+                decided === 'cpu' && 'cb-field__slot--won',
+                decided === 'player' && 'cb-field__slot--lost',
+                // 封じ手で出し直したとき、ふせたカードが はずんで置き直される(key を変えて やり直す)
+                notice?.type === 'seal' && 'cb-field__slot--replaced',
+              )}
+              key={state.cpu.placedId ?? 'none'}
+            >
+              {clash ? (
+                <CardView card={clash.cpuCard} size="field" back={!revealed} />
+              ) : (view === 'cpu-turn' && battle.cpuStep === 'think') || !state.cpu.placedId ? (
+                // 相手が考えているあいだは 置き場が空
+                <span className="cb-field__empty cb-field__empty--cpu" aria-hidden="true" />
+              ) : (
+                // ふせる:相手の手札のパネルから 裏向きのカードが飛んできて置かれる(.cb-field__fly)
+                <CardView card={{ kind: 'finisher' }} size="field" back className={cx(view === 'cpu-turn' && 'cb-field__fly')} />
+              )}
+            </div>
           </div>
         </div>
-        {/* key で出しなおして、ひとことが1回ずつ はねて出る */}
-        {copy && <p key={copy} className="cb-field__copy" role="status" aria-live="assertive">{copy}</p>}
+        <div className="cb-copy-area">{copy && <FieldCopyBand copy={copy} />}</div>
+        <HandInfo battle={battle} />
       </section>
 
+      {/* 手札のゾーン(うしろを暗くして囲む)と 案内の1行。手札は その上に重ねる */}
+      <HandZone battle={battle} />
       <HandRow battle={battle} />
+
+      {staging && clash && <ClashStage clash={clash} view={view} beat={battle.beat} themes={themes} />}
 
       {(view === 'rendan' || view === 'rendan-result') && (
         <MashDuel
@@ -311,7 +416,10 @@ export function CardBattle({
         />
       )}
 
-      {view === 'finisher' && <SpecialCutin monster={player} theme={getAttributeTheme(player.attribute)} />}
+      {view === 'finisher' && <SpecialCutin monster={player} theme={themes.player} />}
+      {view === 'damage' && finisherHit && <div className={`special-impact-flash special-impact-flash--${themes.player}`} aria-hidden="true" />}
+      {view === 'damage' && <div className="hit-flash" aria-hidden="true" />}
+      <ParticleLayer ref={canvasRef} />
 
       {view === 'round-end' && (
         <div className={`cb-round-end cb-round-end--${state.roundResult}`} role="status" aria-live="assertive">

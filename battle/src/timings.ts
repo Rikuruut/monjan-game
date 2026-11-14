@@ -43,10 +43,18 @@ export const AUTOPLAY_MASH_MS = 300;
 export const PRACTICE_COACH_PAGE_MS = 6000;
 
 // ---- カードバトル(card/。戦闘システム設計書 8章の長さの目安に合わせる) ----
-// じゃん・けん・ぽん の1拍(3拍 + めくり で 約2秒)
-export const CARD_JANKEN_BEAT_MS = 350;
-// めくって、どちらが勝ったかを見せる
-export const CARD_REVEAL_MS = 1000;
+// じゃんけんの見せ場(ClashStage):大きなカード2枚が すべりこむ → じゃん・けん・ぽん の3拍 → めくって結果(約3.3秒)
+// ※ 2026年11月14日:350 / 1000ms では速すぎて わかりにくかったので のばした。そのあと 1拍を 550 → 750ms(ワンテンポ遅く)
+export const CARD_CLASH_IN_MS = 300;
+export const CARD_JANKEN_BEAT_MS = 750;
+export const CARD_REVEAL_MS = 1300;
+// 相手のターン:考える(手札がゆれて「カードを えらんでいる…」)→ ふせる(裏向きのカードが 場へ飛んで置かれる)
+// ※ 2026年11月14日:1.2秒では速すぎて 何をしているか わからなかったので、2つの段に分けて のばした
+export const CARD_CPU_THINK_MS = 1400;
+export const CARD_CPU_PLACE_MS = 1000;
+export const CARD_CPU_TURN_MS = CARD_CPU_THINK_MS + CARD_CPU_PLACE_MS;
+// 自分のターンのはじめに「あなたの ターン!」を出しておく時間
+export const CARD_PLAYER_TURN_BANNER_MS = 900;
 // ダメージ:数字が飛び出して HP バーが減る
 export const CARD_DAMAGE_MS = 1400;
 // ドロー:引いたカードを見せる
@@ -55,3 +63,6 @@ export const CARD_DRAW_MS = 800;
 export const CARD_SKILL_MS = 1200;
 // ドローで必殺技のカードが来たときは、長めに見せる
 export const CARD_FINISHER_DRAW_MS = 1400;
+// カードバトルの攻撃:勝った側が前へ出て、飛び道具が飛ぶ(main の攻撃と同じ長さ)。必殺技は ためを長く
+export const CARD_ATTACK_MS = ATTACK_DISPLAY_MS;
+export const CARD_FINISHER_ATTACK_MS = SPECIAL_ATTACK_MS;
