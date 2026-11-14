@@ -22,11 +22,14 @@ import type { Hand } from '../types';
 import {
   CARD_DAMAGE_MS,
   CARD_DRAW_MS,
+  CARD_FINISHER_DRAW_MS,
   CARD_JANKEN_BEAT_MS,
   CARD_REVEAL_MS,
   CARD_SKILL_MS,
   MASH_DUEL_MS,
   MASH_RESULT_MS,
+  SPECIAL_CUTIN_SLAM_MS,
+  SPECIAL_DISPLAY_MS,
 } from '../timings';
 
 // カードバトルの画面の進み方(戦闘システム設計書 6章・7章)。
@@ -34,7 +37,8 @@ import {
 //
 // 見せる段階(view):
 //   player(手札をえらぶ。合成・スキルは ここで使い、notice で結果を少し見せて player にもどる)
-//   → janken(じゃん・けん・ぽん)→ reveal(めくる)→(rendan → rendan-result)→ damage → draw → player …
+//   → janken(じゃん・けん・ぽん)→ reveal(めくる)→(rendan → rendan-result)→ damage → draw →(相手のスキルは notice)→ player …
+//   必殺技は player → finisher(カットイン)→ damage
 //   どちらかの HP が 0 になったら round-end
 
 export type CardBattleView =
@@ -44,6 +48,7 @@ export type CardBattleView =
   | 'reveal'
   | 'rendan'
   | 'rendan-result'
+  | 'finisher'
   | 'damage'
   | 'draw'
   | 'round-end';
@@ -69,7 +74,22 @@ export interface DamageShown {
 export type Notice =
   | { type: 'merge'; card: JankenCard }
   | { type: 'heal'; amount: number }
-  | { type: 'seal'; hand: Hand };
+  | { type: 'seal'; hand: Hand }
+  // 相手のスキル(ターンのはじめ):回復・ため技の予告
+  | { type: 'cpu-heal'; amount: number }
+  | { type: 'cpu-charge' };
+
+/** ため技のターンの結果:ためた相手が勝って2倍 / こちらが勝って ふせいだ */
+export type ChargeNote = 'charged' | 'blocked';
+
+// 次のターンのはじめに起きた 相手のスキルを、順に見せる ひとことにする
+function cpuNotices(events: BattleEvent[]): Notice[] {
+  return events.flatMap((event): Notice[] => {
+    if (event.type === 'cpu-heal') return [{ type: 'cpu-heal', amount: event.amount }];
+    if (event.type === 'cpu-charge-announce') return [{ type: 'cpu-charge' }];
+    return [];
+  });
+}
 
 type PlaySound = (sound: GameSound, options?: GameSoundOptions) => void;
 
@@ -133,6 +153,11 @@ export function useCardBattle({
   const mashRef = useRef(0);
   const [cpuMash, setCpuMash] = useState(0);
   const [rendanWinner, setRendanWinner] = useState<Side | null>(null);
+  // ドローで引いたカード(必殺技なら 長めに知らせる)
+  const [drawn, setDrawn] = useState<Card | null>(null);
+  const [chargeNote, setChargeNote] = useState<ChargeNote | null>(null);
+  // 必殺技の一撃(ダメージを特大で見せる)
+  const [finisherHit, setFinisherHit] = useState(false);
 
   const items = handItems(state.player.hand);
   const pairs = mergeablePairs(state.player.hand);
@@ -144,11 +169,28 @@ export function useCardBattle({
     setCursor(index >= 0 ? index : itemCursor(nextItems));
   };
 
+  // 相手のスキル(回復・ため技の予告)を1つずつ見せてから、手札えらびへ
+  const showCpuNotices = (list: Notice[]) => {
+    const [first, ...rest] = list;
+    if (!first) {
+      setNotice(null);
+      setView('player');
+      return;
+    }
+    setNotice(first);
+    setView('notice');
+    playSound(first.type === 'cpu-heal' ? 'summon' : 'star-showdown');
+    schedule(() => showCpuNotices(rest), CARD_SKILL_MS);
+  };
+
   // ダメージを見せる → ラウンドが終わりなら round-end、続くなら 次のターン(お互い1枚引く)
   const showDamage = (after: BattleState, events: BattleEvent[]) => {
     const hit = events.find((event) => event.type === 'damage');
+    const shown = hit && hit.type === 'damage' ? { target: hit.target, amount: hit.amount, charged: hit.charged } : null;
     setState(after);
-    setDamage(hit && hit.type === 'damage' ? { target: hit.target, amount: hit.amount, charged: hit.charged } : null);
+    setDamage(shown);
+    setChargeNote(shown?.charged ? 'charged' : events.some((event) => event.type === 'charge-blocked') ? 'blocked' : null);
+    setFinisherHit(events.some((event) => event.type === 'finisher'));
     setView('damage');
     playSound('impact');
     playSound('hp-loss');
@@ -156,17 +198,27 @@ export function useCardBattle({
     schedule(() => {
       setDamage(null);
       setClash(null);
+      setChargeNote(null);
+      setFinisherHit(false);
       if (after.phase === 'round_end') {
         setView('round-end');
         playSound(after.roundResult === 'win' ? 'victory' : 'defeat');
         return;
       }
-      const next = beginNextTurn(after, random).state;
+      const step = beginNextTurn(after, random);
+      const next = step.state;
+      const draw = step.events.find((event) => event.type === 'draw');
+      const card = draw && draw.type === 'draw' ? draw.card : null;
       setState(next);
       placeCursor(next);
+      setDrawn(card);
       setView('draw');
-      playSound('select');
-      schedule(() => setView('player'), CARD_DRAW_MS);
+      // 必殺技のカードは 金色に光って来る(専用の音)
+      playSound(card?.kind === 'finisher' ? 'star-showdown' : 'select');
+      schedule(() => {
+        setDrawn(null);
+        showCpuNotices(cpuNotices(step.events));
+      }, card?.kind === 'finisher' ? CARD_FINISHER_DRAW_MS : CARD_DRAW_MS);
     }, CARD_DAMAGE_MS);
   };
 
@@ -197,8 +249,11 @@ export function useCardBattle({
     const janken = step.events.find((event) => event.type === 'janken');
     setArmed(false);
     if (!janken || janken.type !== 'janken') {
-      // 必殺技(演出は段階2d・3)
-      showDamage(step.state, step.events);
+      // 必殺技:じゃんけんぽんの かけ声は入れず、すぐカットイン → 相手を かならず倒す
+      setView('finisher');
+      playSound('star-showdown');
+      schedule(() => playSound('impact'), SPECIAL_CUTIN_SLAM_MS);
+      schedule(() => showDamage(step.state, step.events), SPECIAL_DISPLAY_MS);
       return;
     }
     setClash({ playerCard: janken.playerCard, cpuCard: janken.cpuCard, winner: janken.winner, by: janken.by });
@@ -270,6 +325,9 @@ export function useCardBattle({
     setNotice(null);
     setClash(null);
     setDamage(null);
+    setDrawn(null);
+    setChargeNote(null);
+    setFinisherHit(false);
     setBeat(0);
     setView('player');
     playSound('start');
@@ -374,6 +432,9 @@ export function useCardBattle({
     mash,
     cpuMash,
     rendanWinner,
+    drawn,
+    chargeNote,
+    finisherHit,
     press,
     pressMash,
     restart,

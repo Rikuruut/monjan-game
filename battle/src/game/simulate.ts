@@ -122,6 +122,9 @@ export interface MatchResult {
   /** ラウンドごとのターン数(戦ったラウンドだけ) */
   turns: number[];
   finisherUsed: boolean;
+  /** ため技を予告された / ため技のターン(勝つとダメージ2倍)まで行った */
+  chargeAnnounced: boolean;
+  chargeTurn: boolean;
 }
 
 /** 1試合を最後まで回す */
@@ -136,18 +139,24 @@ export function playMatch(
   let state = startMatch(config, attack, random);
   const turns: number[] = [];
   let roundsWon = 0;
+  let chargeAnnounced = false;
+  let chargeTurn = false;
 
   for (;;) {
     state = openPack(state, random).state;
     while (state.phase !== 'round_end' && state.turn < TURN_LIMIT) {
       state = playTurn(state, policy, random, mashWinRate);
-      if (state.phase === 'turn_end') state = beginNextTurn(state, random).state;
+      if (state.phase === 'turn_end') {
+        state = beginNextTurn(state, random).state;
+        if (state.cpu.chargeAnnounced) chargeAnnounced = true;
+        if (state.cpu.charging) chargeTurn = true;
+      }
     }
     turns.push(state.turn);
     if (state.roundResult === 'win') roundsWon += 1;
     const destination = state.roundResult ? roundDestination(state, state.roundResult) : 'defeat';
     if (destination !== 'next-round') {
-      return { cleared: destination === 'clear', roundsWon, turns, finisherUsed: state.finisherUsed };
+      return { cleared: destination === 'clear', roundsWon, turns, finisherUsed: state.finisherUsed, chargeAnnounced, chargeTurn };
     }
     state = startNextRound(state, random);
   }
@@ -167,6 +176,9 @@ export interface SimSummary {
   clearedTurns: number;
   /** 必殺技を使った(見られた)割合 */
   finisherRate: number;
+  /** ボス(最後のラウンド)まで来た試合のうち、ため技の予告を見た割合 / ため技のターンまで行った割合 */
+  chargeAnnouncedRate: number;
+  chargeTurnRate: number;
 }
 
 /** matches 試合を回して まとめる */
@@ -184,6 +196,9 @@ export function simulate(
   let finishers = 0;
   let totalTurns = 0;
   let clearedTurns = 0;
+  let lastReached = 0;
+  let announced = 0;
+  let chargeTurns = 0;
 
   for (let match = 0; match < options.matches; match += 1) {
     const result = playMatch(config, policy, random, options);
@@ -192,6 +207,9 @@ export function simulate(
       clearedTurns += result.turns.reduce((sum, count) => sum + count, 0);
     }
     if (result.finisherUsed) finishers += 1;
+    if (result.turns.length === roundCount) lastReached += 1;
+    if (result.chargeAnnounced) announced += 1;
+    if (result.chargeTurn) chargeTurns += 1;
     result.turns.forEach((count, index) => {
       reached[index] += 1;
       turnSum[index] += count;
@@ -208,5 +226,7 @@ export function simulate(
     totalTurns: totalTurns / options.matches,
     clearedTurns: cleared ? clearedTurns / cleared : 0,
     finisherRate: finishers / options.matches,
+    chargeAnnouncedRate: lastReached ? announced / lastReached : 0,
+    chargeTurnRate: lastReached ? chargeTurns / lastReached : 0,
   };
 }

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { GameSound, GameSoundOptions } from '../audio/gameAudio';
+import { getAttributeTheme } from '../attributes';
+import { SpecialCutin } from '../battle/BattleScreen';
 import { MashDuel } from '../battle/MashDuel';
 import { HAND_META } from '../components/HandIcon';
 import { Backdrop, Logo } from '../components/Scenery';
@@ -12,7 +14,15 @@ import { assetUrl, usePadButtons } from '../integration';
 import type { Monster } from '../types';
 import { cardLabel, CardView } from './CardView';
 import { FighterPanel } from './FighterPanel';
-import { skillBlockedReason, useCardBattle, type CardBattleView, type Clash, type HandItem, type Notice } from './useCardBattle';
+import {
+  skillBlockedReason,
+  useCardBattle,
+  type CardBattleView,
+  type ChargeNote,
+  type Clash,
+  type HandItem,
+  type Notice,
+} from './useCardBattle';
 
 type PlaySound = (sound: GameSound, options?: GameSoundOptions) => void;
 type Battle = ReturnType<typeof useCardBattle>;
@@ -21,15 +31,26 @@ type Battle = ReturnType<typeof useCardBattle>;
 
 const BEAT_COPY = ['', 'じゃん', 'けん', 'ぽん！'];
 
+const CHARGE_COPY: Record<ChargeNote, string> = {
+  charged: 'ためわざ！ ダメージ 2ばい！',
+  blocked: 'ふせいだ！',
+};
+
 function noticeCopy(notice: Notice): string {
   if (notice.type === 'merge') return `がったい！ ${cardLabel(notice.card)} に なった！`;
   if (notice.type === 'heal') return `HPが ${notice.amount} もどった！`;
+  if (notice.type === 'cpu-heal') return `あいての かいふく！ HPが ${notice.amount} もどった`;
+  if (notice.type === 'cpu-charge') return 'あいては ちからを ためている…！';
   return `${HAND_META[notice.hand].label}を ふうじた！ あいては カードを だしなおしたよ`;
 }
 
 // 場の真ん中に出す ひとこと(じゃんけんの かけ声・めくった結果・合成やスキルの結果)
-function fieldCopy(view: CardBattleView, beat: number, clash: Clash | null, notice: Notice | null): string {
+function fieldCopy(battle: Battle): string {
+  const { view, beat, clash, notice, chargeNote, state } = battle;
   if (view === 'notice' && notice) return noticeCopy(notice);
+  // ため技のターン:手札をえらぶあいだ 注意を出し、結果も出す
+  if (view === 'player' && state.cpu.charging) return 'ためわざ が くる！ まけると ダメージ 2ばい！';
+  if (view === 'damage' && chargeNote) return CHARGE_COPY[chargeNote];
   if (view === 'janken') return BEAT_COPY[beat] ?? '';
   if (!clash || view === 'player' || view === 'draw' || view === 'round-end') return '';
   if (clash.winner === 'rendan') return 'あいこ！ ★も おなじ！';
@@ -40,7 +61,7 @@ function fieldCopy(view: CardBattleView, beat: number, clash: Clash | null, noti
 // 手札の上に出す案内(えらんでいるものの説明・決定の1回目で浮いたときの説明)
 function promptCopy(battle: Battle): string {
   const { state, view, items, cursor, armed, mergePick } = battle;
-  if (view === 'draw') return 'カードを 1まい ひいたよ！';
+  if (view === 'draw') return battle.drawn?.kind === 'finisher' ? 'ひっさつわざ カードが きた！' : 'カードを 1まい ひいたよ！';
   if (view !== 'player') return '';
   if (mergePick !== null) return 'どれを がったいする？';
   const item = items[cursor];
@@ -61,7 +82,7 @@ function promptCopy(battle: Battle): string {
     return `かいふく:HPが ${healAmount(state)} もどるよ！ もういちど けっていで つかう`;
   }
   if (card.kind === 'skill') return 'ふうじて:あいての 手を 1つ ふうじる！ もういちど けっていで つかう';
-  return `${cardLabel(card)}:もういちど けっていで だす`;
+  return 'ひっさつわざ:どんな 手にも かって かならず たおす！ もういちど けっていで だす';
 }
 
 // ---- 手札 ----
@@ -199,16 +220,26 @@ export function CardBattle({
   setup?: (state: BattleState) => BattleState;
 }) {
   const battle = useCardBattle({ config, playerAttack: attackFromLegacy(player.attack, config), random, playSound, setup });
-  const { state, view, clash, beat, damage, mash, cpuMash, rendanWinner, notice } = battle;
+  const { state, view, clash, damage, mash, cpuMash, rendanWinner, notice, chargeNote, finisherHit } = battle;
   usePadButtons(battle.press);
 
   // 相手のカードが おもてになっている(ぽん!のあと)
   const revealed = clash !== null && view !== 'janken';
   const decided = revealed && clash.winner !== 'rendan' ? clash.winner : view === 'rendan-result' || view === 'damage' ? rendanWinner : null;
-  const copy = fieldCopy(view, beat, clash, notice);
+  const copy = fieldCopy(battle);
+  // ため技:予告してから その結果が出るまで、相手にオーラ(こちらが勝ったら すぐ消す)
+  const charging = (state.cpu.chargeAnnounced || state.cpu.charging) && chargeNote !== 'blocked';
 
   return (
-    <main className={cx('screen', 'battle-screen', 'cb-screen', `cb-screen--${view}`, notice && `cb-screen--notice-${notice.type}`)}>
+    <main className={cx(
+        'screen',
+        'battle-screen',
+        'cb-screen',
+        `cb-screen--${view}`,
+        notice && `cb-screen--notice-${notice.type}`,
+        // 必殺技の一撃:ダメージの数字を特大に(effects.css)
+        finisherHit && 'battle-screen--special',
+      )}>
       <Backdrop />
       <div className="battle-topbar">
         <div className="signboard">
@@ -236,6 +267,8 @@ export function CardBattle({
           maxHp={state.cpu.maxHp}
           attack={state.cpu.attack}
           damage={damage}
+          healed={notice?.type === 'cpu-heal'}
+          charging={charging}
           defeated={state.cpu.hp <= 0}
         />
       </div>
@@ -243,7 +276,7 @@ export function CardBattle({
       {/* 真ん中:相手の手札(マークだけ)と、場(自分の出したカード・相手の ふせたカード) */}
       <section className="cb-center">
         <CpuHand state={state} clash={clash} revealed={revealed} />
-        <div className={cx('cb-field', view === 'janken' && `cb-field--beat${beat}`)}>
+        <div className={cx('cb-field', view === 'janken' && `cb-field--beat${battle.beat}`)}>
           <div className={cx('cb-field__slot', decided === 'player' && 'cb-field__slot--won', decided === 'cpu' && 'cb-field__slot--lost')}>
             {clash ? <CardView card={clash.playerCard} size="field" back={view === 'janken'} /> : <span className="cb-field__empty" aria-hidden="true" />}
           </div>
@@ -278,6 +311,8 @@ export function CardBattle({
         />
       )}
 
+      {view === 'finisher' && <SpecialCutin monster={player} theme={getAttributeTheme(player.attribute)} />}
+
       {view === 'round-end' && (
         <div className={`cb-round-end cb-round-end--${state.roundResult}`} role="status" aria-live="assertive">
           <strong>{state.roundResult === 'win' ? 'かった！' : 'まけちゃった…'}</strong>
@@ -288,15 +323,29 @@ export function CardBattle({
   );
 }
 
-// 3ラウンドを作るまで(段階2b)のあいだだけ:2体目の相手との1ラウンドだけにして、必殺技は出さない
-// (パック選び・3ラウンド・必殺技を作ったら、この関数ごと外す)
-export function trialConfig(config: BattleConfig): BattleConfig {
-  const second = config.rounds[Math.min(1, config.rounds.length - 1)];
-  return { ...config, rounds: [{ ...second, finisherChance: 0, comebackChance: 0 }] };
+// 3ラウンドの通し(段階2b)を作るまでのあいだだけ:1ラウンドだけにする。round は 1 = 練習・2 = 2体目・3 = ボス
+// (通しを作ったら、この関数ごと外す)
+export function trialConfig(config: BattleConfig, round = 2): BattleConfig {
+  const index = Math.min(config.rounds.length, Math.max(1, Math.round(round))) - 1;
+  return { ...config, rounds: [config.rounds[index]] };
 }
 
 /** 設定ファイル(public/data/battle-config.json)を読んでから、カードバトルを始める */
-export function CardBattleEntry({ player, cpu, playSound }: { player: Monster; cpu: Monster; playSound: PlaySound }) {
+export function CardBattleEntry({
+  player,
+  cpu,
+  practiceCpu,
+  round = 2,
+  playSound,
+}: {
+  player: Monster;
+  cpu: Monster;
+  /** 練習(round = 1)の相手 */
+  practiceCpu: Monster;
+  /** 戦う相手(`?round=`)。1 = 練習・2 = 2体目・3 = ボス */
+  round?: number;
+  playSound: PlaySound;
+}) {
   const [config, setConfig] = useState<BattleConfig | null>(null);
   useEffect(() => {
     let alive = true;
@@ -305,7 +354,7 @@ export function CardBattleEntry({ player, cpu, playSound }: { player: Monster; c
     });
     return () => { alive = false; };
   }, []);
-  const trial = useMemo(() => (config ? trialConfig(config) : null), [config]);
+  const trial = useMemo(() => (config ? trialConfig(config, round) : null), [config, round]);
   if (!trial) return <main className="screen loading-screen"><div className="loader" /><p>カードを じゅんびしているよ…</p></main>;
-  return <CardBattle player={player} cpu={cpu} config={trial} playSound={playSound} />;
+  return <CardBattle player={player} cpu={round === 1 ? practiceCpu : cpu} config={trial} playSound={playSound} />;
 }

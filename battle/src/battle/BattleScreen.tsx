@@ -38,8 +38,8 @@ function SpecialMoveTitle({ monster }: { monster: Monster }) {
   );
 }
 
-// 必殺技のカットイン(自分のモンスターの絵 + 技の名前)
-function SpecialCutin({ monster, theme }: { monster: Monster; theme: AttributeTheme }) {
+// 必殺技のカットイン(自分のモンスターの絵 + 技の名前)。カードバトル(card/)でも使う
+export function SpecialCutin({ monster, theme }: { monster: Monster; theme: AttributeTheme }) {
   return (
     <div className={`special-cutin special-cutin--${theme}`} role="status" aria-live="assertive">
       <span className="special-cutin__lines" aria-hidden="true" />

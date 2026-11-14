@@ -29,6 +29,7 @@ export function FighterPanel({
   attack,
   damage,
   healed = false,
+  charging = false,
   defeated,
 }: {
   monster: Monster;
@@ -39,6 +40,8 @@ export function FighterPanel({
   damage: DamageShown | null;
   /** 回復したところ(足元から緑の光) */
   healed?: boolean;
+  /** ため技を ためている(相手。紫のオーラ) */
+  charging?: boolean;
   defeated: boolean;
 }) {
   const theme = getAttributeTheme(monster.attribute);
@@ -53,11 +56,13 @@ export function FighterPanel({
         'cb-fighter',
         hit && 'cb-fighter--hit',
         healed && 'cb-fighter--healed',
+        charging && 'cb-fighter--charging',
         defeated && 'cb-fighter--defeated',
       )}
     >
       <div className="monster-tag">
         <span className="side-label">{side === 'player' ? 'あなた' : 'あいて'}</span>
+        {charging && <span className="cb-charge-chip">⚡ ためている</span>}
       </div>
       <MonsterCard
         monster={monster}

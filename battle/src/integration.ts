@@ -54,6 +54,8 @@ export interface Launch {
   toGenerator: boolean;
   /** 作りかけのカードバトル(card/)を開く(`?card=1`。できあがったら これまでのバトルと入れかえる) */
   card?: boolean;
+  /** カードバトルで戦う相手(`?round=`。1 = 練習・2 = 2体目・3 = ボス。3ラウンドの通しができるまでの、1ラウンドだけの確かめ用) */
+  cardRound?: number;
 }
 
 /**
@@ -62,19 +64,24 @@ export interface Launch {
  * - `?play=demo&name=<名前>` … 開発者メニューのテストプレイから来た。見本のゴリラ × はさみで、すぐバトル
  * - `?play=sample`  … バトルの見本のモンスターで、すぐバトル
  * - `?standalone=1` … サーバーにつながず、単体で遊ぶ(スタートで撮影の画面へ行かない)
+ * - `?card=1` / `?card=0` … カードバトル / これまでのバトル。作業中の枝(card-battle)では、すぐバトルに入るとき(上の3つ)は
+ *   何も付けなくてもカードバトルになる(`?card=0` で これまでのバトル)。`?round=` で戦う相手(1 = 練習・2 = 2体目・3 = ボス)
  * ビルドしていない開発用(npm.cmd run dev)とテストは、これまでどおり単体で動く。
  */
 export function readLaunch(search: string = window.location.search, integrated: boolean = import.meta.env.PROD): Launch {
   const params = new URLSearchParams(search);
   const demo = params.get('play') === 'demo';
   const photoId = demo ? DEMO_PHOTO_ID : params.get('photo') || null;
+  const skipTitle = photoId !== null || params.get('play') === 'sample';
+  // カードバトル:`?card=1` か、すぐバトルに入るとき(撮影の画面の「たたかう!」など)。`?card=0` なら これまでのバトル
+  const card = params.has('card') ? params.get('card') !== '0' : skipTitle;
   return {
     photoId,
     playerName: demo ? params.get('name') : null,
-    skipTitle: photoId !== null || params.get('play') === 'sample',
+    skipTitle,
     toGenerator: integrated && !params.has('standalone'),
-    // 作りかけのカードバトルを開く(`?photo=` などと一緒に使える)
-    ...(params.has('card') ? { card: true } : {}),
+    ...(card ? { card: true } : {}),
+    ...(params.has('round') ? { cardRound: Number(params.get('round')) || 2 } : {}),
   };
 }
 

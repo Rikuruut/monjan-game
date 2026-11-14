@@ -608,7 +608,15 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   let content: ReactNode;
   if (launch.card) {
     // 作りかけのカードバトル(?card=1)。できあがったら これまでのバトルと入れかえる
-    content = <CardBattleEntry player={data.player} cpu={data.cpu} playSound={playSound} />;
+    content = (
+      <CardBattleEntry
+        player={data.player}
+        cpu={data.cpu}
+        practiceCpu={data.practiceCpu}
+        round={launch.cardRound}
+        playSound={playSound}
+      />
+    );
   } else if (screen === 'title') {
     content = <TitleScreen onStart={pressStart} />;
   } else if (screen === 'thanks') {

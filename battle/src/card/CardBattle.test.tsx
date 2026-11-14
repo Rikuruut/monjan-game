@@ -12,6 +12,7 @@ import {
   CARD_SKILL_MS,
   MASH_DUEL_MS,
   MASH_RESULT_MS,
+  SPECIAL_DISPLAY_MS,
 } from '../timings';
 import type { Hand, Monster } from '../types';
 import { CardBattle, trialConfig } from './CardBattle';
@@ -66,6 +67,20 @@ function renderBattle(options: { seed?: number; setup?: (state: BattleState) => 
     />,
   );
   return { playSound, ...view };
+}
+
+/** ボス(round 3)と戦う */
+function renderBoss(setup: (state: BattleState) => BattleState) {
+  return render(
+    <CardBattle
+      player={monster('p', 'ゴリザミ', 2000)}
+      cpu={monster('c', 'ドライオン', 1000)}
+      config={trialConfig(DEFAULT_BATTLE_CONFIG, 3)}
+      playSound={vi.fn()}
+      random={seededRandom(1)}
+      setup={setup}
+    />,
+  );
 }
 
 describe('カードバトル:手札と じゃんけん', () => {
@@ -301,5 +316,95 @@ describe('カードバトル:スキル', () => {
     press('Enter');
     press('Enter');
     expect(screen.queryByText(/ふうじた！/)).not.toBeInTheDocument();
+  });
+});
+
+describe('カードバトル:必殺技', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  const finisher: Card = { id: 'fin', kind: 'finisher' };
+
+  it('必殺技を出すと、かけ声なしで すぐカットイン → 相手を かならず倒す', () => {
+    const cpu = [janken('x', 'rock', 3), janken('y', 'paper', 2)];
+    renderBattle({ setup: withHands([janken('a', 'scissors', 1), finisher], cpu) });
+    press('ArrowRight');
+    press('Enter');
+    expect(prompt()).toBe('ひっさつわざ:どんな 手にも かって かならず たおす！ もういちど けっていで だす');
+    press('Enter');
+    expect(screen.queryByText('じゃん')).not.toBeInTheDocument();
+    expect(screen.getByText('ひっさつわざ！')).toBeInTheDocument();
+    wait(SPECIAL_DISPLAY_MS);
+    expect(hpOf(1)).toMatch(/^HP 0 \//);
+    wait(CARD_DAMAGE_MS);
+    expect(screen.getByText('かった！')).toBeInTheDocument();
+  });
+
+  it('ボス:相手の HP が半分以下になったら、次のドローで 必殺技のカードが かならず来る', () => {
+    const cpu = [janken('x', 'rock', 1), janken('y', 'rock', 2), janken('z', 'scissors', 1)];
+    renderBoss(withHands([janken('a', 'paper', 1), janken('b', 'rock', 1)], cpu, (state) => ({
+      ...state,
+      cpu: { ...state.cpu, hp: 50, maxHp: 60 },
+    })));
+    // パー★1 で グー★1 に勝つ:50 - 20 = 30(半分以下)
+    press('Enter');
+    press('Enter');
+    wait(CARD_JANKEN_BEAT_MS * 3 + CARD_REVEAL_MS + CARD_DAMAGE_MS);
+    expect(prompt()).toBe('ひっさつわざ カードが きた！');
+    expect(screen.getByLabelText('じぶんの てふだ').querySelector('.cb-card--finisher')).not.toBeNull();
+  });
+});
+
+describe('カードバトル:相手のスキル(ボス)', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('回復:相手の HP が4割以下になった次のターンのはじめに +30', () => {
+    const cpu = [janken('x', 'rock', 1), janken('y', 'rock', 2), janken('z', 'scissors', 1)];
+    renderBoss(withHands([janken('a', 'paper', 1), janken('b', 'rock', 1), janken('c', 'rock', 2)], cpu, (state) => ({
+      ...state,
+      // 必殺技が来ないように 使ったことにする
+      finisherUsed: true,
+      cpu: { ...state.cpu, hp: 40, maxHp: 60 },
+    })));
+    press('Enter');
+    press('Enter');
+    wait(CARD_JANKEN_BEAT_MS * 3 + CARD_REVEAL_MS + CARD_DAMAGE_MS + CARD_DRAW_MS);
+    expect(screen.getByText('あいての かいふく！ HPが 30 もどった')).toBeInTheDocument();
+    expect(hpOf(1)).toBe('HP 50 / 60');
+    wait(CARD_SKILL_MS);
+    expect(prompt()).toBe('だす カードを えらぼう！');
+  });
+
+  it('ため技:3ターン目に予告して オーラが出る', () => {
+    const cpu = [janken('x', 'rock', 1), janken('y', 'rock', 2), janken('z', 'scissors', 1)];
+    renderBoss(withHands([janken('a', 'paper', 1), janken('b', 'rock', 1)], cpu, (state) => ({ ...state, turn: 2, finisherUsed: true })));
+    expect(screen.queryByText('⚡ ためている')).not.toBeInTheDocument();
+    press('Enter');
+    press('Enter');
+    wait(CARD_JANKEN_BEAT_MS * 3 + CARD_REVEAL_MS + CARD_DAMAGE_MS + CARD_DRAW_MS);
+    expect(screen.getByText('あいては ちからを ためている…！')).toBeInTheDocument();
+    expect(screen.getByText('⚡ ためている')).toBeInTheDocument();
+  });
+
+  it('ためたターン:相手が勝つと ダメージ2倍、こちらが勝つと「ふせいだ!」', () => {
+    const charging = (state: BattleState): BattleState => ({ ...state, finisherUsed: true, cpu: { ...state.cpu, charging: true, attack: 10 } });
+    // 負ける:チョキ★1 と グー★1 → (10 + 10) × 2
+    const lose = renderBoss(withHands([janken('a', 'scissors', 1)], [janken('x', 'rock', 1)], charging));
+    expect(screen.getByText('ためわざ が くる！ まけると ダメージ 2ばい！')).toBeInTheDocument();
+    press('Enter');
+    press('Enter');
+    wait(CARD_JANKEN_BEAT_MS * 3 + CARD_REVEAL_MS);
+    expect(screen.getByText('ためわざ！ ダメージ 2ばい！')).toBeInTheDocument();
+    expect(screen.getByLabelText('40ダメージ')).toBeInTheDocument();
+    lose.unmount();
+
+    // 勝つ:パー★1 と グー★1
+    renderBoss(withHands([janken('a', 'paper', 1)], [janken('x', 'rock', 1)], charging));
+    press('Enter');
+    press('Enter');
+    wait(CARD_JANKEN_BEAT_MS * 3 + CARD_REVEAL_MS);
+    expect(screen.getByText('ふせいだ！')).toBeInTheDocument();
+    expect(screen.queryByText('⚡ ためている')).not.toBeInTheDocument();
   });
 });

@@ -42,6 +42,8 @@ const CASES: { name: string; config: BattleConfig }[] = [
   { name: '2体目45〜55・ボス65〜75・相手の攻撃8〜12・★15/30/55', config: variant({ secondHp: [45, 55], bossHp: [65, 75], cpuAttack: [8, 12], starDamage: [15, 30, 55] }) },
   { name: '2体(練習→ボス80〜90・相手の攻撃8〜12)', config: variant({ twoRounds: true, bossHp: [80, 90], cpuAttack: [8, 12] }) },
   { name: '2体(練習→いまのボス)', config: variant({ twoRounds: true }) },
+  // ため技の間かく(いまは3ターンごと。3ターン目に予告 → 4ターン目に ためる)
+  { name: 'いまの設定・ため技 2ターンごと', config: { ...base, chargeInterval: 2 } },
 ];
 
 const POLICIES: { policy: Policy; label: string }[] = [
@@ -64,6 +66,7 @@ it('数値の案ごとの結果', () => {
         '1試合のターン': summary.totalTurns.toFixed(1),
         全クリアした試合のターン: summary.clearedTurns.toFixed(1),
         必殺技を見た: percent(summary.finisherRate),
+        'ため技の予告/ためたターン(ボスまで来た子)': `${percent(summary.chargeAnnouncedRate)} / ${percent(summary.chargeTurnRate)}`,
       };
     }),
   );
