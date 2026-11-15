@@ -13,7 +13,7 @@ import { attackFromLegacy, loadBattleConfig, type BattleConfig } from '../game/c
 import type { BattleState, Side } from '../game/engine';
 import type { RandomSource } from '../game/logic';
 import { assetUrl, usePadButtons } from '../integration';
-import type { Monster } from '../types';
+import type { Hand, Monster } from '../types';
 import { cardLabel, CardView } from './CardView';
 import { ClashStage } from './ClashStage';
 import { FighterPanel } from './FighterPanel';
@@ -328,8 +328,39 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
 
 // ---- 相手の手札 ----
 
-function CpuHand({ state, clash, revealed }: { state: BattleState; clash: CardBattleApi['clash']; revealed: boolean }) {
+// 封じ手の鎖が 割れる長さ(cardbattle.css の .cb-chain--break と そろえる)
+const CHAIN_BREAK_MS = 700;
+
+function CpuHand({
+  state,
+  clash,
+  revealed,
+  view,
+}: {
+  state: BattleState;
+  clash: CardBattleApi['clash'];
+  revealed: boolean;
+  view: CardBattleApi['view'];
+}) {
   const sealed = state.cpu.sealedHand;
+  // 封じ手は 命中のところで解ける(engine の closeTurn)。鎖は ターンの終わり(ドロー)まで残して、そこで パキッと割る(設計書8章)
+  const [leftover, setLeftover] = useState<Hand | null>(null);
+  const [breaking, setBreaking] = useState(false);
+  const prevSealRef = useRef(sealed);
+  useEffect(() => {
+    if (prevSealRef.current && !sealed) setLeftover(prevSealRef.current);
+    prevSealRef.current = sealed;
+  }, [sealed]);
+  useEffect(() => {
+    if (!leftover || !['draw', 'notice', 'cpu-turn', 'round-end'].includes(view)) return;
+    setBreaking(true);
+    const timer = window.setTimeout(() => {
+      setLeftover(null);
+      setBreaking(false);
+    }, CHAIN_BREAK_MS);
+    return () => window.clearTimeout(timer);
+  }, [leftover, view]);
+  const chained = sealed ?? leftover;
   return (
     <div className="cb-cpu-hand" aria-label="あいての てふだ">
       <p className="cb-cpu-hand__title">あいての てふだ</p>
@@ -338,7 +369,7 @@ function CpuHand({ state, clash, revealed }: { state: BattleState; clash: CardBa
           // --i:相手のターンに 1枚ずつ ずらして ゆらす
           <div
             key={card.id}
-            className={cx('cb-cpu-hand__slot', card.hand === sealed && 'cb-cpu-hand__slot--sealed')}
+            className={cx('cb-cpu-hand__slot', card.hand === chained && !breaking && 'cb-cpu-hand__slot--sealed')}
             style={{ '--i': index } as CSSProperties}
           >
             <CardView
@@ -349,6 +380,14 @@ function CpuHand({ state, clash, revealed }: { state: BattleState; clash: CardBa
               className={cx(revealed && card.id === clash?.cpuCard.id && 'cb-card--used')}
             />
             {card.hand === sealed && <span className="cb-chain" aria-label="ふうじられている">⛓️</span>}
+            {/* 解けた鎖:ターンの終わりまで残し、左右に割れて 飛んでいく */}
+            {!sealed && card.hand === leftover && (
+              <span className={cx('cb-chain', 'cb-chain--left', breaking && 'cb-chain--break')} aria-hidden="true">
+                <i>⛓️</i>
+                <i>⛓️</i>
+                {breaking && <b className="cb-chain__spark">✦</b>}
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -524,7 +563,7 @@ export function CardBattle({
 
       {/* 真ん中の列:相手の手札(マークだけ)・場(自分の出したカード・相手の ふせたカード)・場の ひとこと・説明パネル */}
       <section className="cb-center">
-        <CpuHand state={state} clash={clash} revealed={revealed} />
+        <CpuHand state={state} clash={clash} revealed={revealed} view={view} />
         {/* 場:自分(緑の枠)と 相手(ピンクの枠)。上に「あなた」「あいて」の札 */}
         <div className={cx('cb-field', staging && 'cb-field--staging')}>
           <div className="cb-field__side cb-field__side--player">

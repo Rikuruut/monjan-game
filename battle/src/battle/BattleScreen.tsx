@@ -60,12 +60,31 @@ export function SpecialCutin({ monster, theme }: { monster: Monster; theme: Attr
       delay: SPECIAL_CUTIN_SLAM_MS / 1000,
     });
   }, { scope: rootRef });
+  // モンスター(設計書8章):窓の中は はじめ カードの窓のように 寄った絵 → 全体まで ズームアウト →
+  // 同じ絵が 枠より大きく 前へ飛び出す。窓が すべりこむ動き(monsterSlide)は CSS のまま
+  useGSAP(() => {
+    const root = rootRef.current;
+    const windowImage = root?.querySelector('.special-cutin__monster .monster-image');
+    const frame = root?.querySelector('.special-cutin__monster');
+    const pop = root?.querySelector('.special-cutin__pop');
+    const tl = gsap.timeline();
+    if (windowImage) tl.fromTo(windowImage, { scale: 1.7 }, { scale: 1, duration: 0.5, ease: 'power2.out' }, 0.3);
+    if (pop) {
+      tl.fromTo(pop, { opacity: 0, scale: 0.98, y: 0 }, { opacity: 1, scale: 1.2, x: -24, y: -56, duration: 0.24, ease: 'back.out(2.4)' }, 0.85)
+        .to(pop, { scale: 1.16, y: -48, duration: 0.5, ease: 'sine.inOut', repeat: -1, yoyo: true });
+    }
+    if (frame) tl.fromTo(frame, { x: 0 }, { x: 10, duration: 0.4, ease: 'fx.wiggle', clearProps: 'x' }, 0.85);
+  }, { scope: rootRef });
   return (
     <div ref={rootRef} className={`special-cutin special-cutin--${theme}`} role="status" aria-live="assertive">
       <span className="special-cutin__lines" aria-hidden="true" />
       <span className="special-cutin__band" aria-hidden="true" />
       <div className="special-cutin__monster" aria-hidden="true">
         <MonsterImage monster={monster} />
+      </div>
+      {/* 枠の外へ 飛び出す絵(窓と同じ位置・傾き。読み上げは 窓の絵だけ) */}
+      <div className="special-cutin__pop-frame" aria-hidden="true">
+        <img className="special-cutin__pop" src={monster.image} alt="" draggable={false} />
       </div>
       <div className="special-cutin__copy">
         <small>ひっさつわざ！</small>

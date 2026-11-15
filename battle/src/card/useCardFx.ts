@@ -77,10 +77,24 @@ export function useCardFx(
     const field = root.querySelector('.battlefield');
     if (field && feedback.zoom > 1) gsap.fromTo(field, { scale: feedback.zoom }, { scale: 1, duration: 0.45, ease: 'power3.out' });
 
+    // 必殺技のとどめ(設計書8章):HP が0になったのを見せてから、相手が 回りながら 画面の外へ 吹き飛ぶ
+    if (damage.finisher && panel) {
+      gsap.timeline({ delay: 0.45 })
+        .to(panel, { x: -dir * 30, rotation: -dir * 6, transformOrigin: '50% 50%', duration: 0.12, ease: 'power2.out' })
+        .to(panel, { x: dir * 1500, y: -420, rotation: dir * 720, scale: 0.4, duration: 0.9, ease: 'power2.in' });
+    }
+
     shakerRef.current?.add(feedback.trauma);
     // さいごに 止める:ここまでで作った動きは 当たった瞬間の形のまま 止まって、少しして一気に動き出す
     hitStop(root, feedback.hitStop);
   }, { scope: rootRef, dependencies: [view, damage] });
+
+  // ---- やり直し(相手のターンから):吹き飛ばした・のけぞった モンスターを もとの位置へ ----
+  useGSAP(() => {
+    if (view !== 'cpu-turn') return;
+    const panels = rootRef.current?.querySelectorAll('.battlefield .monster-panel');
+    if (panels?.length) gsap.set(panels, { clearProps: 'transform' });
+  }, { scope: rootRef, dependencies: [view] });
 
   // ---- 必殺技のカットイン:たたきつける瞬間に 大きく揺らす ----
   useGSAP(() => {

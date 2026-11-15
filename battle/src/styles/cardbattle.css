@@ -456,6 +456,36 @@
   animation: cbChain 0.4s cubic-bezier(.2, 1.6, .4, 1) both;
 }
 @keyframes cbChain { from { opacity: 0; scale: 2; } }
+/* 解けた鎖(CardBattle.tsx の CpuHand):ターンの終わりまで残り、左右の半分に割れて 回りながら落ちる。まんなかで 光が はじける */
+.cb-chain--left { width: 64px; height: 64px; animation: none; }
+.cb-chain--left i { position: absolute; inset: 0; font-style: normal; }
+.cb-chain--left i:first-child { clip-path: inset(0 50% 0 0); }
+.cb-chain--left i:nth-child(2) { clip-path: inset(0 0 0 50%); }
+.cb-chain--break i:first-child { animation: cbChainBreakL 0.7s cubic-bezier(.3, .1, .7, 1) both; }
+.cb-chain--break i:nth-child(2) { animation: cbChainBreakR 0.7s cubic-bezier(.3, .1, .7, 1) both; }
+@keyframes cbChainBreakL {
+  0%, 15% { transform: none; opacity: 1; }
+  100%    { transform: translate(-46px, 60px) rotate(-70deg); opacity: 0; }
+}
+@keyframes cbChainBreakR {
+  0%, 15% { transform: none; opacity: 1; }
+  100%    { transform: translate(46px, 60px) rotate(70deg); opacity: 0; }
+}
+.cb-chain__spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-size: 54px;
+  color: #fffbe0;
+  text-shadow: 0 0 12px #ffe27a, 0 0 24px #ffffff;
+  translate: -50% -50%;
+  animation: cbChainSpark 0.45s ease-out 0.08s both;
+}
+@keyframes cbChainSpark {
+  0%   { opacity: 0; transform: scale(0.2) rotate(0deg); }
+  40%  { opacity: 1; transform: scale(1.3) rotate(45deg); }
+  100% { opacity: 0; transform: scale(1.8) rotate(90deg); }
+}
 /* 出し直した ふせたカードが はずんで置かれる */
 .cb-field__slot--replaced { animation: cbReplace 0.5s ease-out; }
 @keyframes cbReplace {
@@ -883,3 +913,52 @@
 .cb-info__result { box-shadow: inset 0 0 0 3px var(--card-color), 0 0 14px 5px #ffe27a; }
 .cb-info__equation--cancel { font-family: var(--font-title); font-size: 30px; color: #d9d9d9; }
 .cb-info--merge .cb-info__line { font-size: 19px; }
+
+/* ---- 回復で まんたん:数え上がった(CARD_HP_COUNT_MS)あとに、バーが1回 キラッと光り、星が はじけて「まんたん!」(FighterPanel.tsx の HpBar) ---- */
+.cb-hp { position: relative; }
+.cb-hp--full .cb-hp__bar { animation: cbHpFullFlash 0.6s ease-out 0.95s both; }
+@keyframes cbHpFullFlash {
+  0%   { box-shadow: 0 0 18px 5px #6cf08a; filter: none; }
+  30%  { box-shadow: 0 0 30px 12px #fffbe0, 0 0 60px 20px #6cf08a; filter: brightness(1.8); }
+  100% { box-shadow: 0 0 18px 5px #6cf08a; filter: none; }
+}
+.cb-hp__full { position: absolute; z-index: 3; inset: 0; pointer-events: none; }
+.cb-hp__full i {
+  position: absolute;
+  left: var(--x);
+  top: calc(50% + var(--y));
+  font-style: normal;
+  font-size: 28px;
+  line-height: 1;
+  color: #fffbe0;
+  text-shadow: 0 0 10px #ffe27a, 0 0 18px #6cf08a;
+  translate: -50% -50%;
+  animation: cbHpSpark 0.7s ease-out both;
+  animation-delay: calc(0.95s + var(--i) * 0.05s);
+}
+@keyframes cbHpSpark {
+  0%   { opacity: 0; transform: scale(0.2) rotate(0deg); }
+  35%  { opacity: 1; transform: scale(1.4) rotate(90deg); }
+  100% { opacity: 0; transform: scale(0.6) rotate(180deg); }
+}
+.cb-hp__full b {
+  position: absolute;
+  left: 50%;
+  top: -34px;
+  padding: 2px 14px 4px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: #a6ec7c;
+  color: var(--ink);
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 22px;
+  white-space: nowrap;
+  translate: -50% 0;
+  animation: cbHpFullChip 0.8s cubic-bezier(.2, 1.6, .4, 1) 0.95s both;
+}
+@keyframes cbHpFullChip {
+  0%   { opacity: 0; transform: scale(0.3); }
+  60%  { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 1; transform: scale(1); }
+}

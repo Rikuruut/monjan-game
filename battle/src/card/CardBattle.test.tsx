@@ -364,6 +364,9 @@ describe('カードバトル:スキル', () => {
     expect(playerPanel.querySelectorAll('.cb-heal-fx__plus').length).toBeGreaterThan(3);
     expect(playerPanel.querySelector('.cb-heal-fx__ring')).not.toBeNull();
     expect(playerPanel.querySelector('.cb-hp--healing')).not.toBeNull();
+    // まんたんに なったので、HP のバーが キラッと光り「まんたん!」
+    expect(playerPanel.querySelector('.cb-hp--full')).not.toBeNull();
+    expect(playerPanel.querySelector('.cb-hp__full')).toHaveTextContent('まんたん！');
     expect(playSound).toHaveBeenCalledWith('heal');
     // 回復は 少し長めに見せる
     wait(CARD_SKILL_MS);
@@ -406,6 +409,27 @@ describe('カードバトル:スキル', () => {
     // 20回 画面を作り直すので 時間の上限をのばす
   }, 20000);
 
+  it('封じ手の鎖は 命中のあとも残り、ターンの終わり(ドロー)で 割れて消える', () => {
+    const cpu = [janken('x', 'rock', 1), janken('y', 'paper', 2), janken('z', 'rock', 3)];
+    renderBattle({ setup: withHands([seal, janken('a', 'scissors', 1)], cpu) });
+    press('ArrowLeft');
+    press('Enter');
+    press('Enter');
+    wait(CARD_SKILL_MS);
+    press('Enter');
+    press('Enter');
+    wait(TO_IMPACT);
+    // 命中:封じ手は もう解けているが、鎖は 残っている(まだ割れない)
+    expect(screen.queryAllByLabelText('ふうじられている')).toHaveLength(0);
+    expect(document.querySelector('.cb-chain--left')).not.toBeNull();
+    expect(document.querySelector('.cb-chain--break')).toBeNull();
+    // ターンの終わり(ドロー):パキッと割れて、少しすると消える
+    wait(CARD_DAMAGE_MS);
+    expect(document.querySelector('.cb-chain--break')).not.toBeNull();
+    wait(700);
+    expect(document.querySelector('.cb-chain--left')).toBeNull();
+  });
+
   it('相手の手札が全部同じ手のとき、封じ手は暗くなって使えない', () => {
     renderBattle({ setup: withHands([seal, janken('a', 'paper', 1)], [janken('x', 'rock', 1), janken('y', 'rock', 2)]) });
     press('ArrowLeft');
@@ -431,6 +455,8 @@ describe('カードバトル:必殺技', () => {
     press('Enter');
     expect(screen.queryByText('じゃん')).not.toBeInTheDocument();
     expect(screen.getByText('ひっさつわざ！')).toBeInTheDocument();
+    // モンスターが 枠の外へ飛び出す絵(読み上げは 窓の絵だけ)
+    expect(document.querySelector('.special-cutin__pop')).toHaveAttribute('alt', '');
     wait(SPECIAL_DISPLAY_MS);
     expect(document.querySelector('.cb-screen')?.className).toContain('battle-screen--special');
     expect(document.querySelector('.projectile')).not.toBeNull();

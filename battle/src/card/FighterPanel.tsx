@@ -45,8 +45,18 @@ export function HpBar({ hp, maxHp, healing = false }: { hp: number; maxHp: numbe
   const ratio = maxHp > 0 ? Math.min(1, Math.max(0, hp / maxHp)) : 0;
   const shownHp = useCountUp(hp, CARD_HP_COUNT_MS);
   const level = hp <= 0 ? 'empty' : ratio <= 0.3 ? 'low' : ratio <= 0.5 ? 'mid' : 'high';
+  // 回復で まんたんになった:数え上がったところで バーが キラッと光り、星が はじけて「まんたん!」(cardbattle.css の .cb-hp__full)
+  const full = healing && hp >= maxHp;
   return (
-    <span className={`cb-hp cb-hp--${level}${healing ? ' cb-hp--healing' : ''}`} role="img" aria-label={`HP ${hp} / ${maxHp}`}>
+    <span className={cx('cb-hp', `cb-hp--${level}`, healing && 'cb-hp--healing', full && 'cb-hp--full')} role="img" aria-label={`HP ${hp} / ${maxHp}`}>
+      {full && (
+        <span className="cb-hp__full" aria-hidden="true">
+          {FULL_SPARKS.map((spark, index) => (
+            <i key={index} style={{ '--x': `${spark.x}%`, '--y': `${spark.y}px`, '--i': index } as CSSProperties}>✦</i>
+          ))}
+          <b>まんたん！</b>
+        </span>
+      )}
       <span className="cb-hp__label" aria-hidden="true">HP</span>
       <span className="cb-hp__bar" aria-hidden="true">
         <span className="cb-hp__ghost" style={{ transform: `scaleX(${ratio})` }} />
@@ -56,6 +66,15 @@ export function HpBar({ hp, maxHp, healing = false }: { hp: number; maxHp: numbe
     </span>
   );
 }
+
+// まんたんの キラッ:バーのまわりで はじける星の位置(バーの幅に対する % と、上下の px)
+const FULL_SPARKS = [
+  { x: 4, y: -18 },
+  { x: 30, y: 16 },
+  { x: 52, y: -22 },
+  { x: 76, y: 14 },
+  { x: 97, y: -16 },
+];
 
 // 回復の ✚ を出す横の位置(カードの幅に対する %。ばらばらに見えるように並べる)
 const HEAL_PLUS = [14, 72, 34, 88, 52, 24, 64];
