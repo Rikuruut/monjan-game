@@ -48,6 +48,8 @@ const ALL_SOUNDS: GameSound[] = [
   'tie',
   'card-get',
   'heal',
+  'pack-tear',
+  'card-flip',
   'toggle',
 ];
 
@@ -153,6 +155,16 @@ describe('会場用効果音', () => {
     expect(oscillators.every((oscillator) => oscillator.stop.mock.calls.length === 1)).toBe(true);
   });
 
+  it('パックの カードを めくる音:1枚ごとに 音程が上がり、レアは 高い音を重ねる', () => {
+    const { oscillators } = installFakeAudioContext();
+    playGameSound('card-flip', { step: 0 });
+    playGameSound('card-flip', { step: 4 });
+    expect(oscillators).toHaveLength(2);
+    expect(firstFrequency(oscillators[1])).toBeGreaterThan(firstFrequency(oscillators[0]));
+    playGameSound('card-flip', { step: 0, rare: true });
+    expect(oscillators).toHaveLength(5);
+  });
+
   it('召喚・公開・星勝負・あいこ・カード獲得に専用の音列を生成する', () => {
     const { oscillators } = installFakeAudioContext();
     const soundLengths: Array<[GameSound, number]> = [
@@ -162,6 +174,8 @@ describe('会場用効果音', () => {
       ['tie', 2],
       ['card-get', 5],
       ['heal', 4],
+      ['pack-tear', 3],
+      ['card-flip', 1],
     ];
 
     soundLengths.forEach(([sound, expectedLength]) => {

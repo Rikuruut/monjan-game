@@ -33,6 +33,11 @@ import {
   CARD_JANKEN_BEAT_MS,
   CARD_MERGE_HINT_MS,
   CARD_MERGE_MS,
+  CARD_PACK_FLIP_MS,
+  CARD_PACK_OPEN_MS,
+  CARD_PACK_READY_AUTO_MS,
+  CARD_PACK_SPREAD_MS,
+  CARD_PACK_TEAR_MS,
   CARD_PLAYER_TURN_BANNER_MS,
   CARD_REVEAL_MS,
   CARD_SKILL_MS,
@@ -54,6 +59,7 @@ import {
 //   どちらかの HP が 0 になったら round-end
 
 export type CardBattleView =
+  | 'pack'
   | 'cpu-turn'
   | 'player'
   | 'notice'
@@ -66,6 +72,9 @@ export type CardBattleView =
   | 'damage'
   | 'draw'
   | 'round-end';
+
+/** パック選びの段:えらぶ → あける(袋が破れる)→ めくる → バトル スタートを待つ */
+export type PackStep = 'choose' | 'opening' | 'reveal' | 'ready';
 
 /** 手札の並びの1つ:「がったい!」の枠(合成できるペアがあるときだけ左はし)か、カード */
 export type HandItem = { kind: 'merge' } | { kind: 'card'; card: Card };
@@ -126,6 +135,11 @@ export function shownPair(battle: { pairs: [JankenCard, JankenCard][]; mergePick
   return pairs[0] ?? null;
 }
 
+/** レアなカード(パックで めくる前から 裏のふちが光る):★3・スキル・必殺技 */
+export function isRareCard(card: CardFace): boolean {
+  return card.kind !== 'janken' || card.star === 3;
+}
+
 /** カーソルの最初の位置:じゃんけんカードの先頭(なければ 必殺技、それもなければ 0) */
 export function itemCursor(items: HandItem[]): number {
   const janken = items.findIndex((item) => item.kind === 'card' && isJanken(item.card));
@@ -148,6 +162,7 @@ export function useCardBattle({
   playSound,
   attributes = { player: '', cpu: '' },
   setup,
+  packIntro = false,
 }: {
   config: BattleConfig;
   playerAttack: number;
@@ -157,18 +172,34 @@ export function useCardBattle({
   attributes?: Record<Side, string>;
   /** パックを開けたあとの状態を差しかえる(テスト・開発者メニュー用) */
   setup?: (state: BattleState) => BattleState;
+  /** ラウンドのはじめに パック選び・開封の画面を出す(false なら パックを そのまま開けて 相手のターンから。テスト用) */
+  packIntro?: boolean;
 }) {
   const { schedule, clearTimers } = useTimers();
-  // いまは パック選びの画面がないので、はじまりに そのままパックを開ける(パック選びは段階2b)
-  const deal = () => {
-    const dealt = openPack(startMatch(config, playerAttack, random), random).state;
-    return setup ? setup(dealt) : dealt;
+  // パックを開ける(setup があれば そのあとの状態を差しかえる)
+  const openWith = (base: BattleState) => {
+    const opened = openPack(base, random).state;
+    return setup ? setup(opened) : opened;
   };
+  const deal = () => openWith(startMatch(config, playerAttack, random));
 
   // 画面に見せている状態。じゃんけんの あいだは「出す前」のままにして、ダメージのところで「出したあと」に入れかえる
-  const [state, setState] = useState<BattleState>(deal);
-  // ラウンドのはじめは 相手のターンから(はじめの予約は 下の useEffect)
-  const [view, setView] = useState<CardBattleView>('cpu-turn');
+  const [state, setState] = useState<BattleState>(() => (packIntro ? startMatch(config, playerAttack, random) : deal()));
+  // ラウンドのはじめは パック選び(packIntro)か 相手のターンから(はじめの予約は 下の useEffect)
+  const [view, setView] = useState<CardBattleView>(packIntro ? 'pack' : 'cpu-turn');
+
+  // ---- パック選び・開封(設計書4-1・8章):えらぶ → あける → めくる → バトル スタート ----
+  const middlePack = Math.floor((config.packChoices - 1) / 2);
+  const [packStep, setPackStep] = useState<PackStep>('choose');
+  const [packCursor, setPackCursor] = useState(middlePack);
+  // 開けた5枚(めくる順 = 手札の並び)と、めくった枚数
+  const [packCards, setPackCards] = useState<Card[]>([]);
+  const [flipped, setFlipped] = useState(0);
+  // タイマーから読む いまの値(タイマーの中は 予約したときの描画の値になるので)
+  const packStepRef = useRef<PackStep>('choose');
+  const packCursorRef = useRef(middlePack);
+  const packBaseRef = useRef<BattleState | null>(packIntro ? state : null);
+  const openedRef = useRef<BattleState | null>(null);
   // 相手のターンの段:考える(手札がゆれる)→ ふせる(裏向きのカードが場へ)
   const [cpuStep, setCpuStep] = useState<'think' | 'place'>('think');
   // 自分のターンに入ったところ(「あなたの ターン!」を少し出す)
@@ -239,9 +270,69 @@ export function useCardBattle({
     }, CARD_CPU_THINK_MS + CARD_CPU_PLACE_MS);
   };
 
-  // はじめのターン:相手のターンから(StrictMode で2回呼ばれても、片づけで予約は消える)
-  useEffect(() => {
+  const toPackStep = (step: PackStep) => {
+    packStepRef.current = step;
+    setPackStep(step);
+  };
+
+  // パック選びを はじめる(ラウンドのはじめ。base は phase 'pack' の状態)。packAutoOpenMs で 今えらんでいるパックが自動で開く
+  const beginPack = (base: BattleState) => {
+    packBaseRef.current = base;
+    openedRef.current = null;
+    packCursorRef.current = middlePack;
+    setState(base);
+    setView('pack');
+    setPackCursor(middlePack);
+    setPackCards([]);
+    setFlipped(0);
+    toPackStep('choose');
+    schedule(() => openChosenPack(), config.packAutoOpenMs);
+  };
+
+  // えらんだパックを開ける:中身は ここで抽選(3つの中身に違いはない)→ 袋が破れる → 5枚を 左から1枚ずつ めくる → 待つ
+  const openChosenPack = () => {
+    const base = packBaseRef.current;
+    if (packStepRef.current !== 'choose' || !base) return;
+    const opened = openWith(base);
+    openedRef.current = opened;
+    const cards = opened.player.hand;
+    setPackCards(cards);
+    toPackStep('opening');
+    playSound('select');
+    schedule(() => playSound('pack-tear'), CARD_PACK_TEAR_MS);
+    schedule(() => {
+      toPackStep('reveal');
+      cards.forEach((card, index) => {
+        schedule(() => {
+          setFlipped(index + 1);
+          // めくるたびに 音程が上がる(レアは キラッと高く)
+          playSound('card-flip', { step: index, rare: isRareCard(card) });
+        }, CARD_PACK_SPREAD_MS + CARD_PACK_FLIP_MS * index);
+      });
+      schedule(() => {
+        toPackStep('ready');
+        schedule(() => startBattle(), CARD_PACK_READY_AUTO_MS);
+      }, CARD_PACK_SPREAD_MS + CARD_PACK_FLIP_MS * cards.length);
+    }, CARD_PACK_OPEN_MS);
+  };
+
+  // バトル スタート:開けた5枚が手札になり、相手のターンから
+  const startBattle = () => {
+    const opened = openedRef.current;
+    if (packStepRef.current !== 'ready' || !opened) return;
+    clearTimers();
+    openedRef.current = null;
+    packBaseRef.current = null;
+    setState(opened);
+    placeCursor(opened);
+    playSound('start');
     startCpuTurn();
+  };
+
+  // はじめ:パック選び(packIntro)か 相手のターンから(StrictMode で2回呼ばれても、片づけで予約は消える)
+  useEffect(() => {
+    if (packIntro) schedule(() => openChosenPack(), config.packAutoOpenMs);
+    else startCpuTurn();
   }, []);
 
   // 相手のスキル(回復・ため技の予告)を1つずつ見せてから、相手のターンへ
@@ -430,9 +521,9 @@ export function useCardBattle({
   /** はじめから(パックを開けたところから)やり直す */
   const restart = () => {
     clearTimers();
-    const fresh = deal();
+    const fresh = packIntro ? startMatch(config, playerAttack, random) : deal();
     setState(fresh);
-    placeCursor(fresh);
+    if (!packIntro) placeCursor(fresh);
     setArmed(false);
     setMergePick(null);
     setNotice(null);
@@ -446,6 +537,11 @@ export function useCardBattle({
     setMergeHint(false);
     setMergedFrom(null);
     seenPairsRef.current = new Set();
+    if (packIntro) {
+      playSound('toggle');
+      beginPack(fresh);
+      return;
+    }
     playSound('start');
     startCpuTurn();
   };
@@ -469,6 +565,23 @@ export function useCardBattle({
     merge(pairs[pick]);
   };
 
+  // パック選び:←→ で えらぶ(端で止まる)、決定1回で 開ける。めくり終わったら 決定で バトル スタート
+  const pressPack = (button: PadButton) => {
+    if (packStepRef.current === 'choose') {
+      if (button === 'center') {
+        openChosenPack();
+        return;
+      }
+      const next = Math.min(config.packChoices - 1, Math.max(0, packCursorRef.current + (button === 'left' ? -1 : 1)));
+      if (next === packCursorRef.current) return;
+      packCursorRef.current = next;
+      setPackCursor(next);
+      playSound('select');
+      return;
+    }
+    if (packStepRef.current === 'ready' && button === 'center') startBattle();
+  };
+
   /** 会場の3つのボタン */
   const press = (button: PadButton) => {
     if (view === 'rendan') {
@@ -480,6 +593,10 @@ export function useCardBattle({
     }
     if (view === 'round-end') {
       if (button === 'center') restart();
+      return;
+    }
+    if (view === 'pack') {
+      pressPack(button);
       return;
     }
     if (view !== 'player') return;
@@ -557,6 +674,10 @@ export function useCardBattle({
   return {
     state,
     view,
+    packStep,
+    packCursor,
+    packCards,
+    flipped,
     items,
     pairs,
     cursor,

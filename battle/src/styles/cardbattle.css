@@ -962,3 +962,166 @@
   60%  { opacity: 1; transform: scale(1.1); }
   100% { opacity: 1; transform: scale(1); }
 }
+
+/* ==================================================================
+   パック選び・開封(PackOpening.tsx。設計書4-1・8章)
+   仮の外装:CSS のホイル・ギザギザのふち・ロゴの文字。あとで 画像に差しかえる
+   動き(浮く・ゆれる・破れる・せり上がる・広がる・めくる)は GSAP。ここは 見た目と くり返しの光だけ
+   ================================================================== */
+.cb-pack-stage { position: absolute; z-index: 40; inset: 0; overflow: hidden; }
+.cb-pack-stage__veil { position: absolute; inset: 0; background: radial-gradient(ellipse 60% 60% at 50% 45%, #0d2219d0, #0d2219f2 75%); }
+/* 破れた口から さす 光の筋(はじめは 見えない) */
+.cb-pack-stage__rays {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 1500px;
+  height: 1500px;
+  margin: -750px 0 0 -750px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, #fff6c8a0 0deg 6deg, #fff6c800 6deg 18deg);
+  mask-image: radial-gradient(circle, #000 10%, transparent 65%);
+  opacity: 0;
+  pointer-events: none;
+}
+.cb-pack-stage__flash { position: absolute; inset: 0; background: radial-gradient(circle at 50% 35%, #ffffff, #ffffff00 60%); opacity: 0; pointer-events: none; }
+.cb-pack-stage__head { position: absolute; left: 0; right: 0; top: 50px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.cb-pack-stage__round {
+  padding: 4px 24px 6px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--sun);
+  color: var(--ink);
+  font-family: var(--font-title);
+  font-size: 28px;
+}
+.cb-pack-stage__title {
+  font-family: var(--font-title);
+  font-weight: 400;
+  font-size: 76px;
+  line-height: 1.1;
+  color: var(--sun);
+  text-shadow: -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink), 0 9px 0 var(--ink);
+  animation: cbCopyIn 0.35s cubic-bezier(.2, 1.5, .4, 1) both;
+}
+.cb-pack-stage__guide { position: absolute; left: 0; right: 0; bottom: 120px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.cb-pack-stage__guide .cb-guide { font-size: 44px; }
+/* のこり時間(この長さで 自動で開く) */
+.cb-pack-stage__timer { width: 420px; height: 12px; overflow: hidden; border: 3px solid var(--ink); border-radius: 999px; background: #0d2219; }
+.cb-pack-stage__timer i { display: block; height: 100%; background: var(--sun); transform-origin: left; animation: cbPackTimer linear both; }
+@keyframes cbPackTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* ---- パック(3つ。えらんだのは GSAP で 浮いて ゆれる) ---- */
+.cb-pack-row { position: absolute; left: 0; right: 0; top: 270px; height: 460px; display: flex; justify-content: center; align-items: center; gap: 70px; }
+.cb-pack-tier-normal  { --pack-a: #3fd68a; --pack-b: #0f7a64; --pack-c: #ffe27a; }
+.cb-pack-tier-silver  { --pack-a: #f2f6ff; --pack-b: #7d8db0; --pack-c: #3d5a99; }
+.cb-pack-tier-gold    { --pack-a: #fff1a6; --pack-b: #d08a12; --pack-c: #8a3b00; }
+.cb-pack {
+  position: relative;
+  z-index: 1;
+  width: 260px;
+  height: 400px;
+  border: 5px solid var(--ink);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 30% 20%, #ffffff66, #ffffff00 40%),
+    linear-gradient(140deg, var(--pack-a), var(--pack-b) 55%, var(--pack-a));
+  box-shadow: 0 12px 0 var(--forest-deep), 0 18px 40px #0008;
+  transition: filter 0.2s;
+}
+.cb-pack-stage--choose .cb-pack:not(.cb-pack--selected) { filter: brightness(0.6) saturate(0.7); }
+.cb-pack--selected { box-shadow: 0 12px 0 var(--forest-deep), 0 0 0 6px var(--sun), 0 0 50px 16px #ffe27acc; }
+/* 上の ちぎれる帯:ギザギザ(縦のすじ)と ミシン目 */
+.cb-pack__top {
+  position: absolute;
+  left: -5px;
+  right: -5px;
+  top: -5px;
+  height: 46px;
+  border: 5px solid var(--ink);
+  border-bottom: 4px dashed #ffffffb0;
+  border-radius: 16px 16px 4px 4px;
+  background:
+    repeating-linear-gradient(90deg, #00000026 0 6px, #ffffff1f 6px 12px),
+    linear-gradient(140deg, var(--pack-b), var(--pack-a));
+}
+/* 下の ギザギザ */
+.cb-pack::after {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22px;
+  border-radius: 0 0 11px 11px;
+  background: repeating-linear-gradient(90deg, #00000026 0 6px, #ffffff1f 6px 12px);
+  content: '';
+}
+.cb-pack__body {
+  position: absolute;
+  inset: 52px 12px 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-radius: 12px;
+  background: #0d221955;
+  color: var(--white);
+  font-family: var(--font-title);
+  text-align: center;
+}
+.cb-pack__logo { font-size: 30px; color: var(--sun); text-shadow: -3px -3px 0 var(--ink), 3px -3px 0 var(--ink), -3px 3px 0 var(--ink), 3px 3px 0 var(--ink); }
+.cb-pack__name { font-size: 40px; line-height: 1.05; text-shadow: 0 4px 0 var(--ink); }
+.cb-pack__emblem {
+  display: grid;
+  place-items: center;
+  width: 70px;
+  height: 70px;
+  border: 4px solid var(--ink);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffbe6, var(--pack-c, #ffe27a));
+  color: var(--ink);
+  font-size: 40px;
+}
+.cb-pack__count { padding: 2px 14px 4px; border-radius: 999px; background: var(--ink); color: var(--sun); font-size: 20px; }
+.cb-pack__round { font-size: 16px; color: #ffffffcc; }
+/* ホイルの照り返し:光の すじが 斜めに流れる */
+.cb-pack__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(115deg, #ffffff00 40%, #ffffffb0 50%, #ffffff00 60%) no-repeat;
+  background-size: 300% 100%;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  animation: cbPackShine 2.8s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.45s);
+}
+@keyframes cbPackShine { from { background-position: 120% 0; } to { background-position: -40% 0; } }
+
+/* 開けた口から せり上がる カードの束(パックの うしろ) */
+.cb-pack-stack { position: absolute; z-index: 0; left: 50%; top: 80px; width: 210px; height: 283px; margin-left: -105px; opacity: 0; }
+.cb-pack-stack__card { position: absolute; inset: 0; transform: translate(calc(var(--i) * 3px), calc(var(--i) * -3px)); }
+
+/* ---- めくる5枚 ---- */
+.cb-pack-cards { position: absolute; left: 0; right: 0; top: 330px; display: flex; justify-content: center; gap: 26px; }
+.cb-pack-card { position: relative; perspective: 900px; }
+.cb-pack-card__face { transform-style: preserve-3d; }
+/* レア(★3・スキル・必殺技):めくる前から 裏のふちが 光る(予告) */
+.cb-pack-card--rare:not(.cb-pack-card--open) .cb-card { box-shadow: inset 0 0 0 6px var(--sun), 0 0 26px 8px #ffd23f; animation: cbPackRare 0.8s ease-in-out infinite alternate; }
+@keyframes cbPackRare { from { box-shadow: inset 0 0 0 6px var(--sun), 0 0 14px 4px #ffd23f99; } }
+.cb-pack-card--rare.cb-pack-card--open .cb-card { box-shadow: inset 0 0 0 6px var(--card-color), 0 0 30px 10px #ffe27a; }
+.cb-pack-card__burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 220px;
+  height: 220px;
+  margin: -110px 0 0 -110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffffd0, #ffe27a80 40%, #ffe27a00 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+.cb-pack-card__pair { animation: cbChipIn2 0.4s cubic-bezier(.2, 1.6, .4, 1) both; }
+@keyframes cbChipIn2 { from { opacity: 0; scale: 0.3; } }

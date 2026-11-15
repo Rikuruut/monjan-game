@@ -19,6 +19,7 @@ import { ClashStage } from './ClashStage';
 import { FighterPanel } from './FighterPanel';
 import { HandZone } from './HandGuide';
 import { HandInfo } from './HandInfo';
+import { PackOpening } from './PackOpening';
 import { useCardFx } from './useCardFx';
 import { Flip, gsap, useGSAP } from '../fx/gsap';
 import {
@@ -447,6 +448,7 @@ export function CardBattle({
   playSound,
   random,
   setup,
+  packIntro = false,
 }: {
   player: Monster;
   cpu: Monster;
@@ -455,6 +457,8 @@ export function CardBattle({
   random?: RandomSource;
   /** パックを開けたあとの状態を差しかえる(テスト・開発者メニュー用) */
   setup?: (state: BattleState) => BattleState;
+  /** ラウンドのはじめに パック選び・開封を出す(本番。テストは 既定の false で すぐ戦闘から) */
+  packIntro?: boolean;
 }) {
   const battle = useCardBattle({
     config,
@@ -463,6 +467,7 @@ export function CardBattle({
     playSound,
     attributes: { player: player.attribute, cpu: cpu.attribute },
     setup,
+    packIntro,
   });
   const { state, view, clash, damage, mash, cpuMash, rendanWinner, notice, chargeNote, finisherHit } = battle;
   usePadButtons(battle.press);
@@ -613,8 +618,10 @@ export function CardBattle({
       </section>
 
       {/* 手札のゾーン(うしろを暗くして囲む)と 案内の1行。手札は その上に重ねる */}
-      <HandZone battle={battle} />
-      <HandRow battle={battle} />
+      {view !== 'pack' && <HandZone battle={battle} />}
+      {view !== 'pack' && <HandRow battle={battle} />}
+      {/* ラウンドのはじめ:パック選び・開封(手札は バトル スタートで 配られる) */}
+      {view === 'pack' && <PackOpening battle={battle} />}
 
       {staging && clash && <ClashStage clash={clash} view={view} beat={battle.beat} themes={themes} />}
 
@@ -657,6 +664,7 @@ export function CardBattleEntry({
   practiceCpu,
   round = 2,
   playSound,
+  packIntro = true,
 }: {
   player: Monster;
   cpu: Monster;
@@ -665,6 +673,8 @@ export function CardBattleEntry({
   /** 戦う相手(`?round=`)。1 = 練習・2 = 2体目・3 = ボス */
   round?: number;
   playSound: PlaySound;
+  /** ラウンドのはじめに パック選び(`?pack=0` で 飛ばす) */
+  packIntro?: boolean;
 }) {
   const [config, setConfig] = useState<BattleConfig | null>(null);
   useEffect(() => {
@@ -676,5 +686,5 @@ export function CardBattleEntry({
   }, []);
   const trial = useMemo(() => (config ? trialConfig(config, round) : null), [config, round]);
   if (!trial) return <main className="screen loading-screen"><div className="loader" /><p>カードを じゅんびしているよ…</p></main>;
-  return <CardBattle player={player} cpu={round === 1 ? practiceCpu : cpu} config={trial} playSound={playSound} />;
+  return <CardBattle player={player} cpu={round === 1 ? practiceCpu : cpu} config={trial} playSound={playSound} packIntro={packIntro} />;
 }

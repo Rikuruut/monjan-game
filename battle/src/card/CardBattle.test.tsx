@@ -17,6 +17,11 @@ import {
   CARD_JANKEN_BEAT_MS,
   CARD_MERGE_HINT_MS,
   CARD_MERGE_MS,
+  CARD_PACK_FLIP_MS,
+  CARD_PACK_OPEN_MS,
+  CARD_PACK_READY_AUTO_MS,
+  CARD_PACK_SPREAD_MS,
+  CARD_PACK_TEAR_MS,
   CARD_PLAYER_TURN_BANNER_MS,
   CARD_REVEAL_MS,
   CARD_SKILL_MS,
@@ -679,5 +684,112 @@ describe('カードバトル:場の色分け・案内の1行', () => {
     press('Enter');
     press('Enter');
     expect(guide()).toBe('しょうぶ！');
+  });
+});
+
+describe('カードバトル:パック選び・開封', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  const config = trialConfig(DEFAULT_BATTLE_CONFIG);
+  // めくり終わるまで(あける → 広がる → 5枚めくる)
+  const TO_READY = CARD_PACK_OPEN_MS + CARD_PACK_SPREAD_MS + CARD_PACK_FLIP_MS * config.packSize;
+  const packs = () => screen.getAllByTestId(/^pack-[0-9]$/);
+  const chosenPack = () => packs().findIndex((pack) => pack.getAttribute('aria-current') === 'true');
+  const packGuide = () => screen.queryByTestId('pack-guide')?.textContent ?? '';
+
+  function renderPack(setup?: (state: BattleState) => BattleState) {
+    const playSound = vi.fn();
+    render(
+      <CardBattle
+        player={monster('p', 'ゴリザミ', 2000)}
+        cpu={monster('c', 'ドライオン', 1000)}
+        config={config}
+        playSound={playSound}
+        random={seededRandom(1)}
+        setup={setup}
+        packIntro
+      />,
+    );
+    return { playSound };
+  }
+
+  it('はじめは パックが3つ。←→ で えらび(端で止まる)、手札は まだ ない', () => {
+    renderPack();
+    expect(packs()).toHaveLength(3);
+    expect(chosenPack()).toBe(1);
+    expect(packGuide()).toBe('◀ ▶ で えらんで ● で あける！');
+    expect(screen.queryByTestId(/^hand-item-/)).not.toBeInTheDocument();
+    press('ArrowLeft');
+    press('ArrowLeft');
+    expect(chosenPack()).toBe(0);
+    press('ArrowRight');
+    press('ArrowRight');
+    press('ArrowRight');
+    expect(chosenPack()).toBe(2);
+  });
+
+  it('決定で開ける → 破れる音 → 5枚を 左から1枚ずつ めくる(音程が上がる)→ 決定で バトル スタート', () => {
+    const hand = [heal, janken('a', 'rock', 3), janken('b', 'paper', 1), janken('c', 'paper', 1), janken('d', 'scissors', 2)];
+    const { playSound } = renderPack((state) => ({ ...state, player: { ...state.player, hand } }));
+    press('Enter');
+    expect(screen.getByText('あけるよ…！')).toBeInTheDocument();
+    wait(CARD_PACK_TEAR_MS);
+    expect(playSound).toHaveBeenCalledWith('pack-tear');
+    wait(CARD_PACK_OPEN_MS - CARD_PACK_TEAR_MS + CARD_PACK_SPREAD_MS);
+    expect(screen.getAllByTestId(/^pack-card-/)).toHaveLength(5);
+    // 1枚め:表に。レア(回復)なので 高い音も
+    expect(within(screen.getByTestId('pack-card-0')).getByLabelText('かいふく')).toBeInTheDocument();
+    expect(within(screen.getByTestId('pack-card-1')).getByLabelText('ふせたカード')).toBeInTheDocument();
+    expect(playSound).toHaveBeenCalledWith('card-flip', { step: 0, rare: true });
+    // ★3 は めくる前から レアの光
+    expect(screen.getByTestId('pack-card-1')).toHaveClass('cb-pack-card--rare');
+    wait(CARD_PACK_FLIP_MS * 4);
+    expect(playSound).toHaveBeenCalledWith('card-flip', { step: 4, rare: false });
+    // めくり終わって 少しすると「● で バトル スタート!」
+    wait(CARD_PACK_FLIP_MS);
+    expect(packGuide()).toBe('● で バトル スタート！');
+    // 合体できるペア(パー★1 × 2)に ✨
+    expect(screen.getAllByLabelText('がったい できる')).toHaveLength(2);
+    press('Enter');
+    expect(screen.queryByTestId('pack-guide')).not.toBeInTheDocument();
+    // 相手のターン → 自分のターン。手札は パックの5枚
+    wait(CARD_CPU_TURN_MS);
+    expect(screen.getAllByTestId(/^hand-item-/).length).toBeGreaterThanOrEqual(5);
+    expect(guide()).not.toBe('');
+  });
+
+  it('えらばずに 待つと 自動で開き、めくり終わって 待つと 自動で バトルへ', () => {
+    renderPack();
+    press('ArrowRight');
+    wait(config.packAutoOpenMs);
+    expect(screen.getByText('あけるよ…！')).toBeInTheDocument();
+    wait(TO_READY);
+    expect(packGuide()).toBe('● で バトル スタート！');
+    wait(CARD_PACK_READY_AUTO_MS);
+    expect(screen.queryByTestId('pack-guide')).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId(/^pack-[0-9]$/)).toHaveLength(0);
+  });
+
+  it('あけている・めくっている あいだは ボタンを受けない。「もういちど」は パック選びから', () => {
+    renderPack((state) => ({ ...state, cpu: { ...state.cpu, hp: 1 } }));
+    press('Enter');
+    press('Enter');
+    press('ArrowLeft');
+    wait(CARD_PACK_OPEN_MS);
+    expect(packGuide()).toBe('');
+    wait(TO_READY - CARD_PACK_OPEN_MS);
+    press('Enter');
+    wait(CARD_CPU_TURN_MS);
+    // 相手の HP 1:どのカードでも 勝てば終わり。決定2回で出して、勝つまで くりかえす
+    for (let turn = 0; turn < 8 && !screen.queryByText('かった！') && !screen.queryByText('まけちゃった…'); turn += 1) {
+      press('Enter');
+      press('Enter');
+      wait(TURN_MS);
+    }
+    const end = screen.queryByText('かった！') ?? screen.queryByText('まけちゃった…');
+    expect(end).not.toBeNull();
+    press('Enter');
+    expect(packs()).toHaveLength(3);
   });
 });

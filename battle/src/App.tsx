@@ -614,6 +614,7 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
         cpu={data.cpu}
         practiceCpu={data.practiceCpu}
         round={launch.cardRound}
+        packIntro={!launch.cardSkipPack}
         playSound={playSound}
       />
     );

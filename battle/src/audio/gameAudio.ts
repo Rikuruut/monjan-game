@@ -19,10 +19,17 @@ export type GameSound =
   | 'card-get'
   // 回復:下から上へ すべり上がる音 + キラキラ(カードバトルの回復カード・相手の回復)
   | 'heal'
+  // パック開封:袋が ビリッと破れる / カードを1枚めくる(step で音程が上がる。rare は 高い音を重ねる)
+  | 'pack-tear'
+  | 'card-flip'
   | 'toggle';
 
 export type GameSoundOptions = {
   attribute?: string;
+  /** card-flip:何枚目か(0 から。1枚ごとに 全音ずつ上がる) */
+  step?: number;
+  /** card-flip:レアなカード(★3・スキル・必殺技) */
+  rare?: boolean;
 };
 
 type AudioContextConstructor = typeof AudioContext;
@@ -272,6 +279,22 @@ function scheduleGameSound(context: AudioContext, kind: GameSound, options: Game
       [1318.51, 1567.98, 2093].forEach((frequency, index) =>
         scheduleTone(context, now + 0.28 + index * 0.09, frequency, 0.22, 0.035, 'sine'));
       break;
+    case 'pack-tear':
+      // 高いところから 一気に すべり落ちる音を 少しずらして重ねる(紙が裂ける感じ)
+      scheduleTone(context, now, 1800, 0.16, 0.05, 'sawtooth', 260);
+      scheduleTone(context, now + 0.04, 1400, 0.18, 0.045, 'square', 200);
+      scheduleTone(context, now + 0.2, 523.25, 0.3, 0.05, 'triangle', 1046.5);
+      break;
+    case 'card-flip': {
+      const step = Math.max(0, options.step ?? 0);
+      const base = 440 * 2 ** ((step * 2) / 12);
+      scheduleTone(context, now, base, 0.1, 0.05, 'triangle', base * 1.5);
+      if (options.rare) {
+        scheduleTone(context, now + 0.06, base * 2, 0.32, 0.05, 'sine');
+        scheduleTone(context, now + 0.12, base * 2.5, 0.36, 0.04, 'sine');
+      }
+      break;
+    }
     case 'toggle':
       scheduleTone(context, now, 660, 0.12, 0.045, 'sine', 820);
       break;
