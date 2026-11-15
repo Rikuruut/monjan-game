@@ -148,9 +148,14 @@ function setupRound(base: BattleState, round: number, random: RandomSource): Bat
   };
 }
 
-/** 試合のはじまり(1体目のパック選びから)。playerAttack はユーザーのモンスターの攻撃力 */
-export function startMatch(config: BattleConfig, playerAttack: number, random: RandomSource = Math.random): BattleState {
-  const maxHp = randomInt(random, config.playerHp);
+/**
+ * 試合のはじまり(1体目のパック選びから)。playerAttack はユーザーのモンスターの攻撃力、
+ * playerHp は最大 HP(カードの ♥ から。`hpFromLegacy`)。省くと config.playerHp の はばから選ぶ(シミュレーション用)
+ */
+export function startMatch(config: BattleConfig, playerAttack: number, random: RandomSource = Math.random, playerHp?: number): BattleState {
+  // 乱数の並びを変えないように、HP が渡されても 1回は引く(シード付きのテスト・シミュレーションの結果を そろえる)
+  const rolled = randomInt(random, config.playerHp);
+  const maxHp = playerHp ?? rolled;
   const base: BattleState = {
     config,
     round: 1,

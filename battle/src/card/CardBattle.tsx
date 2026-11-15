@@ -9,7 +9,7 @@ import { HAND_META } from '../components/HandIcon';
 import { Backdrop, Logo } from '../components/Scenery';
 import { cx } from '../cx';
 import { mergedFace, type JankenCard } from '../game/cards';
-import { attackFromLegacy, loadBattleConfig, type BattleConfig } from '../game/config';
+import { attackFromLegacy, attackIcons, hpFromLegacy, loadBattleConfig, type BattleConfig } from '../game/config';
 import type { BattleState, Side } from '../game/engine';
 import type { RandomSource } from '../game/logic';
 import { assetUrl, usePadButtons } from '../integration';
@@ -463,6 +463,8 @@ export function CardBattle({
   const battle = useCardBattle({
     config,
     playerAttack: attackFromLegacy(player.attack, config),
+    // 最大 HP は カードの ♥ の数から(印刷カードと そろえる)
+    playerHp: hpFromLegacy(player.hp, config),
     random,
     playSound,
     attributes: { player: player.attribute, cpu: cpu.attribute },
@@ -542,7 +544,7 @@ export function CardBattle({
           side="player"
           hp={state.player.hp}
           maxHp={state.player.maxHp}
-          attack={state.player.attack}
+          swords={attackIcons(state.player.attack, state.config)}
           damage={view === 'damage' ? damage : null}
           attacking={view === 'attack' && attacker === 'player'}
           striking={striking && attacker === 'player'}
@@ -554,7 +556,7 @@ export function CardBattle({
           side="cpu"
           hp={state.cpu.hp}
           maxHp={state.cpu.maxHp}
-          attack={state.cpu.attack}
+          swords={attackIcons(state.cpu.attack, state.config)}
           damage={view === 'damage' ? damage : null}
           attacking={view === 'attack' && attacker === 'cpu'}
           striking={striking && attacker === 'cpu'}

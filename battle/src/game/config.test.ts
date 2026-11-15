@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import configJson from '../../public/data/battle-config.json';
-import { attackFromLegacy, DEFAULT_BATTLE_CONFIG, loadBattleConfig, parseBattleConfig } from './config';
+import { attackFromLegacy, attackIcons, DEFAULT_BATTLE_CONFIG, hpFromLegacy, loadBattleConfig, parseBattleConfig } from './config';
 
 describe('カードバトルの設定', () => {
   it('設定ファイル(battle-config.json)は、既定値の項目を全部持ち、同じ中身', () => {
@@ -56,5 +56,16 @@ describe('カードバトルの設定', () => {
     expect(attackFromLegacy(3000)).toBe(14);
     expect(attackFromLegacy(9000)).toBe(14);
     expect(attackFromLegacy(0)).toBe(6);
+  });
+
+  it('カードの ♥ を ユーザーの最大 HP にする(撮影の ♥3〜5 は 90・100・110。はみ出したら はし)', () => {
+    expect([1000, 2000, 3000, 4000, 5000].map((hp) => hpFromLegacy(hp))).toEqual([80, 85, 90, 100, 110]);
+    expect(hpFromLegacy(0)).toBe(80);
+    expect(hpFromLegacy(9000)).toBe(110);
+  });
+
+  it('攻撃力を ⚔ の数にする(読みかえの 6・10・14 と そろう。相手の 10〜14 も)', () => {
+    expect([6, 8, 9, 10, 12, 13, 14].map((attack) => attackIcons(attack))).toEqual([1, 1, 2, 2, 2, 3, 3]);
+    expect([1000, 2000, 3000].map((attack) => attackIcons(attackFromLegacy(attack)))).toEqual([1, 2, 3]);
   });
 });

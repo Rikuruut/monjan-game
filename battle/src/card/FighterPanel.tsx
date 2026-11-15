@@ -67,6 +67,9 @@ export function HpBar({ hp, maxHp, healing = false }: { hp: number; maxHp: numbe
   );
 }
 
+// こうげきの ⚔ の枠の数(印刷カードと同じ 3つ)
+const SWORD_SLOTS = [0, 1, 2];
+
 // まんたんの キラッ:バーのまわりで はじける星の位置(バーの幅に対する % と、上下の px)
 const FULL_SPARKS = [
   { x: 4, y: -18 },
@@ -88,7 +91,7 @@ export function FighterPanel({
   side,
   hp,
   maxHp,
-  attack,
+  swords,
   damage,
   attacking = false,
   striking = false,
@@ -100,7 +103,8 @@ export function FighterPanel({
   side: Side;
   hp: number;
   maxHp: number;
-  attack: number;
+  /** こうげきの ⚔ の数(1〜3。印刷カードと同じ。計算に使う攻撃力の数字は 出さない) */
+  swords: number;
   /** 命中で見せるダメージ(当たった側だけ数字が出る) */
   damage: DamageShown | null;
   /** 攻撃している(前へ出る) */
@@ -154,9 +158,12 @@ export function FighterPanel({
           footer={
             <div className="cb-stats">
               <HpBar hp={hp} maxHp={maxHp} healing={healed !== null} />
-              <span className="cb-power" aria-label={`こうげき力 ${attack}`}>
+              <span className="cb-power" aria-label={`こうげき ⚔${swords}`}>
                 <span className="cb-power__label" aria-hidden="true">こうげき</span>
-                <b className="cb-power__value" aria-hidden="true">{attack}</b>
+                {/* 印刷カードと同じ:3つの枠のうち 数だけ光る */}
+                <span className="cb-power__swords" aria-hidden="true">
+                  {SWORD_SLOTS.map((slot) => <i key={slot} className={cx('cb-power__sword', slot < swords && 'cb-power__sword--on')}>⚔</i>)}
+                </span>
               </span>
             </div>
           }

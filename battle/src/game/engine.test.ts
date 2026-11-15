@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Hand } from '../types';
 import type { Card, JankenCard } from './cards';
-import { DEFAULT_BATTLE_CONFIG as config } from './config';
+import { DEFAULT_BATTLE_CONFIG } from './config';
+
+// ユーザーの HP は 100 で見る(ふだんは カードの ♥ で 90〜110。はばは シミュレーション用)
+const config = { ...DEFAULT_BATTLE_CONFIG, playerHp: [100, 100] as [number, number] };
 import {
   beginNextTurn,
   canUseSkill,
@@ -63,6 +66,10 @@ const types = (events: { type: string }[]) => events.map((event) => event.type);
 describe('試合のはじまりとパック', () => {
   it('1体目(練習)のパック選びから始まる。HP は100、相手は HP30・攻撃力8', () => {
     const state = startMatch(config, ATTACK, seededRandom(1));
+    // HP を渡すと その HP(カードの ♥ から)。乱数の並びは 渡さないときと同じ
+    const given = startMatch(config, ATTACK, seededRandom(1), 110);
+    expect(given.player).toMatchObject({ hp: 110, maxHp: 110 });
+    expect(given.cpu.maxHp).toBe(state.cpu.maxHp);
     expect(state).toMatchObject({ round: 1, turn: 1, phase: 'pack', finisherUsed: false });
     expect(state.player).toMatchObject({ hp: 100, maxHp: 100, attack: ATTACK, hand: [] });
     expect(state.cpu).toMatchObject({ hp: 30, maxHp: 30, attack: 8 });

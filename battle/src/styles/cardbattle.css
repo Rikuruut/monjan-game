@@ -74,7 +74,14 @@
   line-height: 1.2;
   color: var(--gold);
 }
-.cb-power__value { font-family: var(--font-title); font-size: 42px; font-weight: 400; line-height: 1; color: var(--sun); }
+/* こうげきの ⚔(印刷カードと同じ:3つの枠のうち 数だけ光る) */
+.cb-power__swords { display: flex; gap: 4px; }
+/* 印刷カード(generator/static/card/card.css)と同じ:絵文字にしない字体、空は うすい灰色、満は 金 + 黒いふち */
+.cb-power__sword { font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif; font-style: normal; font-size: 48px; line-height: 1; color: #ffffff38; }
+.cb-power__sword--on {
+  color: var(--gold);
+  text-shadow: -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink), 0 3px 0 var(--ink), 0 0 12px #ffd23f;
+}
 
 /* ---- カード:上の札(★・スキル・ひっさつ)/ 絵 / 名前 ---- */
 .cb-card {

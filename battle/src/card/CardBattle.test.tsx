@@ -33,13 +33,14 @@ import type { Hand, Monster } from '../types';
 import { CardBattle, trialConfig } from './CardBattle';
 import { sendCardDev } from './cardDev';
 
-const monster = (id: string, name: string, attack: Monster['attack']): Monster => ({
+// ♥4(HP 100)にしておく(HP の数字を 100 で書いているテストが多いので)。♥ と HP の読みかえは 下の「こうげき・HP の見せ方」で見る
+const monster = (id: string, name: string, attack: Monster['attack'], hp: Monster['hp'] = 4000): Monster => ({
   id,
   name,
   source: { animal: 'ゴリラ', object: 'はさみ' },
   attribute: '風',
   attack,
-  hp: 3000,
+  hp,
   description: 'テスト用',
   image: '/monsters/test.png',
 });
@@ -130,8 +131,8 @@ describe('カードバトル:手札と じゃんけん', () => {
     expect(cpuHand.textContent).not.toMatch(/★★|★1|★2|★3/);
     expect(screen.getByLabelText('ふせたカード')).toBeInTheDocument();
     expect(screen.getByLabelText('HP 100 / 100')).toBeInTheDocument();
-    // 古い ⚔2 は 攻撃力10
-    expect(screen.getByLabelText('こうげき力 10')).toBeInTheDocument();
+    // ⚔2 のモンスターは こうげき欄も ⚔2(中の攻撃力は 10)
+    expect(document.querySelector('.monster-panel--player .cb-power')).toHaveAttribute('aria-label', 'こうげき ⚔2');
     expect(cursorIndex()).toBe(0);
     expect(info()).toContain('グー ★1');
     expect(info()).toContain('かつと 20 ダメージ！');
@@ -622,8 +623,33 @@ describe('カードバトル:HP のピンチ・こうげきの表示・開発者
     renderBattle({ setup: withHands([janken('a', 'rock', 1)], cpu) });
     const powers = document.querySelectorAll('.cb-stats .cb-power');
     expect(powers).toHaveLength(2);
-    expect(screen.getByLabelText('こうげき力 10').textContent).toBe('こうげき10');
+    // 数字ではなく ⚔ の枠(3つのうち 数だけ光る)
+    const mine = document.querySelector('.monster-panel--player .cb-power') as HTMLElement;
+    expect(mine).toHaveAttribute('aria-label', 'こうげき ⚔2');
+    expect(mine.querySelectorAll('.cb-power__sword')).toHaveLength(3);
+    expect(mine.querySelectorAll('.cb-power__sword--on')).toHaveLength(2);
+    expect(mine.textContent).not.toMatch(/d/);
     expect(document.querySelector('.monster-tag .cb-power')).toBeNull();
+  });
+
+  it.each([
+    [3000, 90],
+    [4000, 100],
+    [5000, 110],
+  ] as const)('HP は カードの ♥ で決まる(♥%i → %i)', (hp, maxHp) => {
+    const view = render(
+      <CardBattle
+        player={monster('p', 'ゴリザミ', 3000, hp)}
+        cpu={monster('c', 'ドライオン', 1000)}
+        config={trialConfig(DEFAULT_BATTLE_CONFIG)}
+        playSound={vi.fn()}
+        random={seededRandom(1)}
+      />,
+    );
+    expect(screen.getAllByLabelText(/^HP [0-9]+ [/] [0-9]+$/)[0]).toHaveAttribute('aria-label', `HP ${maxHp} / ${maxHp}`);
+    // ⚔3 のモンスターは こうげき欄も ⚔3
+    expect(document.querySelector('.monster-panel--player .cb-power')).toHaveAttribute('aria-label', 'こうげき ⚔3');
+    view.unmount();
   });
 
   it('HP が3割以下で 赤く点滅する(字は出さない)。0 なら点滅しない', () => {

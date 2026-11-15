@@ -34,6 +34,8 @@ export interface BattleConfig {
   playerAttack: Range;
   /** 古い ⚔1・⚔2・⚔3(生成側が変わるまでの読みかえ)の攻撃力 */
   legacyAttack: [number, number, number];
+  /** カードの ♥1〜♥5 の ユーザーの最大 HP(撮影で作るモンスターは ♥3〜5 = 90・100・110) */
+  legacyHp: [number, number, number, number, number];
   handLimit: number;
   cpuHandSize: number;
   /** 画面に並ぶパックの数 */
@@ -72,9 +74,10 @@ export interface BattleConfig {
 export const DEFAULT_BATTLE_CONFIG: BattleConfig = {
   starDamage: [10, 25, 50],
   starWeights: [60, 30, 10],
-  playerHp: [100, 100],
+  playerHp: [90, 110],
   playerAttack: [6, 14],
   legacyAttack: [6, 10, 14],
+  legacyHp: [80, 85, 90, 100, 110],
   handLimit: 5,
   cpuHandSize: 3,
   packChoices: 3,
@@ -162,4 +165,21 @@ export async function loadBattleConfig(url: string, fetcher: Fetcher = fetch): P
 export function attackFromLegacy(attack: number, config: BattleConfig = DEFAULT_BATTLE_CONFIG): number {
   const index = Math.min(2, Math.max(0, Math.round(attack / 1000) - 1));
   return config.legacyAttack[index];
+}
+
+/** カードの ♥ の数(JSON では 1000 = 1個)を、ユーザーの最大 HP にする(印刷カードの ♥ と バトルの HP を そろえる) */
+export function hpFromLegacy(hp: number, config: BattleConfig = DEFAULT_BATTLE_CONFIG): number {
+  const index = Math.min(config.legacyHp.length - 1, Math.max(0, Math.round(hp / 1000) - 1));
+  return config.legacyHp[index];
+}
+
+/**
+ * 攻撃力を ⚔ の数(1〜3)にする(バトルの こうげき欄は 印刷カードと同じ ⚔ で見せる。計算は 数字のまま)。
+ * 読みかえの 6・10・14 の あいだで 区切る(既定値なら 〜8 → ⚔1・〜12 → ⚔2・それより上 → ⚔3)。相手の攻撃力(10〜14)も これで ⚔ にする
+ */
+export function attackIcons(attack: number, config: BattleConfig = DEFAULT_BATTLE_CONFIG): 1 | 2 | 3 {
+  const [one, two, three] = config.legacyAttack;
+  if (attack <= (one + two) / 2) return 1;
+  if (attack <= (two + three) / 2) return 2;
+  return 3;
 }

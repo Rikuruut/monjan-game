@@ -158,6 +158,7 @@ export function skillBlockedReason(state: BattleState, card: Card): string | nul
 export function useCardBattle({
   config,
   playerAttack,
+  playerHp,
   random = Math.random,
   playSound,
   attributes = { player: '', cpu: '' },
@@ -166,6 +167,8 @@ export function useCardBattle({
 }: {
   config: BattleConfig;
   playerAttack: number;
+  /** ユーザーの最大 HP(カードの ♥ から。省くと 設定の はばから) */
+  playerHp?: number;
   random?: RandomSource;
   playSound: PlaySound;
   /** 自分と相手のタイプ(攻撃の音を タイプで変える) */
@@ -181,10 +184,10 @@ export function useCardBattle({
     const opened = openPack(base, random).state;
     return setup ? setup(opened) : opened;
   };
-  const deal = () => openWith(startMatch(config, playerAttack, random));
+  const deal = () => openWith(startMatch(config, playerAttack, random, playerHp));
 
   // 画面に見せている状態。じゃんけんの あいだは「出す前」のままにして、ダメージのところで「出したあと」に入れかえる
-  const [state, setState] = useState<BattleState>(() => (packIntro ? startMatch(config, playerAttack, random) : deal()));
+  const [state, setState] = useState<BattleState>(() => (packIntro ? startMatch(config, playerAttack, random, playerHp) : deal()));
   // ラウンドのはじめは パック選び(packIntro)か 相手のターンから(はじめの予約は 下の useEffect)
   const [view, setView] = useState<CardBattleView>(packIntro ? 'pack' : 'cpu-turn');
 
@@ -521,7 +524,7 @@ export function useCardBattle({
   /** はじめから(パックを開けたところから)やり直す */
   const restart = () => {
     clearTimers();
-    const fresh = packIntro ? startMatch(config, playerAttack, random) : deal();
+    const fresh = packIntro ? startMatch(config, playerAttack, random, playerHp) : deal();
     setState(fresh);
     if (!packIntro) placeCursor(fresh);
     setArmed(false);
