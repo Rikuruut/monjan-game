@@ -746,19 +746,17 @@ describe('カードバトル:パック選び・開封', () => {
     return { playSound };
   }
 
-  it('はじめは パックが3つ。←→ で えらび(端で止まる)、手札は まだ ない', () => {
+  it('はじめは パックが5つ(上3・下2)。上の段の まんなかから ←→ で 1つずつ えらび(端で止まる)、手札は まだ ない', () => {
     renderPack();
-    expect(packs()).toHaveLength(3);
+    expect(packs()).toHaveLength(5);
     expect(chosenPack()).toBe(1);
     expect(packGuide()).toBe('◀ ▶ で えらんで ● で あける！');
     expect(screen.queryByTestId(/^hand-item-/)).not.toBeInTheDocument();
     press('ArrowLeft');
     press('ArrowLeft');
     expect(chosenPack()).toBe(0);
-    press('ArrowRight');
-    press('ArrowRight');
-    press('ArrowRight');
-    expect(chosenPack()).toBe(2);
+    for (let i = 0; i < 5; i++) press('ArrowRight');
+    expect(chosenPack()).toBe(4);
   });
 
   it('決定で開ける → 破れる音 → 5枚を 左から1枚ずつ めくる(音程が上がる)→ 決定で バトル スタート', () => {
@@ -822,6 +820,6 @@ describe('カードバトル:パック選び・開封', () => {
     const end = screen.queryByText('かった！') ?? screen.queryByText('まけちゃった…');
     expect(end).not.toBeNull();
     press('Enter');
-    expect(packs()).toHaveLength(3);
+    expect(packs()).toHaveLength(5);
   });
 });

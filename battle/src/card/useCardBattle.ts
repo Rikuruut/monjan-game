@@ -194,7 +194,8 @@ export function useCardBattle({
   const [view, setView] = useState<CardBattleView>(packIntro ? 'pack' : 'cpu-turn');
 
   // ---- パック選び・開封(設計書4-1・8章):えらぶ → あける → めくる → バトル スタート ----
-  const middlePack = Math.floor((config.packChoices - 1) / 2);
+  // はじめのカーソル:上の段(3つ。cardbattle.css の .cb-pack-row)の まんなか
+  const middlePack = Math.floor((Math.min(3, config.packChoices) - 1) / 2);
   const [packStep, setPackStep] = useState<PackStep>('choose');
   const [packCursor, setPackCursor] = useState(middlePack);
   // 開けた5枚(めくる順 = 手札の並び)と、めくった枚数

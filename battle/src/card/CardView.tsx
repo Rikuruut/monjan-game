@@ -43,7 +43,8 @@ export function CardView({
   if (back) {
     return (
       <div className={cx('cb-card', `cb-card--${size}`, 'cb-card--back', className)} role="img" aria-label="ふせたカード">
-        <span className="cb-card__back" aria-hidden="true">？</span>
+        {/* 三すくみのマーク(絵は cardbattle.css の .cb-card__back の背景) */}
+        <span className="cb-card__back" aria-hidden="true" />
       </div>
     );
   }

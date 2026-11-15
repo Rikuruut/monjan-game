@@ -17,6 +17,15 @@
   --gold: #F2C14E;
   --heart: #ff4d6d;
   --battle-ink: #173A2E;
+  /* 背景:カードバトルのカード(battle/src/styles/cardbattle.css の .cb-card)と同じ「森」のデザイン。
+     2026年11月16日 依頼者:背景は全カード共通にする。タイプの色(--el)は バッジ・絵のふち・下の帯 だけに使う */
+  --forest: #1F4D3A;
+  --moss: #3F8F4A;
+  --card-bg-a: #FFF8E6;
+  --card-bg-b: #e3f1cc;
+  --card-leaves: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='%23173A2E' fill-opacity='.07'%3E%3Cpath d='M8 30C8 18 16 10 30 10C30 22 22 30 8 30Z'/%3E%3Cpath d='M33 45C33 38 37 33 45 33C45 40 41 45 33 45Z'/%3E%3C/g%3E%3Cpath d='M8 30L30 10M33 45L45 33' stroke='%23173A2E' stroke-opacity='.08' fill='none'/%3E%3C/svg%3E");
+  --card-sprig-tl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%23173A2E' fill-opacity='.26'%3E%3Cpath d='M1 1C11 1 18 5 21 12C13 12 6 9 1 1Z'/%3E%3Cpath d='M1 1C1 11 5 18 12 21C12 13 9 6 1 1Z'/%3E%3C/g%3E%3C/svg%3E");
+  --card-sprig-br: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%23173A2E' fill-opacity='.26' transform='rotate(180 12 12)'%3E%3Cpath d='M1 1C11 1 18 5 21 12C13 12 6 9 1 1Z'/%3E%3Cpath d='M1 1C1 11 5 18 12 21C12 13 9 6 1 1Z'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 * { box-sizing: border-box; }
@@ -42,10 +51,10 @@ html, body {
 .card {
   width: 63mm;
   height: 88mm;
-  padding: 3mm;   /* ここまでが安全域(タイプの色の枠) */
+  padding: 3mm;   /* ここまでが安全域(森の深緑の枠) */
   background:
-    radial-gradient(circle at 20% 10%, rgb(255 255 255 / 0.28), transparent 45%),
-    linear-gradient(160deg, var(--el), color-mix(in srgb, var(--el) 60%, #000));
+    radial-gradient(circle at 20% 10%, rgb(255 255 255 / 0.22), transparent 45%),
+    linear-gradient(160deg, color-mix(in srgb, var(--forest) 85%, #fff), color-mix(in srgb, var(--forest) 70%, #000));
   overflow: hidden;
   position: relative;
   font-family: "M PLUS Rounded 1c", sans-serif;
@@ -64,8 +73,13 @@ html, body {
   gap: 1mm;
   padding: 1.5mm;
   border-radius: 2mm;
-  background: var(--paper);
-  border: 0.4mm solid color-mix(in srgb, var(--el) 40%, #fff);
+  background:
+    var(--card-sprig-tl) left 0.6mm top 0.6mm / 6mm auto no-repeat,
+    var(--card-sprig-br) right 0.6mm bottom 0.6mm / 6mm auto no-repeat,
+    radial-gradient(ellipse at 50% 40%, rgb(255 255 255 / 0.7), transparent 62%),
+    var(--card-leaves) 0 0 / 8mm 8mm,
+    linear-gradient(170deg, var(--card-bg-a), var(--card-bg-b));
+  border: 0.5mm solid var(--moss);
 }
 
 /* 名前(左)とタイプのバッジ(右) */
@@ -240,6 +254,33 @@ html, body {
   color: #fff;
 }
 
+/* ---- 裏面(印刷の2ページ目):カードバトルの裏向きのカード(battle の .cb-card--back)と同じデザインを mm で ----
+   両面印刷で表と裏が 1〜2mm ずれても目立たないよう、枠は表と同じ 3mm、マークのまわりは広めにあける。
+   上下さかさまでも同じに見える(四すみの葉は4か所) */
+.card--back {
+  /* 枠(.card の背景・padding 3mm)は表と同じ森の深緑 */
+  break-before: page;
+}
+.card-back-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2mm;
+  border: 0.6mm solid #FFE9A8;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 134' preserveAspectRatio='none'%3E%3Cdefs%3E%3Cg id='s' fill='%23FFE9A8' fill-opacity='.35'%3E%3Cpath d='M0 0C10 0 17 4 20 11C12 11 5 8 0 0Z'/%3E%3Cpath d='M0 0C0 10 4 17 11 20C11 12 8 5 0 0Z'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23s' x='3' y='3'/%3E%3Cuse href='%23s' transform='translate(97 3) scale(-1 1)'/%3E%3Cuse href='%23s' transform='translate(3 131) scale(1 -1)'/%3E%3Cuse href='%23s' transform='translate(97 131) scale(-1 -1)'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat,
+    radial-gradient(circle at 50% 50%, #ffe9a826 0 22%, transparent 45%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='%23fff' fill-opacity='.06'%3E%3Cpath d='M8 30C8 18 16 10 30 10C30 22 22 30 8 30Z'/%3E%3Cpath d='M33 45C33 38 37 33 45 33C45 40 41 45 33 45Z'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 8mm 8mm,
+    radial-gradient(ellipse at 50% 50%, #2f6b4c, #0d2219 80%);
+}
+.card-mark {
+  width: 58%;   /* 82% だと主張が強すぎた(2026年11月16日 依頼者) */
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 0.6mm 0 rgb(0 0 0 / 0.4));
+}
+
 .card-error {
   font-family: sans-serif;
   color: #c00;
@@ -255,6 +296,8 @@ html, body {
     background: #1d2330;
   }
   .sheet { zoom: var(--zoom, 3); }
+  /* 裏面は印刷だけ(画面のプレビュー・バトルのはめこみ には出さない) */
+  .card--back { display: none; }
   .card {
     border-radius: 3mm;
     box-shadow: 0 2mm 6mm rgb(0 0 0 / 0.5);

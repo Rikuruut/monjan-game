@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { HandInfo } from './HandInfo';
 import { skillBlockedReason, type CardBattleApi } from './useCardBattle';
 
@@ -35,7 +36,7 @@ export function handGuide(battle: CardBattleApi): string | null {
   return '● を もういちど おすと だすよ！';
 }
 
-/** 手札のゾーン(うすい線の囲み)と、その上のふちの1行:左に 説明(HandInfo)、右に 案内 */
+/** 手札のゾーン(暗いトレイ)と、その上のふちの1行:左に 説明(HandInfo)、右に 案内。右はしに 山札 */
 export function HandZone({ battle }: { battle: CardBattleApi }) {
   const guide = handGuide(battle);
   return (
@@ -44,6 +45,18 @@ export function HandZone({ battle }: { battle: CardBattleApi }) {
         <HandInfo battle={battle} />
         {/* key で出しなおして、文言が変わるたびに はねて出る */}
         {guide && <p key={guide} className="cb-guide" role="status" aria-live="polite" data-testid="hand-guide">{guide}</p>}
+      </div>
+      {/* 山札:裏向きのカードを3枚 少しずらして重ねる。ターンのはじめは ここから1枚 引く(動きは CardBattle.tsx の HandRow)。
+          カードは 引くたびに作るので 数は出さない。「ふせたカード」の読み上げと まざらないよう CardView は使わない */}
+      <div className="cb-deck" aria-hidden="true">
+        <span className="cb-deck__label">やまふだ</span>
+        <span className="cb-deck__pile">
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="cb-deck__card cb-card cb-card--field cb-card--back" style={{ '--i': i } as CSSProperties}>
+              <span className="cb-card__back" />
+            </span>
+          ))}
+        </span>
       </div>
     </div>
   );

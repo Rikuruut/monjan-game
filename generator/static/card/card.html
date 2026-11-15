@@ -37,6 +37,13 @@
         </footer>
       </div>
     </article>
+    <!-- 裏面(印刷の2ページ目。両面印刷で カードの裏に刷る。画面のプレビューには出さない。card.css の .card--back)。
+         マークは mark.png(元は リポジトリ直下の カード用マーク.png。tools/make_card_mark.py で背景を抜いた) -->
+    <article class="card card--back" aria-hidden="true">
+      <div class="card-back-inner">
+        <img id="card-mark" class="card-mark" src="/static/card/mark.png" alt="">
+      </div>
+    </article>
   </main>
   <p id="card-error" class="card-error" hidden></p>
   <script src="/static/card/card.js"></script>

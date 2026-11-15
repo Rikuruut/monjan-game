@@ -80,7 +80,7 @@ export const DEFAULT_BATTLE_CONFIG: BattleConfig = {
   legacyHp: [80, 85, 90, 100, 110],
   handLimit: 5,
   cpuHandSize: 3,
-  packChoices: 3,
+  packChoices: 5,
   packSize: 5,
   packJanken: 1,
   packHealRate: 0.15,

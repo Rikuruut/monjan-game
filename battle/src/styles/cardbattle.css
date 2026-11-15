@@ -163,9 +163,19 @@
   text-shadow: -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink), 0 3px 0 var(--ink), 0 0 12px #ffd23f;
 }
 
-/* ---- カード:上の札(★・スキル・ひっさつ)/ 絵 / 名前 ---- */
+/* ---- カード:上の札(★・スキル・ひっさつ)/ 絵 / 名前 ----
+   背景は全カード共通の「森」のデザイン(2026年11月16日 依頼者:グー・チョキ・パー・★3 も、印刷のモンスターカードも同じに)。
+   色が変わるのは スキル(紫)と ひっさつ(金)だけで、下の --card-* を差しかえる。
+   葉の模様・四隅の葉は うすい墨色の SVG なので、どの地の色にもなじむ
+   (同じ模様を generator/static/card/card.css のモンスターカードにも mm で使っている) */
 .cb-card {
-  --card-color: var(--leaf);
+  --card-color: var(--moss);   /* 内側のふち(勝ったとき・開封などの光でも使う) */
+  --card-frame: var(--forest); /* 外の枠 */
+  --card-bg-a: var(--cream);
+  --card-bg-b: #e3f1cc;
+  --card-leaves: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='%23173A2E' fill-opacity='.07'%3E%3Cpath d='M8 30C8 18 16 10 30 10C30 22 22 30 8 30Z'/%3E%3Cpath d='M33 45C33 38 37 33 45 33C45 40 41 45 33 45Z'/%3E%3C/g%3E%3Cpath d='M8 30L30 10M33 45L45 33' stroke='%23173A2E' stroke-opacity='.08' fill='none'/%3E%3C/svg%3E");
+  --card-sprig-tl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%23173A2E' fill-opacity='.26'%3E%3Cpath d='M1 1C11 1 18 5 21 12C13 12 6 9 1 1Z'/%3E%3Cpath d='M1 1C1 11 5 18 12 21C12 13 9 6 1 1Z'/%3E%3C/g%3E%3C/svg%3E");
+  --card-sprig-br: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%23173A2E' fill-opacity='.26' transform='rotate(180 12 12)'%3E%3Cpath d='M1 1C11 1 18 5 21 12C13 12 6 9 1 1Z'/%3E%3Cpath d='M1 1C1 11 5 18 12 21C12 13 9 6 1 1Z'/%3E%3C/g%3E%3C/svg%3E");
   position: relative;
   display: flex;
   flex-direction: column;
@@ -174,22 +184,23 @@
   width: 168px;
   height: 226px;
   padding: 10px 6px 12px;
-  border: 5px solid var(--ink);
+  border: 5px solid var(--card-frame);
   border-radius: 18px;
-  background: linear-gradient(170deg, var(--cream), #f0e8c8);
+  background:
+    var(--card-sprig-tl) left 6px top 6px / 22% auto no-repeat,
+    var(--card-sprig-br) right 6px bottom 6px / 22% auto no-repeat,
+    radial-gradient(ellipse at 50% 40%, #ffffffb0, transparent 62%),
+    var(--card-leaves) 0 0 / 38px 38px,
+    linear-gradient(170deg, var(--card-bg-a), var(--card-bg-b));
   box-shadow: inset 0 0 0 5px var(--card-color), 0 8px 0 var(--forest-deep);
   color: var(--ink);
   font-family: var(--font-title);
   line-height: 1;
   user-select: none;
 }
-.cb-card--rock     { --card-color: #ef8354; }
-.cb-card--scissors { --card-color: #4f9fe0; }
-.cb-card--paper    { --card-color: #6dbd45; }
-.cb-card--skill    { --card-color: #a77be8; }
-.cb-card--finisher { --card-color: var(--gold); background: linear-gradient(170deg, #fff6cf, #ffd75e); }
-/* ★3 は枠が金色 */
-.cb-card--star3 { --card-color: var(--gold); background: linear-gradient(170deg, #fffbe6, #ffe9a8); }
+/* グー・チョキ・パー・★1〜3 は色を変えない(手は絵と名前、強さは★で見分ける) */
+.cb-card--skill    { --card-color: #a77be8; --card-frame: #4b2a7a; --card-bg-a: #f7f1ff; --card-bg-b: #e0d0ff; }
+.cb-card--finisher { --card-color: var(--gold); --card-frame: #8a5a00; --card-bg-a: #fff6cf; --card-bg-b: #ffd75e; }
 
 /* ★:ふち取り(text-stroke)は つぶれるので使わず、色と影で見せる */
 .cb-card__badge {
@@ -242,14 +253,32 @@
 
 .cb-card--used { opacity: 0.35; }
 
-/* 裏向き */
+/* 裏向き:濃い森の緑に、じゃんけんの三すくみのマーク(2026年11月16日 依頼者)。
+   マークは public/assets/card-mark.png(元は リポジトリ直下の カード用マーク.png。tools/make_card_mark.py で背景を抜いた)。
+   葉の模様は表と同じ形を 白くうすく、四すみの葉は4か所(上下さかさまでも同じに見えるように)。
+   印刷の裏面(generator/static/card/card.css の .card--back)も同じデザイン */
 .cb-card--back {
+  --back-a: #2f6b4c;            /* 真ん中(明るい) */
+  --back-b: var(--forest-deep); /* まわり(暗い) */
+  --back-leaves: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='%23fff' fill-opacity='.06'%3E%3Cpath d='M8 30C8 18 16 10 30 10C30 22 22 30 8 30Z'/%3E%3Cpath d='M33 45C33 38 37 33 45 33C45 40 41 45 33 45Z'/%3E%3C/g%3E%3C/svg%3E");
+  --back-sprigs: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 134' preserveAspectRatio='none'%3E%3Cdefs%3E%3Cg id='s' fill='%23FFE9A8' fill-opacity='.35'%3E%3Cpath d='M0 0C10 0 17 4 20 11C12 11 5 8 0 0Z'/%3E%3Cpath d='M0 0C0 10 4 17 11 20C11 12 8 5 0 0Z'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23s' x='3' y='3'/%3E%3Cuse href='%23s' transform='translate(97 3) scale(-1 1)'/%3E%3Cuse href='%23s' transform='translate(3 131) scale(1 -1)'/%3E%3Cuse href='%23s' transform='translate(97 131) scale(-1 -1)'/%3E%3C/svg%3E");
   justify-content: center;
-  background: repeating-linear-gradient(45deg, var(--moss) 0 14px, var(--forest) 14px 28px);
+  background:
+    var(--back-sprigs) 0 0 / 100% 100% no-repeat,
+    radial-gradient(circle at 50% 50%, #ffe9a826 0 22%, transparent 45%),
+    var(--back-leaves) 0 0 / 38px 38px,
+    radial-gradient(ellipse at 50% 50%, var(--back-a), var(--back-b) 80%);
   box-shadow: inset 0 0 0 5px var(--sun), 0 8px 0 var(--forest-deep);
 }
-.cb-card__back { font-size: 90px; color: var(--sun); text-shadow: 0 5px 0 var(--ink); }
-.cb-card--field .cb-card__back { font-size: 66px; }
+/* マーク:カードの幅の 62%(大きさ違いのカードでも、同じ割合で縮む)。
+   86% だと主張が強すぎた(2026年11月16日 依頼者) */
+.cb-card__back {
+  display: block;
+  width: 62%;
+  aspect-ratio: 1;
+  background: url('/assets/card-mark.png') center / contain no-repeat;
+  filter: drop-shadow(0 4px 0 #0006);
+}
 
 /* ---- 真ん中(左右のパネルの あいだ x 610〜1310) ---- */
 .cb-center {
@@ -316,14 +345,13 @@
 .cb-field__slot--player { box-shadow: 0 0 0 5px var(--leaf), 0 0 0 8px var(--ink); }
 .cb-field__slot--cpu { box-shadow: 0 0 0 5px var(--petal), 0 0 0 8px var(--ink); }
 .cb-field__empty { display: block; width: 124px; height: 166px; border: 3px solid #a6ec7c99; border-radius: 15px; background: #ffffff0f; }
-/* 相手の 裏向きのカードは ピンクの しま模様(場・じゃんけんの見せ場) */
+/* 相手の 裏向きのカードは、同じデザインで 地だけ ピンク(場・じゃんけんの見せ場。どっちのカードか わかるように) */
 .cb-field__slot--cpu .cb-card--back,
 .cb-clash__slot--cpu .cb-card--back {
-  background: repeating-linear-gradient(45deg, #e8679b 0 14px, #b8457a 14px 28px);
+  --back-a: #c4507f;
+  --back-b: #5a1734;
   box-shadow: inset 0 0 0 5px #ffd6e6, 0 8px 0 var(--forest-deep);
 }
-.cb-field__slot--cpu .cb-card__back,
-.cb-clash__slot--cpu .cb-card__back { color: var(--white); }
 /* じゃん・けん・ぽん:かけ声に合わせて 2枚がはねる */
 .cb-field--beat1 .cb-field__slot,
 .cb-field--beat3 .cb-field__slot { animation: cbBeatA 0.3s ease-out; }
@@ -425,6 +453,8 @@
 /* えらんでいないカードは 少し暗く(えらんでいるカードを目立たせる) */
 .cb-hand--choosing .cb-hand__slot:not(.cb-hand__slot--selected):not(.cb-hand__slot--pair) { filter: brightness(0.75) saturate(0.85); }
 .cb-hand--locked .cb-hand__slot { opacity: 0.55; }
+/* 山札から 引いているカードは うすくしない(CardBattle.tsx の drawFromDeck) */
+.cb-hand--locked .cb-hand__cell--drawing .cb-hand__slot { opacity: 1; }
 
 /* カーソル:少し上げて大きく、太い金のふち。光は うしろの層の透明度だけ動かす */
 /* えらんでいるカードは まっすぐに起こして、持ち上げて大きく、いちばん手前に */
@@ -827,7 +857,6 @@
 .cb-card--clash .cb-card__icon--emoji { font-size: 100px; }
 .cb-card--clash .cb-card__name { font-size: 40px; }
 .cb-card--clash.cb-card--back { box-shadow: inset 0 0 0 6px var(--sun), 0 10px 0 var(--forest-deep); }
-.cb-card--clash .cb-card__back { font-size: 130px; }
 
 /* ---- 相手のターン ---- */
 /* 相手の手札の板の ふちが光り、カードが1枚ずつ ゆれる(考えている) */
@@ -933,6 +962,13 @@
   border-bottom: 2px solid #ffe9a840;
   background: #000000a0;
 }
+/* 山札(トレイの右はし。画面の x 1650〜1790・y 850〜。HandGuide.tsx) */
+.cb-deck { position: absolute; left: 1572px; top: 74px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.cb-deck__label { font-family: var(--font-title); font-size: 18px; line-height: 1.2; color: #fff3c4cc; }
+.cb-deck__pile { position: relative; width: 124px; height: 166px; }
+/* 3枚を 少しずつ ずらして重ねる(下ほど 暗く) */
+.cb-deck__card { position: absolute; left: 0; top: 0; translate: calc(var(--i) * -4px) calc(var(--i) * -5px); box-shadow: inset 0 0 0 5px var(--sun), 0 6px 0 var(--forest-deep); }
+.cb-deck__card:not(:last-child) { filter: brightness(0.7); }
 /* 説明がないときも 案内は 右に */
 .cb-hand-zone__bar .cb-guide { margin-left: auto; }
 /* 案内の1行:いま やることを 大きく1行で */
@@ -1180,7 +1216,21 @@
 @keyframes cbPackTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
 /* ---- パック(3つ。えらんだのは GSAP で 浮いて ゆれる) ---- */
-.cb-pack-row { position: absolute; left: 0; right: 0; top: 270px; height: 460px; display: flex; justify-content: center; align-items: center; gap: 70px; }
+/* 上3・下2(幅を 3つ分にして 折り返す。下の2つは まんなか寄せ)。パックは zoom で縮める(PackOpening.tsx の PACK_ZOOM と同じ) */
+.cb-pack-row {
+  position: absolute;
+  left: 50%;
+  top: 214px;
+  width: 700px;
+  height: 660px;
+  margin-left: -350px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: 44px 68px;
+}
+.cb-pack-row .cb-pack { zoom: 0.72; }
 .cb-pack-tier-normal  { --pack-a: #3fd68a; --pack-b: #0f7a64; --pack-c: #ffe27a; }
 .cb-pack-tier-silver  { --pack-a: #f2f6ff; --pack-b: #7d8db0; --pack-c: #3d5a99; }
 .cb-pack-tier-gold    { --pack-a: #fff1a6; --pack-b: #d08a12; --pack-c: #8a3b00; }
@@ -1268,7 +1318,8 @@
 @keyframes cbPackShine { from { background-position: 120% 0; } to { background-position: -40% 0; } }
 
 /* 開けた口から せり上がる カードの束(パックの うしろ) */
-.cb-pack-stack { position: absolute; z-index: 0; left: 50%; top: 80px; width: 210px; height: 283px; margin-left: -105px; opacity: 0; }
+/* 段の まんなか(y 330)に 寄せたパックの口から せり上がる */
+.cb-pack-stack { position: absolute; z-index: 0; left: 50%; top: 180px; width: 210px; height: 283px; margin-left: -105px; opacity: 0; }
 .cb-pack-stack__card { position: absolute; inset: 0; transform: translate(calc(var(--i) * 3px), calc(var(--i) * -3px)); }
 
 /* ---- めくる5枚 ---- */

@@ -18,6 +18,8 @@ const TIERS = ['normal', 'silver', 'gold'] as const;
 
 // めくったカードの 横の間隔(px。.cb-pack-card の幅 + すきま)
 const CARD_GAP = 236;
+// えらぶあいだの パックの縮み(cardbattle.css の .cb-pack の zoom と同じ。上3・下2 の2段が 画面に入る大きさ)
+const PACK_ZOOM = 0.72;
 
 function PackFace({ index, round }: { index: number; round: number }) {
   return (
@@ -76,18 +78,29 @@ export function PackOpening({ battle }: { battle: CardBattleApi }) {
     const chosen = packs[packCursor];
     if (!chosen) return;
     const others = packs.filter((pack) => pack !== chosen);
-    const center = (choices - 1) / 2;
+    // 段(上3・下2)の まんなかへ 寄せる量:見た目の px を測り、舞台の縮みと パックの zoom で わって パックの px に直す
+    const row = chosen.parentElement;
+    let toCenter = { x: 0, y: 0 };
+    if (row) {
+      const rowBox = row.getBoundingClientRect();
+      const box = chosen.getBoundingClientRect();
+      const stage = row.offsetWidth > 0 && rowBox.width > 0 ? rowBox.width / row.offsetWidth : 1;
+      toCenter = {
+        x: (rowBox.left + rowBox.width / 2 - (box.left + box.width / 2)) / stage / PACK_ZOOM,
+        y: (rowBox.top + rowBox.height / 2 - (box.top + box.height / 2)) / stage / PACK_ZOOM,
+      };
+    }
     const tear = CARD_PACK_TEAR_MS / 1000;
     gsap.killTweensOf(packs);
     const tl = gsap.timeline();
     tl.to(others, { y: 520, rotation: (index) => (index % 2 ? 18 : -18), opacity: 0, duration: 0.35, ease: 'power2.in' }, 0)
-      .to(chosen, { x: (center - packCursor) * 330, y: -10, scale: 1.25, rotation: 0, duration: 0.35, ease: 'power3.out' }, 0.05)
+      .to(chosen, { x: toCenter.x, y: toCenter.y - 10, scale: 1.7, rotation: 0, duration: 0.35, ease: 'power3.out' }, 0.05)
       // ため:ぶるぶる ふるえて、少し つぶれる
       .to(chosen, { rotation: 4, duration: 0.25, ease: 'fx.wiggleBig' }, 0.42)
-      .to(chosen, { scaleX: 1.3, scaleY: 1.2, duration: 0.2, ease: 'power1.in' }, 0.45)
+      .to(chosen, { scaleX: 1.78, scaleY: 1.64, duration: 0.2, ease: 'power1.in' }, 0.45)
       // ビリッ:上の帯が 回りながら飛んでいく。うしろに 光の筋と フラッシュ
       .to(chosen.querySelector('.cb-pack__top'), { x: 300, y: -260, rotation: 55, opacity: 0, duration: 0.5, ease: 'power2.out' }, tear)
-      .to(chosen, { scaleX: 1.25, scaleY: 1.25, duration: 0.3, ease: 'elastic.out(1, 0.4)' }, tear)
+      .to(chosen, { scaleX: 1.7, scaleY: 1.7, duration: 0.3, ease: 'elastic.out(1, 0.4)' }, tear)
       .fromTo('.cb-pack-stage__rays', { opacity: 0, scale: 0.4, rotation: 0 }, { opacity: 1, scale: 1, rotation: 25, duration: 0.6, ease: 'power2.out' }, tear)
       .fromTo('.cb-pack-stage__flash', { opacity: 0.9 }, { opacity: 0, duration: 0.35, ease: 'power2.out' }, tear)
       .call(() => {
@@ -103,7 +116,7 @@ export function PackOpening({ battle }: { battle: CardBattleApi }) {
       }, undefined, tear)
       // 裏向きのカードが 口から せり上がり、袋は 下へ落ちる
       .fromTo('.cb-pack-stack', { y: 120, opacity: 0 }, { y: -90, opacity: 1, duration: 0.45, ease: 'back.out(1.6)' }, tear + 0.12)
-      .to(chosen, { y: 640, opacity: 0, duration: 0.5, ease: 'power2.in' }, tear + 0.3);
+      .to(chosen, { y: toCenter.y + 800, opacity: 0, duration: 0.5, ease: 'power2.in' }, tear + 0.3);
   }, { scope: rootRef, dependencies: [packStep] });
 
   // ---- めくる:5枚が まんなかの束から 横一列に広がる ----

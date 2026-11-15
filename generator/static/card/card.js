@@ -110,7 +110,8 @@ async function main() {
     fill(card);
     // 絵・ロゴ・フォントを読み終えてから印刷する(ロゴは読めなくても止めない)
     const logo = document.getElementById("card-logo");
-    await Promise.all([loadImage(card.image), document.fonts.ready, logo.decode().catch(() => {})]);
+    const mark = document.getElementById("card-mark");   // 裏面(2ページ目)のマーク
+    await Promise.all([loadImage(card.image), document.fonts.ready, logo.decode().catch(() => {}), mark.decode().catch(() => {})]);
     fitName();
     cardEl.dataset.ready = "1";
     if (params.get("print") === "1") {

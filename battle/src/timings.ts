@@ -47,7 +47,9 @@ export const PRACTICE_COACH_PAGE_MS = 6000;
 // ※ 2026年11月14日:350 / 1000ms では速すぎて わかりにくかったので のばした。そのあと 1拍を 550 → 750ms(ワンテンポ遅く)
 export const CARD_CLASH_IN_MS = 300;
 // 自分のカードを出す:決定のあと、選んだカードが 裏向きで 手札から場へ飛んで置かれる(相手の ふせる と同じ。見せ場の前の ひと呼吸)
-export const CARD_PLAYER_PLACE_MS = 800;
+// 飛んで着地するまで 約 0.6 秒、そのあと 置いたカードを 少し見せてから 見せ場へ
+// ※ 2026年11月16日:800ms では 着地してすぐ じゃんけんが始まり 速かったので のばした
+export const CARD_PLAYER_PLACE_MS = 1400;
 export const CARD_JANKEN_BEAT_MS = 750;
 export const CARD_REVEAL_MS = 1300;
 // 相手のターン:考える(手札がゆれて「カードを えらんでいる…」)→ ふせる(裏向きのカードが 場へ飛んで置かれる)
@@ -60,7 +62,8 @@ export const CARD_PLAYER_TURN_BANNER_MS = 900;
 // ダメージ:数字が飛び出して HP バーが減る
 export const CARD_DAMAGE_MS = 1400;
 // ドロー:引いたカードを見せる
-export const CARD_DRAW_MS = 800;
+// ※ 2026年11月16日:山札から引いて 大きく見せてから 手札へ入れる動き(約 1.1 秒)にしたので 800 → 1300ms
+export const CARD_DRAW_MS = 1300;
 // 合成・スキル(回復・封じ手)を使ったあと、結果を見せる
 export const CARD_SKILL_MS = 1200;
 // 回復(自分の回復カード・相手の回復):粒・✚・「+○○」・HP が数え上がる のを見せる

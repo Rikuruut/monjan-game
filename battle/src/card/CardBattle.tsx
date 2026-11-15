@@ -222,6 +222,32 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
     if (badge) tl.fromTo(badge, { scale: 2.2, rotation: -20 }, { scale: 1, rotation: 0, duration: 0.45, ease: 'elastic.out(1, 0.35)' }, 1.0);
   };
 
+  // 山札から引く(CARD_DRAW_MS の中で 約 1.1 秒):いちばん上の裏向きのカードが 浮いて 横につぶれる(めくる)→
+  // 引いたカードが 山札の位置から 表向きに ひらきながら トレイの上へ 大きく せり上がる → 少し見せる → 手札の自分の位置へ
+  const drawFromDeck = (cell: HTMLElement, deck: HTMLElement) => {
+    const scale = stageScale(cell);
+    const box = cell.getBoundingClientRect();
+    const pile = deck.getBoundingClientRect();
+    const dx = (pile.left + pile.width / 2 - (box.left + box.width / 2)) / scale;
+    const dy = (pile.top + pile.height / 2 - (box.top + box.height / 2)) / scale;
+    // 山札のカード(124×166)と 手札のカード(168×226)の 大きさの比
+    const small = 124 / 168;
+    const top = deck.querySelector('.cb-deck__card:last-child');
+    const tl = gsap.timeline();
+    if (top) {
+      tl.to(top, { y: -22, scaleX: 0, duration: 0.15, ease: 'power1.in' }, 0)
+        .set(top, { clearProps: 'transform' }, 0.16);
+    }
+    // 引いているあいだは 手札の うす暗さ(.cb-hand--locked)を かけない
+    tl.call(() => cell.classList.add('cb-hand__cell--drawing'), undefined, 0)
+      .set(cell, { zIndex: 10 }, 0)
+      .fromTo(cell, { x: dx, y: dy - 22, scaleX: 0, scaleY: small, rotation: 0, opacity: 1 }, { scaleX: small, duration: 0.12, ease: 'power1.out' }, 0.15)
+      .to(cell, { x: dx * 0.45, y: -210, scale: 1.3, duration: 0.3, ease: 'back.out(1.4)' }, 0.27)
+      .to(cell, { x: 0, y: 0, scale: 1, duration: 0.3, ease: 'power2.inOut' }, 0.92)
+      .set(cell, { clearProps: 'zIndex' })
+      .call(() => cell.classList.remove('cb-hand__cell--drawing'));
+  };
+
   useGSAP(() => {
     const section = sectionRef.current;
     if (!section) return;
@@ -268,13 +294,18 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
       duration: 0.4,
       ease: 'power3.out',
       onEnter: (drawn) => {
-        if (drawn.length) {
-          gsap.fromTo(
-            drawn,
-            { x: 260, y: 240, rotation: 28, opacity: 0 },
-            { x: 0, y: 0, rotation: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.5)', stagger: 0.08 },
-          );
+        if (!drawn.length) return;
+        // ターンのはじめの ドロー:山札から引く
+        const deck = section.closest('.cb-screen')?.querySelector<HTMLElement>('.cb-deck__pile');
+        if (view === 'draw' && deck) {
+          drawn.forEach((cell) => drawFromDeck(cell as HTMLElement, deck));
+          return;
         }
+        gsap.fromTo(
+          drawn,
+          { x: 260, y: 240, rotation: 28, opacity: 0 },
+          { x: 0, y: 0, rotation: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.5)', stagger: 0.08 },
+        );
       },
     });
   }, { scope: sectionRef, dependencies: [layoutKey] });
