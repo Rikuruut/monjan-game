@@ -8,7 +8,7 @@ import { AttackProjectile, ImpactBurst, ParticleLayer } from '../BattleEffects';
 import { HAND_META } from '../components/HandIcon';
 import { Backdrop, Logo } from '../components/Scenery';
 import { cx } from '../cx';
-import type { JankenCard } from '../game/cards';
+import { mergedFace, type JankenCard } from '../game/cards';
 import { attackFromLegacy, loadBattleConfig, type BattleConfig } from '../game/config';
 import type { BattleState, Side } from '../game/engine';
 import type { RandomSource } from '../game/logic';
@@ -22,6 +22,7 @@ import { HandInfo } from './HandInfo';
 import { useCardFx } from './useCardFx';
 import { Flip, gsap, useGSAP } from '../fx/gsap';
 import {
+  shownPair,
   skillBlockedReason,
   useCardBattle,
   type CardBattleApi,
@@ -105,14 +106,62 @@ function pairCardIds(battle: CardBattleApi): Set<string> {
 const FAN_ANGLE = 6;
 const FAN_DROP = 3;
 
-function HandRow({ battle }: { battle: CardBattleApi }) {
-  const { state, view, items, cursor, armed, mergePick, pairs, clash, notice } = battle;
+// 舞台は 画面に合わせて縮めて映しているので、見た目の px(getBoundingClientRect)を 要素の px に直す倍率
+function stageScale(el: HTMLElement): number {
+  const box = el.getBoundingClientRect();
+  return el.offsetWidth > 0 && box.width > 0 ? box.width / el.offsetWidth : 1;
+}
+
+/**
+ * 「がったい」の枠:手札の左はしに、扇形とは別に まっすぐ立てる(cardbattle.css の .cb-hand__merge-panel)。
+ * 上に「がったい!」の帯、真ん中に できあがりのカード(★が1つ上)、下に「★1 → ★2」。ペアが2組以上なら「2くみ」
+ */
+function MergePanel({ battle, index }: { battle: CardBattleApi; index: number }) {
+  const { view, cursor, armed, mergePick, pairs } = battle;
+  const pair = shownPair(battle);
+  if (!pair) return null;
+  const result = mergedFace(pair[0]);
   const choosing = view === 'player';
-  // 場に出したカードは、手札からは消して見せる(状態は 命中のところで入れかわる)。じゃんけんのあいだは「がったい!」の枠も出さない
+  // ペアをえらんでいるあいだも、枠は えらばれたまま(決定の2回目のあと)
+  const selected = choosing && index === cursor;
+  return (
+    <div className="cb-hand__merge-panel">
+      <div
+        className={cx(
+          'cb-hand__slot',
+          'cb-hand__slot--merge',
+          selected && 'cb-hand__slot--selected',
+          selected && (armed || mergePick !== null) && 'cb-hand__slot--armed',
+        )}
+        data-testid={`hand-item-${index}`}
+        aria-current={selected && mergePick === null ? 'true' : undefined}
+      >
+        <div className="cb-merge" role="img" aria-label="がったい">
+          <span className="cb-merge__label">がったい！</span>
+          <span className="cb-merge__result" aria-hidden="true">
+            <CardView card={result} size="small" />
+            <span className="cb-merge__sparkle">✨</span>
+          </span>
+          <span className="cb-merge__stars" aria-hidden="true">★{pair[0].star} → ★{result.star}</span>
+          {pairs.length > 1 && <span className="cb-merge__count">{pairs.length}くみ</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HandRow({ battle }: { battle: CardBattleApi }) {
+  const { state, view, items, cursor, armed, mergePick, pairs, clash, notice, mergeHint, mergedFrom } = battle;
+  const choosing = view === 'player';
+  // 場に出したカードは、手札からは消して見せる(状態は 命中のところで入れかわる)
   const shown = items
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => (item.kind === 'merge' ? choosing || view === 'notice' : item.card.id !== clash?.playerCard.id));
+    .filter(({ item }) => item.kind === 'card' && item.card.id !== clash?.playerCard.id);
+  // 「がったい」の枠(扇形とは別)。じゃんけんのあいだは出さない
+  const mergeIndex = items.findIndex((item) => item.kind === 'merge');
+  const showMerge = mergeIndex >= 0 && (choosing || view === 'notice' || view === 'cpu-turn');
   const highlighted = pairCardIds(battle);
+  const mergeable = new Set(pairs.flat().map((card) => card.id));
   const skillUsed = state.player.skillsUsed >= state.config.skillPerTurn;
   const newCardId = notice?.type === 'merge' ? notice.card.id : null;
 
@@ -125,15 +174,50 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
   const usedOffset = skillUsed ? 1 : 0;
 
   // ---- 動き(GSAP の Flip):並びが変わったら(出した・ドロー・合成)、のこりのカードが すべって つめる。
-  // 新しく来たカードは 右下(山札のほう)から飛んでくる。合成でできたカードは その場で ポンと出る。最初の手札は 1枚ずつ配る ----
+  // 新しく来たカードは 右下(山札のほう)から飛んでくる。最初の手札は 1枚ずつ配る。
+  // 合体は:ペアの2枚(の写し)が 枠のほうへ浮いて 回りながら重なる → 光る → できたカードが ポンと出て ★が はずむ ----
   const sectionRef = useRef<HTMLElement>(null);
-  const layoutKey = [skillUsed ? 'used' : '', ...shown.map(({ item }) => (item.kind === 'card' ? item.card.id : 'merge'))].join('|');
+  const layoutKey = [skillUsed ? 'used' : '', ...shown.map(({ item }) => (item.kind === 'card' ? item.card.id : ''))].join('|');
   const committedKeyRef = useRef<string | null>(null);
   const flipStateRef = useRef<Flip.FlipState | null>(null);
+  // 並びが変わる前の、カードごとの位置(合体した2枚の写しを 元の場所から飛ばすため)
+  const rectsRef = useRef<Map<string, DOMRect>>(new Map());
   // 描きかえる前(DOM が まだ前の並び)に、並びが変わるときだけ 位置を控える
   if (sectionRef.current && committedKeyRef.current !== null && committedKeyRef.current !== layoutKey && !flipStateRef.current) {
-    flipStateRef.current = Flip.getState(sectionRef.current.querySelectorAll('.cb-hand__cell'));
+    const cells = sectionRef.current.querySelectorAll<HTMLElement>('.cb-hand__cell');
+    flipStateRef.current = Flip.getState(cells);
+    rectsRef.current = new Map([...cells].map((cell) => [cell.dataset.flipId ?? '', cell.getBoundingClientRect()]));
   }
+
+  // 合体の演出(できたカードの枠 made に向かって、2枚の写しが寄って重なる)
+  const playMerge = (section: HTMLElement, made: Element) => {
+    const ghosts = [...section.querySelectorAll<HTMLElement>('.cb-merge-fx__card')];
+    const flash = section.querySelector('.cb-merge-fx__flash');
+    const scale = stageScale(section);
+    const base = section.getBoundingClientRect();
+    const local = (rect: DOMRect) => ({ x: (rect.left - base.left) / scale, y: (rect.top - base.top) / scale });
+    const target = local(made.getBoundingClientRect());
+    const meetY = target.y - 150;
+    const tl = gsap.timeline();
+    gsap.set(made, { opacity: 0 });
+    ghosts.forEach((ghost, i) => {
+      const from = rectsRef.current.get(mergedFrom?.[i] ?? '');
+      const start = from ? local(from) : target;
+      const side = i === 0 ? -1 : 1;
+      gsap.set(ghost, { left: 0, top: 0, x: start.x, y: start.y, rotation: 0, opacity: 1 });
+      tl.to(ghost, { x: target.x + side * 60, y: meetY, rotation: side * 12, scale: 1.08, duration: 0.3, ease: 'power2.out' }, 0)
+        .to(ghost, { x: target.x, y: meetY, rotation: side * 360, scale: 0.9, duration: 0.4, ease: 'power2.in' }, 0.32);
+    });
+    tl.to(ghosts, { opacity: 0, duration: 0.08 }, 0.72);
+    if (flash) {
+      tl.fromTo(flash, { x: target.x, y: meetY, scale: 0.2, opacity: 1 }, { scale: 2.4, opacity: 0, duration: 0.45, ease: 'power2.out' }, 0.7);
+    }
+    tl.fromTo(made, { opacity: 0, y: -150, scale: 1.5 }, { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: 'back.out(2.2)' }, 0.74);
+    // ★が「カチッ」と増える
+    const badge = made.querySelector('.cb-card__badge');
+    if (badge) tl.fromTo(badge, { scale: 2.2, rotation: -20 }, { scale: 1, rotation: 0, duration: 0.45, ease: 'elastic.out(1, 0.35)' }, 1.0);
+  };
+
   useGSAP(() => {
     const section = sectionRef.current;
     if (!section) return;
@@ -147,16 +231,14 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
     const state = flipStateRef.current;
     flipStateRef.current = null;
     if (!state) return;
+    // 合体でできたカードは Flip に まかせず、合体の演出の中で 出す(Flip が 先に見せてしまうので)
+    const made = [...cells].find((cell) => cell.querySelector('.cb-hand__slot--new'));
+    if (made) playMerge(section, made);
     Flip.from(state, {
-      targets: cells,
+      targets: [...cells].filter((cell) => cell !== made),
       duration: 0.4,
       ease: 'power3.out',
-      onEnter: (entered) => {
-        const made = entered.filter((cell) => cell.querySelector('.cb-hand__slot--new'));
-        const drawn = entered.filter((cell) => !made.includes(cell));
-        if (made.length) {
-          gsap.fromTo(made, { y: -90, scale: 1.6, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.55, ease: 'back.out(2.4)' });
-        }
+      onEnter: (drawn) => {
         if (drawn.length) {
           gsap.fromTo(
             drawn,
@@ -177,43 +259,53 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
     gsap.fromTo(card, squash, { scaleX: 1, scaleY: 1, duration: armed ? 0.5 : 0.35, ease: 'elastic.out(1, 0.4)' });
   }, { scope: sectionRef, dependencies: [cursor, armed, choosing] });
 
+  // 合体に気づかせる:新しいペアができたターンの はじめ、枠が ぴょんぴょん はねる
+  useGSAP(() => {
+    if (!mergeHint) return;
+    const panel = sectionRef.current?.querySelector('.cb-merge');
+    if (!panel) return;
+    gsap.timeline({ delay: 0.2 })
+      .to(panel, { y: -34, scaleX: 0.94, scaleY: 1.06, duration: 0.2, ease: 'power2.out', repeat: 3, yoyo: true })
+      .to(panel, { scaleX: 1.08, scaleY: 0.92, duration: 0.06 })
+      .to(panel, { y: 0, scaleX: 1, scaleY: 1, duration: 0.4, ease: 'elastic.out(1, 0.4)' });
+  }, { scope: sectionRef, dependencies: [mergeHint] });
+
   const slotFor = ({ item, index }: { item: HandItem; index: number }, position: number) => {
+    if (item.kind !== 'card') return null;
+    const { card } = item;
     const selected = choosing && mergePick === null && index === cursor;
-    const card = item.kind === 'card' ? item.card : null;
-    const key = card ? card.id : 'merge';
     return (
       // 外の枠(.cb-hand__cell)は 並びの位置だけ(Flip が動かす)。中の .cb-hand__slot が 扇形の傾き・持ち上げ(CSS)
-      <div key={key} className="cb-hand__cell" data-flip-id={key}>
-      <div
-        style={fan(position + usedOffset)}
-        className={cx(
-          'cb-hand__slot',
-          !card && 'cb-hand__slot--merge',
-          selected && 'cb-hand__slot--selected',
-          selected && armed && 'cb-hand__slot--armed',
-          card && highlighted.has(card.id) && 'cb-hand__slot--pair',
-          card && card.id === newCardId && 'cb-hand__slot--new',
-          card && skillBlockedReason(state, card) && 'cb-hand__slot--blocked',
-        )}
-        data-testid={`hand-item-${index}`}
-        aria-current={selected ? 'true' : undefined}
-      >
-        {card ? (
+      <div key={card.id} className="cb-hand__cell" data-flip-id={card.id}>
+        <div
+          style={fan(position + usedOffset)}
+          className={cx(
+            'cb-hand__slot',
+            selected && 'cb-hand__slot--selected',
+            selected && armed && 'cb-hand__slot--armed',
+            highlighted.has(card.id) && 'cb-hand__slot--pair',
+            card.id === newCardId && 'cb-hand__slot--new',
+            skillBlockedReason(state, card) && 'cb-hand__slot--blocked',
+          )}
+          data-testid={`hand-item-${index}`}
+          aria-current={selected ? 'true' : undefined}
+        >
           <CardView card={card} />
-        ) : (
-          <div className="cb-merge" role="img" aria-label="がったい">
-            <span className="cb-merge__icon" aria-hidden="true">✨</span>
-            <span className="cb-merge__label">がったい！</span>
-            <span className="cb-merge__count">{pairs.length}くみ</span>
-          </div>
-        )}
-      </div>
+          {/* 合体できるカードには いつも小さな札(どれと どれが がったいできるかが わかる) */}
+          {choosing && mergeable.has(card.id) && <span className="cb-pair-tag" aria-label="がったい できる">✨</span>}
+        </div>
       </div>
     );
   };
 
+  // 合体の写し:合体した2枚(★が1つ下の 同じ手)を、演出のあいだだけ 手札の上に出す
+  const mergeGhost = notice?.type === 'merge' && mergedFrom
+    ? { ...notice.card, star: Math.max(1, notice.card.star - 1) as JankenCard['star'] }
+    : null;
+
   return (
     <section ref={sectionRef} className={cx('cb-hand', choosing ? 'cb-hand--choosing' : 'cb-hand--locked')} aria-label="じぶんの てふだ">
+      {showMerge && <MergePanel battle={battle} index={mergeIndex} />}
       {/* スキルを使ったターンは、置き場所が「しようずみ」になる */}
       {skillUsed && (
         <div className="cb-hand__cell" data-flip-id="used">
@@ -223,6 +315,13 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
         </div>
       )}
       {shown.map((entry, position) => slotFor(entry, position))}
+      {mergeGhost && (
+        <div className="cb-merge-fx" aria-hidden="true">
+          <div className="cb-merge-fx__card"><CardView card={mergeGhost} /></div>
+          <div className="cb-merge-fx__card"><CardView card={mergeGhost} /></div>
+          <span className="cb-merge-fx__flash" />
+        </div>
+      )}
     </section>
   );
 }

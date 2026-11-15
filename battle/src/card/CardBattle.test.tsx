@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Card, JankenCard } from '../game/cards';
 import { DEFAULT_BATTLE_CONFIG } from '../game/config';
@@ -15,6 +15,8 @@ import {
   CARD_FINISHER_ATTACK_MS,
   CARD_HEAL_MS,
   CARD_JANKEN_BEAT_MS,
+  CARD_MERGE_HINT_MS,
+  CARD_MERGE_MS,
   CARD_PLAYER_TURN_BANNER_MS,
   CARD_REVEAL_MS,
   CARD_SKILL_MS,
@@ -280,14 +282,18 @@ describe('カードバトル:合成', () => {
     press('ArrowLeft');
     press('ArrowLeft');
     expect(cursorIndex()).toBe(0);
-    expect(info()).toContain('おなじ カード 2まいで');
+    // 枠には できあがり(グー★3)と ★2 → ★3、説明パネルには 式と ダメージの くらべ
+    expect(within(screen.getByLabelText('がったい')).getByLabelText('グー ★3')).toBeInTheDocument();
+    expect(screen.getByLabelText('がったい')).toHaveTextContent('★2 → ★3');
+    expect(screen.getByRole('img', { name: 'グー ★2 2まいで グー ★3' })).toBeInTheDocument();
+    expect(info()).toMatch(/かつと \d+ → \d+ ダメージ！/);
     expect(handItems().filter((item) => item.className.includes('cb-hand__slot--pair'))).toHaveLength(2);
     press('Enter');
-    expect(guide()).toBe('● を もういちど おすと がったい するよ！');
+    expect(guide()).toBe('● もういちど で がったい！ ターンは つづくよ');
     press('Enter');
     expect(screen.getByText('がったい！')).toBeInTheDocument();
     expect(screen.getByText('グー ★3 に なった')).toBeInTheDocument();
-    wait(CARD_SKILL_MS);
+    wait(CARD_MERGE_MS);
     // ペアがなくなったので 枠も消える。合成したカードに カーソル
     expect(screen.queryByLabelText('がったい')).not.toBeInTheDocument();
     expect(handItems()).toHaveLength(3);
@@ -302,13 +308,18 @@ describe('カードバトル:合成', () => {
     press('ArrowLeft');
     press('Enter');
     press('Enter');
-    expect(info()).toContain('どれを がったいする？');
-    expect(screen.getByRole('option', { name: 'グー ★1 × 2' })).toHaveAttribute('aria-selected', 'true');
+    // 1組め:説明パネルに その式と「1/2」、手札では その2枚だけが 持ち上がる。枠も そのペアの できあがり
+    expect(info()).toContain('どれを がったいする？ 1/2');
+    expect(screen.getByRole('img', { name: 'グー ★1 2まいで グー ★2' })).toBeInTheDocument();
+    expect(handItems().filter((item) => item.className.includes('cb-hand__slot--pair'))).toHaveLength(2);
+    expect(guide()).toBe('◀ ▶ で くみを えらんで ● で がったい');
     press('ArrowRight');
+    expect(screen.getByRole('img', { name: 'パー ★2 2まいで パー ★3' })).toBeInTheDocument();
+    expect(within(screen.getByLabelText('がったい')).getByLabelText('パー ★3')).toBeInTheDocument();
     press('ArrowRight');
-    expect(screen.getByRole('option', { name: 'やめる' })).toHaveAttribute('aria-selected', 'true');
+    expect(info()).toContain('がったいを やめる');
     press('Enter');
-    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(info()).not.toContain('がったいを やめる');
     expect(handItems()).toHaveLength(5);
 
     // もういちど:2組めの パー★2 を合成
@@ -317,6 +328,16 @@ describe('カードバトル:合成', () => {
     press('ArrowRight');
     press('Enter');
     expect(screen.getByText('パー ★3 に なった')).toBeInTheDocument();
+  });
+
+  it('新しいペアができたターンの はじめは「がったい できるよ!」と知らせ、合体できるカードには ✨ の札', () => {
+    renderBattle({ setup: withHands([janken('a', 'rock', 1), janken('b', 'rock', 1), janken('c', 'paper', 1)], cpu) });
+    expect(guide()).toBe('✨ がったい できるよ！ ひだりはしを みてね');
+    expect(screen.getAllByLabelText('がったい できる')).toHaveLength(2);
+    // ペアのカードの説明にも 合体できることを出す
+    expect(info()).toContain('✨ ひだりの がったい で ★アップ！');
+    wait(CARD_MERGE_HINT_MS);
+    expect(guide()).toBe(GUIDE_PICK);
   });
 });
 

@@ -31,6 +31,8 @@ import {
   CARD_FINISHER_DRAW_MS,
   CARD_HEAL_MS,
   CARD_JANKEN_BEAT_MS,
+  CARD_MERGE_HINT_MS,
+  CARD_MERGE_MS,
   CARD_PLAYER_TURN_BANNER_MS,
   CARD_REVEAL_MS,
   CARD_SKILL_MS,
@@ -117,6 +119,13 @@ export function handItems(hand: Card[]): HandItem[] {
   return mergeablePairs(hand).length > 0 ? [{ kind: 'merge' }, ...cards] : cards;
 }
 
+/** 「がったい」の枠に見せるペア(ペアえらびの途中は えらんでいるペア、ほかは 1組目) */
+export function shownPair(battle: { pairs: [JankenCard, JankenCard][]; mergePick: number | null }): [JankenCard, JankenCard] | null {
+  const { pairs, mergePick } = battle;
+  if (mergePick !== null && mergePick < pairs.length) return pairs[mergePick];
+  return pairs[0] ?? null;
+}
+
 /** カーソルの最初の位置:じゃんけんカードの先頭(なければ 必殺技、それもなければ 0) */
 export function itemCursor(items: HandItem[]): number {
   const janken = items.findIndex((item) => item.kind === 'card' && isJanken(item.card));
@@ -170,6 +179,8 @@ export function useCardBattle({
   // 合成できるペアが2組以上のとき、どれを合成するかを えらんでいる(0 から。ペアの数 = やめる)
   const [mergePick, setMergePick] = useState<number | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // いま合体した2枚の id(合体の演出で、手札から 枠へ寄せる)。次の合体まで残す
+  const [mergedFrom, setMergedFrom] = useState<[string, string] | null>(null);
   const [clash, setClash] = useState<Clash | null>(null);
   // じゃん(1)・けん(2)・ぽん(3)
   const [beat, setBeat] = useState(0);
@@ -187,6 +198,23 @@ export function useCardBattle({
 
   const items = handItems(state.player.hand);
   const pairs = mergeablePairs(state.player.hand);
+
+  // 合体に気づかせる:自分のターンに入ったとき、前のターンにはなかったペアが できていたら、
+  // 少しのあいだ「がったい」の枠を はずませて、案内の1行を「がったい できるよ!」にする(操作は止めない)
+  const [mergeHint, setMergeHint] = useState(false);
+  const seenPairsRef = useRef<Set<string>>(new Set());
+  const prevViewRef = useRef<CardBattleView>(view);
+  useEffect(() => {
+    const entered = view === 'player' && prevViewRef.current === 'cpu-turn';
+    prevViewRef.current = view;
+    if (!entered) return;
+    const keys = new Set(pairs.map(([card]) => `${card.hand}-${card.star}`));
+    const fresh = [...keys].some((key) => !seenPairsRef.current.has(key));
+    seenPairsRef.current = keys;
+    if (!fresh) return;
+    setMergeHint(true);
+    schedule(() => setMergeHint(false), CARD_MERGE_HINT_MS);
+  }, [view]);
 
   // 手札が変わったあと:カーソルを id のカードに(なければ じゃんけんカードの先頭に)
   const placeCursor = (next: BattleState, cardId?: string) => {
@@ -371,7 +399,7 @@ export function useCardBattle({
     schedule(() => {
       setNotice(null);
       setView('player');
-    }, shown.type === 'heal' ? CARD_HEAL_MS : CARD_SKILL_MS);
+    }, shown.type === 'heal' ? CARD_HEAL_MS : shown.type === 'merge' ? CARD_MERGE_MS : CARD_SKILL_MS);
   };
 
   // 合成:同じ手・同じ★の2枚を、★が1つ上の1枚に(スキルの枠は使わない)
@@ -380,6 +408,9 @@ export function useCardBattle({
     const event = step.events.find((item) => item.type === 'merge');
     if (!event || event.type !== 'merge') return;
     playSound('card-get');
+    setMergeHint(false);
+    // 合体の演出(2枚が 枠へ寄って重なる)が どの2枚かを知るため
+    setMergedFrom(pair.map((card) => card.id) as [string, string]);
     showNotice(step.state, { type: 'merge', card: event.card }, event.card.id);
   };
 
@@ -412,6 +443,9 @@ export function useCardBattle({
     setFinisherHit(false);
     setBeat(0);
     setTurnBanner(false);
+    setMergeHint(false);
+    setMergedFrom(null);
+    seenPairsRef.current = new Set();
     playSound('start');
     startCpuTurn();
   };
@@ -537,6 +571,8 @@ export function useCardBattle({
     rendanWinner,
     drawn,
     turnBanner,
+    mergeHint,
+    mergedFrom,
     cpuStep,
     chargeNote,
     finisherHit,

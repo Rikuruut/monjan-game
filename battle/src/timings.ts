@@ -65,6 +65,10 @@ export const CARD_SKILL_MS = 1200;
 export const CARD_HEAL_MS = 1800;
 // 回復で HP の数字が 数え上がる時間
 export const CARD_HP_COUNT_MS = 800;
+// 合体:ペアの2枚が 枠へ寄って 回りながら重なる → できたカードが ポンと出る(設計書8章「合成 約1.5秒」)
+export const CARD_MERGE_MS = 1500;
+// 合体に気づかせる:新しいペアができたターンの はじめ、枠が はずんで 案内の1行が「がったい できるよ!」になる時間
+export const CARD_MERGE_HINT_MS = 2200;
 // ドローで必殺技のカードが来たときは、長めに見せる
 export const CARD_FINISHER_DRAW_MS = 1400;
 // カードバトルの攻撃:勝った側が前へ出て、飛び道具が飛ぶ(main の攻撃と同じ長さ)。必殺技は ためを長く

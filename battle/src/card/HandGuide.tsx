@@ -23,11 +23,13 @@ export function handGuide(battle: CardBattleApi): string | null {
     default:
       return 'しょうぶ！';
   }
-  if (mergePick !== null) return '◀ ▶ で えらんで ● で がったい';
+  if (mergePick !== null) return '◀ ▶ で くみを えらんで ● で がったい';
   const item = items[cursor];
   if (item?.kind === 'card' && skillBlockedReason(state, item.card)) return 'この カードは いま つかえないよ';
+  // 新しくペアができたターンの はじめ:合体できることを 知らせる(少しのあいだ)
+  if (!armed && battle.mergeHint && item?.kind !== 'merge') return '✨ がったい できるよ！ ひだりはしを みてね';
   if (!armed) return '◀ ▶ で えらんで ● で けってい';
-  if (item?.kind === 'merge') return '● を もういちど おすと がったい するよ！';
+  if (item?.kind === 'merge') return '● もういちど で がったい！ ターンは つづくよ';
   if (item?.kind === 'card' && item.card.kind === 'skill') return '● を もういちど おすと つかうよ！';
   return '● を もういちど おすと だすよ！';
 }
