@@ -11,7 +11,7 @@ import logging
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
@@ -19,6 +19,8 @@ from .env import env_str
 from .openai_client import allow_person, get_client, is_dry_run
 from .pricing import format_cost, read_usage
 from .prompts import (
+    COMMON_BACKGROUND_PLACES,
+    COMMON_BACKGROUND_RATIO,
     FUSION_PARTS,
     FUSION_STYLES,
     FUSION_TYPES,
@@ -27,15 +29,19 @@ from .prompts import (
     STAGING_OPTIONS,
     ElementName,
     background_place_candidates,
+    background_place_group,
     build_describe_instructions,
     build_describe_prompt,
     build_name_test_prompt,
     build_quick_check_instructions,
     build_recognize_instructions,
     build_recognize_prompt,
+    common_background_place_candidates,
     fusion_part_candidates,
     fusion_part_place,
     pose_candidates,
+    scene_candidates,
+    scene_tone,
     sub_part_candidates,
     weapon_part,
 )
@@ -138,22 +144,54 @@ def _set_fusion_part(design_plan: dict[str, Any], animal: str, part: str) -> Non
     )
 
 
-# 直前に選んだ時間帯・天気と、背景の場所(同じものが続かないようにするため)
-_last_scene: str | None = None
-_last_background_place: str | None = None
+# 背景の袋(候補の並び → まだ出していない候補)と、直前に選んだ時間帯の色・場所の系統。
+# 同じ色・系統が続かないようにするため(サーバーを再起動すると忘れる)
+_background_bags: dict[tuple[str, ...], list[str]] = {}
+_last_scene_tone: str | None = None
+_last_place_group: str | None = None
 
 
-def choose_staging(poses: list[str] | None = None) -> dict[str, str]:
+def _draw_from_bag(
+    pool: list[str], group_of: Callable[[str], str], last_group: str | None,
+    allowed: list[str] | None = None,
+) -> str:
+    """候補を袋に入れて1つずつ取り出す。袋が空になるまで(一巡するまで)同じものは出さない。
+
+    直前と同じ系統(`group_of` の値が `last_group`)は選ばない。袋の残りがその系統だけなら、
+    残りを捨てて新しい一巡を始める(候補ぜんぶがその系統なら、しかたなく選ぶ)。
+    `allowed` を渡すと、袋の中でもそれに入っているものだけを選ぶ(入っていないものは袋に残る)。
+    ※ 2026年11月16日:「直前と同じものだけ避ける」では、霧の朝 → 雷の嵐 のように、
+      言葉はちがっても見た目の似た色・場所が続いた(prompts.BACKGROUND_PLACES のコメント参照)
+    """
+    usable = set(pool if allowed is None else allowed)
+    left = _background_bags.get(tuple(pool))
+    if not left:
+        left = _background_bags[tuple(pool)] = list(pool)
+    choices = [x for x in left if x in usable and group_of(x) != last_group]
+    if not choices:
+        left[:] = list(pool)
+        choices = ([x for x in left if x in usable and group_of(x) != last_group]
+                   or [x for x in left if x in usable] or left)
+    pick = random.choice(choices)
+    left.remove(pick)
+    return pick
+
+
+def choose_staging(poses: list[str] | None = None, scenes: list[str] | None = None) -> dict[str, str]:
     """演出(ポーズ・視点・表情・時間帯と天気)を、項目ごとにランダムに1つずつ選ぶ。
 
     大きな方向だけを決め、中身は判定と画像モデルにまかせる(prompts.STAGING_OPTIONS のコメント参照)。
-    時間帯・天気は背景の色を大きく変えるので、直前と同じものは選ばない。
+    時間帯・天気は背景の色を大きく変えるので、袋から取り出し、直前と同じ色の系統(prompts.SCENE_TONES)は選ばない。
+    `scenes` は背景の場所に合う時間帯・天気(prompts.scene_candidates)。空のリストなら時間帯を付けない("")。
     """
-    global _last_scene
+    global _last_scene_tone
     staging = {key: random.choice(options) for key, options in STAGING_OPTIONS.items()}
     # ポーズは、取り込む場所や動物に合う候補から選ぶ(前足の回・水の中の動物:prompts.pose_candidates)
     staging["pose"] = random.choice(poses or STAGING_OPTIONS["pose"])
-    staging["scene"] = _last_scene = _pick_avoiding(STAGING_OPTIONS["scene"], _last_scene)
+    pool = STAGING_OPTIONS["scene"] if scenes is None else scenes
+    staging["scene"] = _draw_from_bag(pool, scene_tone, _last_scene_tone) if pool else ""
+    if staging["scene"]:
+        _last_scene_tone = scene_tone(staging["scene"])
     return staging
 
 
@@ -161,14 +199,22 @@ def choose_background_place(animal: str) -> str:
     """背景の場所を1つ選ぶ(短いプロンプト用。prompts.BACKGROUND_PLACES のコメント参照)。
 
     `.env` の BACKGROUND に場所の言葉(例:森)があれば、それに固定する(比べるとき用)。
-    なければ、その動物のすみかの中からランダムに選ぶ。直前と同じ場所は選ばない。
+    なければ、その動物のすみかと共通の場所を半分ずつ(prompts.COMMON_BACKGROUND_RATIO)選び、
+    それぞれ袋から取り出す。直前と同じ系統(prompts.BACKGROUND_PLACE_INFO)の場所は選ばない。
+    共通の場所の袋は、すべての動物で1つ(その動物のすみかと重なるものは、選ばずに袋に残す)。
+    ※ 2026年11月16日:袋を動物ごとに分けていたら、試しの8枚(動物はすべてちがう)で「浮島」が2回出た
     """
-    global _last_background_place
+    global _last_place_group
     fixed = env_str("BACKGROUND")
     if fixed:
         return fixed
-    _last_background_place = _pick_avoiding(background_place_candidates(animal), _last_background_place)
-    return _last_background_place
+    common = common_background_place_candidates(animal)
+    if common and random.random() < COMMON_BACKGROUND_RATIO:
+        place = _draw_from_bag(COMMON_BACKGROUND_PLACES, background_place_group, _last_place_group, common)
+    else:
+        place = _draw_from_bag(background_place_candidates(animal), background_place_group, _last_place_group)
+    _last_place_group = background_place_group(place)
+    return place
 
 
 @dataclass
@@ -211,11 +257,13 @@ def choose_plan(animal: str, simple: bool) -> Plan:
     style = choose_fusion_style()
     main = weapon_part(animal) if style == "weapon" else choose_fusion_part(animal)
     subs = sub_part_candidates(animal, main)
+    # 場所を先に選び、その場所に合う時間帯・天気を選ぶ(雪の降る日のジャングル・星空の洞くつ などにしない)
+    place = choose_background_place(animal)
     return Plan(
         fusion_type="",
         fusion_part=main,
-        staging=choose_staging(pose_candidates(animal, main)),
-        background_place=choose_background_place(animal),
+        staging=choose_staging(pose_candidates(animal, main), scene_candidates(place)),
+        background_place=place,
         fusion_style=style,
         sub_fusion_part=random.choice(subs) if subs else "",
     )

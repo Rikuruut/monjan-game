@@ -4,19 +4,27 @@ import pytest
 
 from app import recognizer
 from app.prompts import (
+    AQUATIC_ANIMALS,
+    BACKGROUND_PLACE_INFO,
     BACKGROUND_PLACES,
+    COMMON_BACKGROUND_PLACES,
     DEFAULT_BACKGROUND_PLACES,
     STAGING_OPTIONS,
+    PLACES_WITHOUT_SCENE,
+    background_place_group,
+    background_text,
     build_describe_prompt,
     build_image_prompt,
+    scene_tone,
 )
 
 
 @pytest.fixture(autouse=True)
 def fresh_choice(monkeypatch):
     # 直前に選んだものを忘れた状態から始める
-    monkeypatch.setattr(recognizer, "_last_scene", None)
-    monkeypatch.setattr(recognizer, "_last_background_place", None)
+    monkeypatch.setattr(recognizer, "_background_bags", {})
+    monkeypatch.setattr(recognizer, "_last_scene_tone", None)
+    monkeypatch.setattr(recognizer, "_last_place_group", None)
     monkeypatch.delenv("BACKGROUND", raising=False)
 
 
@@ -31,27 +39,86 @@ def test_simple_prompt_has_one_background_line():
     plan, design_plan, prompt = simple_prompt()
     lines = [line for line in prompt.splitlines() if line.startswith("背景は")]
     assert len(lines) == 1
-    assert f"「{plan.staging['scene']}の{plan.background_place}」" in lines[0]
+    assert f"「{background_text(plan.staging['scene'], plan.background_place)}」" in lines[0]
     assert design_plan["background_place"] == plan.background_place
 
 
-def test_place_comes_from_animal_habitat():
+def test_place_comes_from_habitat_or_common():
+    allowed = set(BACKGROUND_PLACES["ペンギン"]) | set(COMMON_BACKGROUND_PLACES)
+    for _ in range(40):
+        assert recognizer.choose_plan("ペンギン", simple=True).background_place in allowed
+
+
+def test_habitat_and_common_are_about_half_each():
+    # 依頼者が決めた:すみかと共通の場所を半分ずつ(2026年11月16日)
+    habitat = set(BACKGROUND_PLACES["ライオン"])
+    picks = [recognizer.choose_plan("ライオン", simple=True).background_place for _ in range(400)]
+    ratio = sum(p in habitat for p in picks) / len(picks)
+    assert 0.35 < ratio < 0.65
+
+
+def test_unknown_animal_uses_default_or_common_places():
+    allowed = set(DEFAULT_BACKGROUND_PLACES) | set(COMMON_BACKGROUND_PLACES)
     for _ in range(20):
-        assert recognizer.choose_plan("ペンギン", simple=True).background_place in BACKGROUND_PLACES["ペンギン"]
+        assert recognizer.choose_plan("カピバラ", simple=True).background_place in allowed
 
 
-def test_unknown_animal_uses_default_places():
-    assert recognizer.choose_plan("カピバラ", simple=True).background_place in DEFAULT_BACKGROUND_PLACES
+def test_aquatic_animal_never_uses_common_places():
+    for animal in AQUATIC_ANIMALS:
+        for _ in range(30):
+            assert recognizer.choose_plan(animal, simple=True).background_place in BACKGROUND_PLACES[animal]
 
 
-def test_same_place_and_scene_do_not_repeat():
+def test_same_place_group_and_scene_tone_do_not_repeat():
+    # 言葉がちがっても、見た目の似た系統(霧の朝 → 雷の嵐 など)が続かないようにする
     previous = recognizer.choose_plan("ライオン", simple=True)
-    for _ in range(30):
+    for _ in range(60):
         plan = recognizer.choose_plan("ライオン", simple=True)
-        assert plan.background_place != previous.background_place
-        assert plan.staging["scene"] != previous.staging["scene"]
-        assert plan.staging["scene"] in STAGING_OPTIONS["scene"]
+        assert background_place_group(plan.background_place) != background_place_group(previous.background_place)
+        if plan.staging["scene"] and previous.staging["scene"]:
+            assert scene_tone(plan.staging["scene"]) != scene_tone(previous.staging["scene"])
+        assert plan.staging["scene"] in STAGING_OPTIONS["scene"] or plan.background_place in PLACES_WITHOUT_SCENE
         previous = plan
+
+
+def test_every_scene_appears_within_two_rounds():
+    # 袋から取り出すので、候補の数の2倍まわせば、どの時間帯も1回は出る(ランダムの偏りで出ないことがない)
+    scenes = {recognizer.choose_staging()["scene"] for _ in range(len(STAGING_OPTIONS["scene"]) * 2)}
+    assert scenes == set(STAGING_OPTIONS["scene"])
+
+
+def test_scene_fits_the_place():
+    # 「合わなければ、近い景色でよい」を外したので、合わない組み合わせ(雪のジャングル・星空の洞くつ)は選ばない
+    for animal in ("ゾウ", "ワニ", "ティラノサウルス", "サメ", "ウサギ"):
+        for _ in range(80):
+            plan = recognizer.choose_plan(animal, simple=True)
+            scene, place = plan.staging["scene"], plan.background_place
+            if place in PLACES_WITHOUT_SCENE:
+                assert scene == ""
+            else:
+                assert scene in STAGING_OPTIONS["scene"]
+            assert not (scene == "雪の降る日" and place in ("ジャングル", "砂漠", "火山", "サバンナ"))
+
+
+def test_gloomy_scenes_are_removed():
+    # 雷・雨・霧で画面全体が暗い灰色になり、どの絵も似て見えた(2026年11月16日)
+    assert not [s for s in STAGING_OPTIONS["scene"] if "嵐" in s or "雷" in s or "霧" in s]
+
+
+def test_every_place_has_group_and_highlight():
+    places = set(COMMON_BACKGROUND_PLACES) | set(DEFAULT_BACKGROUND_PLACES)
+    for habitat in BACKGROUND_PLACES.values():
+        places |= set(habitat)
+    for place in places:
+        group, highlight = BACKGROUND_PLACE_INFO[place]
+        assert group and highlight
+        # 見どころに、いつもの小物(岩・霧・滝)と文字の入りそうな物を書かない
+        for word in ("霧", "滝", "町", "建物", "遺跡", "看板"):
+            assert word not in highlight and word not in place
+
+
+def test_common_places_cover_many_groups():
+    assert len({background_place_group(p) for p in COMMON_BACKGROUND_PLACES}) >= 7
 
 
 def test_background_can_be_fixed(monkeypatch):
@@ -137,3 +204,12 @@ def test_fusion_line_uses_only_the_object_part():
 def test_fusion_line_without_part_uses_whole_object():
     prompt = build_image_prompt("ライオン", "はさみ", "", {"fusion_part": "jaw", "staging": {}}, prompt_style="simple")
     assert "「口・あご」そのものが、はさみに作り変わった" in prompt and "だけを使い" not in prompt
+
+
+def test_common_places_do_not_repeat_across_animals(monkeypatch):
+    # 共通の場所の袋は全部の動物で1つ(動物ごとだと、試しの8枚で「浮島」が2回出た。2026年11月16日)
+    monkeypatch.setattr(recognizer, "COMMON_BACKGROUND_RATIO", 1.0)
+    animals = ["ライオン", "ゴリラ", "ゾウ", "ワニ", "ティラノサウルス", "鷹", "ペンギン", "ウサギ"]
+    picks = [recognizer.choose_plan(a, simple=True).background_place for a in animals]
+    assert len(set(picks)) == len(picks)
+    assert all(p in COMMON_BACKGROUND_PLACES and p not in BACKGROUND_PLACES[a] for p, a in zip(picks, animals))

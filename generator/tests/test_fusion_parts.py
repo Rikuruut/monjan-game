@@ -137,10 +137,13 @@ def test_aquatic_animal_swims(monkeypatch):
     assert places == set(BACKGROUND_PLACES["サメ"]) and all("海" in p for p in places)
 
 
-def test_land_animal_background_line_unchanged(monkeypatch):
-    _, _, prompt = plan_and_prompt("ライオン", "body", monkeypatch)
+def test_land_animal_background_line_has_highlight(monkeypatch):
+    # 陸の動物は、場所の見どころを添える(「合わなければ、近い景色でよい」は 2026年11月16日に外した)
+    from app.prompts import BACKGROUND_PLACE_INFO
+    plan, _, prompt = plan_and_prompt("ライオン", "body", monkeypatch)
     [line] = [line for line in prompt.splitlines() if line.startswith("背景は")]
-    assert line.endswith("(合わなければ、近い景色でよい)。") and "泳いで" not in line
+    assert line.endswith(f"({BACKGROUND_PLACE_INFO[plan.background_place][1]})。")
+    assert "泳いで" not in line and "近い景色" not in line
 
 
 def test_quick_check_asks_for_shapeable_part_first():

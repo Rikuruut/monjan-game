@@ -385,17 +385,34 @@ STAGING_OPTIONS: dict[str, list[str]] = {
     # ※ 2026年11月2日:夜の候補を減らした。それまでは8つのうち4つ(月夜・満天の星空・雪の降る夜・雷の鳴る嵐)が暗い場面で、
     #   試した4枚のうち3枚が夜になり、夜の絵にはどれも大きな満月が描かれた(新しい「いつもの絵」になりかけた)。
     #   月を思わせる「月夜」を外し、「雪の降る夜」は昼の雪にした。夜は「満天の星空」だけ
+    # ※ 2026年11月16日:「背景が似ていて偏っている」と指摘された(依頼者の友人)。8件のうち 雷の鳴る嵐3・霧の立ちこめる朝2・
+    #   満天の星空2 で、雷・雨・霧で画面全体が暗い灰色になり、場所がちがっても同じ絵に見えた。
+    #   嵐と霧を外し、明るい・暖かい色の候補を多くした。色の系統は SCENE_TONES(直前と同じ系統を続けない)
+    #   変更前は archive/20261116_before_background_variety/
     "scene": [
         "朝焼け",
         "昼の青空",
         "夕焼け",
-        "霧の立ちこめる朝",
         "雪の降る日",
         "雨上がりの虹",
-        "雷の鳴る嵐",
         "満天の星空",
     ],
 }
+
+# 時間帯・天気の色の系統(暖・明・寒・暗)。直前と同じ系統は続けない(recognizer.choose_staging)
+SCENE_TONES: dict[str, str] = {
+    "朝焼け": "暖",
+    "夕焼け": "暖",
+    "昼の青空": "明",
+    "雨上がりの虹": "明",
+    "雪の降る日": "寒",
+    "満天の星空": "暗",
+}
+
+
+def scene_tone(scene: str) -> str:
+    """時間帯・天気の色の系統。一覧にないものは、その言葉自身を系統にする。"""
+    return SCENE_TONES.get(scene, scene)
 
 # 前足(arm)に物を取り込む回では選ばないポーズ
 # ※ 2026年11月2日:前足を武器にして「振り返りざまに技を放つ」で描いたら、武器の前足を振り上げたうえに、
@@ -803,34 +820,134 @@ def fusion_line(animal: str, object_name: str, design_plan: dict) -> str:
 #   書くのは「時間帯・天気の場所」の2語だけ(例:月夜の森)。複雑な指示を足すと、物の取り込みが不正確になったため。
 #   場所は、依頼者の基本「背景はモンスターに合うもの」に合わせて、動物のすみかから選ぶ。
 #   時間帯・天気は STAGING_OPTIONS["scene"] から選ぶ。
-#   町・建物は入れない(看板などの文字が描かれやすいため)。
+#   町・建物・遺跡は入れない(看板などの文字が描かれやすいため)。
+#
+# ※ 2026年11月16日:「背景が似ていて偏っている」と指摘された(依頼者の友人)。場所の言葉はちがうのに、どの絵も
+#   「下からのあおり・足元に苔の岩場・左右に木や崖・遠くに霧と崖・滝」で、色も暗い灰色が多かった
+#   (ワニ×ジャングル・ゾウ×川辺・ゴリラ×森・ティラノ×岩山。滝は4枚中3枚)。
+#   2語だと「何の場所か」しか伝わらず、足元や遠景の小物は画像モデルのいつもの形に戻るため、次のようにした。
+#   - 場所ごとに短い「見どころ」を1つ持たせ、背景の行に添える(いつもの岩・霧・滝を、その場所らしい物に置きかえさせる)。
+#     「霧を描かない」のような否定は書かない(かえってその物を呼びやすい)
+#   - 動物のすみか(BACKGROUND_PLACES)と、どの動物にも合う共通の場所(COMMON_BACKGROUND_PLACES)を半分ずつ選ぶ(依頼者が決めた)
+#   - 場所に色・地形の系統を持たせ、直前と同じ系統を続けない(recognizer.choose_background_place)
+#   - すみかの「森・岩山・ジャングル」の重なりを減らした(ゴリラの岩山 → 竹林、鷹の崖・ティラノの岩山 → 赤い峡谷)
+#   - 「(合わなければ、近い景色でよい)」を外した(無難な景色に戻る逃げ道になっていた)
+
+# 場所ごとの (系統, 見どころ)。系統は色・地形のまとまり(同じ系統を続けない)。
+# 見どころは背景の行のかっこに入れる短い言葉(岩・霧・滝は使わない。文字の入りそうな物も書かない)
+BACKGROUND_PLACE_INFO: dict[str, tuple[str, str]] = {
+    "森":             ("緑", "太い幹の大きな木々"),
+    "ジャングル":     ("緑", "太いつるの垂れる大木と大きな葉"),
+    "竹林":           ("緑", "まっすぐ空へのびる竹"),
+    "草原":           ("草", "風になびく一面の草"),
+    "丘の上":         ("草", "なだらかに続く緑の丘"),
+    "サバンナ":       ("乾", "ぽつんと立つ一本の木と広い地平線"),
+    "砂漠":           ("乾", "遠くまで続く砂丘"),
+    "赤い峡谷":       ("岩", "赤い岩の大きなアーチ"),
+    "岩山":           ("岩", "そびえ立つ大きな一枚岩"),
+    "花畑":           ("花", "一面に咲く色とりどりの花"),
+    "紅葉の山":       ("秋", "赤や黄色にそまった木々"),
+    "雪原":           ("白", "どこまでも続く白い雪"),
+    "氷の大地":       ("白", "青く光る大きな氷の山"),
+    "海辺":           ("水", "白い砂浜と打ち寄せる波"),
+    "湖のほとり":     ("水", "鏡のように空を映す湖"),
+    "川辺":           ("水", "浅く広く流れる川"),
+    "沼地":           ("水", "水面に浮かぶ大きな葉"),
+    "火山":           ("火", "流れる赤い溶岩"),
+    "山の頂上":       ("空", "はるか下に広がる山なみ"),
+    "雲の上":         ("空", "足元に広がる雲の海"),
+    "浮島":           ("空", "空に浮かぶ小さな島々"),
+    "水晶の洞くつ":   ("洞くつ", "光る水晶の柱"),
+    "きのこの森":     ("ふしぎ", "大きく光るきのこ"),
+    # 水の中(サメ)。どれも水の中なので、見え方で系統を分ける
+    "海の中":             ("明るい海", "上から差しこむ光の筋"),
+    "深い海の中":         ("深海", "青く光る深海の生き物"),
+    "サンゴ礁の海の中":   ("サンゴ", "色とりどりのサンゴと小さな魚"),
+    "荒れた海の波の中":   ("荒波", "大きくうねる波"),
+}
+
 BACKGROUND_PLACES: dict[str, list[str]] = {
     "ライオン":         ["サバンナ", "岩山", "草原"],
     "ゾウ":             ["サバンナ", "ジャングル", "川辺"],
     "ウサギ":           ["花畑", "森", "草原"],
     "ペンギン":         ["氷の大地", "雪原", "海辺"],
     "ネコ":             ["森", "花畑", "丘の上"],
-    "鷹":               ["山の頂上", "雲の上", "崖"],
+    "鷹":               ["山の頂上", "雲の上", "赤い峡谷"],
     "ワニ":             ["沼地", "ジャングル", "川辺"],
-    "ゴリラ":           ["ジャングル", "森", "岩山"],
+    "ゴリラ":           ["ジャングル", "森", "竹林"],
     "サメ":             ["海の中", "深い海の中", "サンゴ礁の海の中", "荒れた海の波の中"],   # 水の中だけ(AQUATIC_ANIMALS)
-    "ティラノサウルス": ["火山", "ジャングル", "岩山"],
+    "ティラノサウルス": ["火山", "ジャングル", "赤い峡谷"],
 }
 
-# 一覧にない動物(製品版の自由入力)で選ぶ場所
-DEFAULT_BACKGROUND_PLACES: list[str] = ["森", "草原", "山", "空の上"]
+# 一覧にない動物(製品版の自由入力)のすみか
+DEFAULT_BACKGROUND_PLACES: list[str] = ["森", "草原", "山の頂上", "雲の上"]
+
+# どの動物にも合う共通の場所(すみかと半分ずつ選ぶ。水の中の動物には使わない)
+COMMON_BACKGROUND_PLACES: list[str] = [
+    "砂漠", "赤い峡谷", "雪原", "湖のほとり", "花畑", "紅葉の山",
+    "雲の上", "浮島", "水晶の洞くつ", "きのこの森", "竹林",
+]
+
+# 共通の場所から選ぶ割合(残りはすみかから)
+COMMON_BACKGROUND_RATIO = 0.5
 
 
 def background_place_candidates(animal: str) -> list[str]:
-    """その動物で使う背景の場所の一覧を返す。一覧にない動物は DEFAULT_BACKGROUND_PLACES。"""
+    """その動物のすみかの一覧を返す。一覧にない動物は DEFAULT_BACKGROUND_PLACES。"""
     return list(BACKGROUND_PLACES.get((animal or "").strip()) or DEFAULT_BACKGROUND_PLACES)
 
 
+def common_background_place_candidates(animal: str) -> list[str]:
+    """その動物で使う共通の場所(すみかと重なるものは除く)。水の中の動物は空(水の中だけにするため)。"""
+    if (animal or "").strip() in AQUATIC_ANIMALS:
+        return []
+    habitat = set(background_place_candidates(animal))
+    return [p for p in COMMON_BACKGROUND_PLACES if p not in habitat]
+
+
+# 時間帯・天気を付けない場所(空が見えないため。付けると「満天の星空の洞くつ」のような食い違いになる)
+PLACES_WITHOUT_SCENE: tuple[str, ...] = ("水晶の洞くつ", "海の中", "深い海の中", "サンゴ礁の海の中")
+
+# 時間帯・天気と合わない場所(「雪の降る日のジャングル」などにしない)
+# ※ 2026年11月16日:「合わなければ、近い景色でよい」を外したので、合わない組み合わせはプログラムで選ばない
+SCENE_EXCLUDED_PLACES: dict[str, tuple[str, ...]] = {
+    "雪の降る日": ("ジャングル", "サバンナ", "砂漠", "火山", "花畑", "沼地", "海辺", "荒れた海の波の中", "雲の上"),
+}
+
+
+def scene_candidates(place: str | None) -> list[str]:
+    """その場所で選ぶ時間帯・天気の候補。空が見えない場所は空のリスト(時間帯を付けない)。"""
+    if place in PLACES_WITHOUT_SCENE:
+        return []
+    return [s for s in STAGING_OPTIONS["scene"] if (place or "") not in SCENE_EXCLUDED_PLACES.get(s, ())]
+
+
+def background_place_group(place: str) -> str:
+    """場所の系統。一覧にない場所(.env の BACKGROUND で固定したものなど)は、その言葉自身を系統にする。"""
+    info = BACKGROUND_PLACE_INFO.get(place)
+    return info[0] if info else place
+
+
 def background_text(scene: str | None, place: str | None) -> str:
-    """背景の2語(例:月夜の森)。場所がなければ空文字(背景の行を入れない)。"""
+    """背景の2語(例:夕焼けの砂漠)。場所がなければ空文字(背景の行を入れない)。"""
     if not place:
         return ""
     return f"{scene}の{place}" if scene else place
+
+
+def background_line(animal: str, scene: str | None, place: str | None) -> str:
+    """画像プロンプトの背景の1行(例:背景は「夕焼けの砂漠」(遠くまで続く砂丘)。)。場所がなければ空文字。"""
+    background = background_text(scene, place)
+    if not background:
+        return ""
+    notes = []
+    info = BACKGROUND_PLACE_INFO.get(place or "")
+    if info:
+        notes.append(info[1])
+    if (animal or "").strip() in AQUATIC_ANIMALS:
+        notes.append("水の中を泳いでいるように描く。地面や岩の上に立たせない")
+    note = f"({'。'.join(notes)})" if notes else ""
+    return f"背景は「{background}」{note}。\n"
 
 
 # 画像プロンプトの書き方(.env の IMAGE_PROMPT_STYLE)
@@ -907,20 +1024,14 @@ def build_image_prompt(
             "、".join(pose_parts) + "で描いて(その動物に無理な姿勢なら、近い姿勢でよい)。\n"
             if pose_parts else ""
         )
-        # 背景(場所と時間帯・天気の2語だけ。景色の中身は画像モデルにまかせる。BACKGROUND_PLACES のコメント参照)
-        background = background_text(staging.get("scene"), (design_plan or {}).get("background_place"))
-        if background and animal.strip() in AQUATIC_ANIMALS:
-            background_line = f"背景は「{background}」(水の中を泳いでいるように描く。地面や岩の上に立たせない)。\n"
-        elif background:
-            background_line = f"背景は「{background}」(合わなければ、近い景色でよい)。\n"
-        else:
-            background_line = ""
+        # 背景(時間帯・天気と場所の2語 + 場所の見どころ。景色の中身は画像モデルにまかせる。BACKGROUND_PLACES のコメント参照)
         return SIMPLE_IMAGE_PROMPT_TEMPLATE.format(
             animal=animal,
             object_name=object_name,
             fusion_part_line=fusion_part_line,
             pose_line=pose_line,
-            background_line=background_line,
+            background_line=background_line(
+                animal, staging.get("scene"), (design_plan or {}).get("background_place")),
             person_section=person_section,
         )
 
