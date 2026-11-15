@@ -38,6 +38,7 @@ import {
   CARD_PACK_READY_AUTO_MS,
   CARD_PACK_SPREAD_MS,
   CARD_PACK_TEAR_MS,
+  CARD_PLAYER_PLACE_MS,
   CARD_PLAYER_TURN_BANNER_MS,
   CARD_REVEAL_MS,
   CARD_SKILL_MS,
@@ -53,7 +54,7 @@ import {
 //
 // 見せる段階(view):
 //   cpu-turn(相手のターン:カードを えらんで 裏向きで置く)→ player(手札をえらぶ。合成・スキルは ここで使い、notice で結果を少し見せて player にもどる)
-//   → janken(じゃん・けん・ぽん)→ reveal(めくる)→(rendan → rendan-result)→ attack(勝った側が前へ出て 飛び道具)→ damage(命中)
+//   → place(出したカードが 裏向きで 場へ飛ぶ)→ janken(じゃん・けん・ぽん)→ reveal(めくる)→(rendan → rendan-result)→ attack(勝った側が前へ出て 飛び道具)→ damage(命中)
 //   → draw →(相手のスキルは notice)→ cpu-turn → player …
 //   必殺技は player → finisher(カットイン)→ attack → damage。攻撃と命中の見せ方は main のバトル(BattleScreen.tsx)と同じ
 //   どちらかの HP が 0 になったら round-end
@@ -63,6 +64,7 @@ export type CardBattleView =
   | 'cpu-turn'
   | 'player'
   | 'notice'
+  | 'place'
   | 'janken'
   | 'reveal'
   | 'rendan'
@@ -454,11 +456,15 @@ export function useCardBattle({
     }
     setClash({ playerCard: janken.playerCard, cpuCard: janken.cpuCard, winner: janken.winner, by: janken.by });
     setTurnBanner(false);
-    // 見せ場:大きなカード2枚が すべりこむ(beat 0)→ じゃん・けん・ぽん(1〜3)→ めくる
-    setView('janken');
-    setBeat(0);
+    // 置く:出したカードが 裏向きで 手札から場へ飛んで置かれる(useCardFx)。そのあと 見せ場
+    setView('place');
     playSound('select');
-    const beatAt = (beat: number) => CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * (beat - 1);
+    // 見せ場:大きなカード2枚が すべりこむ(beat 0)→ じゃん・けん・ぽん(1〜3)→ めくる
+    schedule(() => {
+      setView('janken');
+      setBeat(0);
+    }, CARD_PLAYER_PLACE_MS);
+    const beatAt = (beat: number) => CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * (beat - 1);
     schedule(() => {
       setBeat(1);
       playSound('janken-jan');

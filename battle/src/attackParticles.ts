@@ -89,10 +89,12 @@ function emojiShape(text: string, scalar: number) {
 
 // 発射台ごとの、カードの絵の中心の高さ(カードバトルは カードを小さくしているので ちがう。なければ CENTER_Y)
 const centerYs = new WeakMap<ParticleFire, number>();
+// 発射台ごとの、カードの絵の中心の横の位置(カードバトルは パネルの並びが ちがう。なければ CENTER_X)
+const centerXs = new WeakMap<ParticleFire, Record<BurstAt, number>>();
 
 // yOffset:カードの絵の中心から 下へずらす(回復は 足もとから出す)
 function origin(fire: ParticleFire, at: BurstAt, yOffset = 0) {
-  return { x: CENTER_X[at] / STAGE.width, y: ((centerYs.get(fire) ?? CENTER_Y) + yOffset) / STAGE.height };
+  return { x: (centerXs.get(fire) ?? CENTER_X)[at] / STAGE.width, y: ((centerYs.get(fire) ?? CENTER_Y) + yOffset) / STAGE.height };
 }
 
 // テスト(jsdom)には canvas がないので、粒は出さない
@@ -100,11 +102,18 @@ export function canUseParticles() {
   return typeof navigator !== 'undefined' && !/jsdom/i.test(navigator.userAgent);
 }
 
-/** 粒を描く canvas(1920×1080)を、canvas-confetti の発射台にする。centerY はカードの絵の中心の高さ(省くと main のバトルの位置) */
-export function createParticleFire(canvas: HTMLCanvasElement, { centerY }: { centerY?: number } = {}): ParticleFire | null {
+/**
+ * 粒を描く canvas(1920×1080)を、canvas-confetti の発射台にする。
+ * centerY はカードの絵の中心の高さ、centerX は 自分・相手・真ん中の 横の位置(省くと main のバトルの位置)
+ */
+export function createParticleFire(
+  canvas: HTMLCanvasElement,
+  { centerY, centerX }: { centerY?: number; centerX?: Record<BurstAt, number> } = {},
+): ParticleFire | null {
   if (!canUseParticles()) return null;
   const fire = confetti.create(canvas, { resize: false, useWorker: false });
   if (centerY !== undefined) centerYs.set(fire, centerY);
+  if (centerX !== undefined) centerXs.set(fire, centerX);
   return fire;
 }
 

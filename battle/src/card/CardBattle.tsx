@@ -18,7 +18,6 @@ import { cardLabel, CardView } from './CardView';
 import { ClashStage } from './ClashStage';
 import { FighterPanel } from './FighterPanel';
 import { HandZone } from './HandGuide';
-import { HandInfo } from './HandInfo';
 import { PackOpening } from './PackOpening';
 import { useCardFx } from './useCardFx';
 import { Flip, gsap, useGSAP } from '../fx/gsap';
@@ -37,6 +36,10 @@ type PlaySound = (sound: GameSound, options?: GameSoundOptions) => void;
 
 // カードの絵の中心の高さ(左右のモンスターを 0.8倍にしているので、main の 490 より上。cardbattle.css の .projectile の top と同じ)
 const CARD_IMAGE_Y = 422;
+// カードの絵の中心の 横の位置(左右のパネルを 画面のはしへ はなしたので、main の 510 / 1410 より外。cardbattle.css の上書きと同じ)
+const CARD_CENTER_X = { player: 330, cpu: 1590, center: 960 } as const;
+// 全ラウンドの数(上の帯の ●○○)
+const ROUND_COUNT = 3;
 
 // ---- 場の ひとこと(1行目は短く大きく、くわしいことは2行目に小さく) ----
 
@@ -77,9 +80,9 @@ function fieldCopy(battle: CardBattleApi): FieldCopy | null {
   return clash.by === 'star' ? { main, sub: 'あいこ → ★が おおい ほうの かち' } : { main };
 }
 
-// 1行目の字の大きさ:真ん中の列(幅 388px)に1行で収まる大きさ(上限 46px)
+// 1行目の字の大きさ:場の円(直径 420px)の下のほうに1行で収まる大きさ(上限 46px)
 function mainCopySize(text: string): number {
-  return Math.min(46, Math.floor(360 / Math.max(1, [...text].length)));
+  return Math.min(46, Math.floor(400 / Math.max(1, [...text].length)));
 }
 
 function FieldCopyBand({ copy }: { copy: FieldCopy }) {
@@ -232,6 +235,31 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
     const state = flipStateRef.current;
     flipStateRef.current = null;
     if (!state) return;
+    // 出した:手札にあった位置から、裏向きのカードが 場の自分の枠へ 弧をえがいて飛び、つぶれて着地(相手の ふせる と同じ動き)
+    if (view === 'place' && clash) {
+      const fly = section.closest('.cb-screen')?.querySelector<HTMLElement>('.cb-field__fly--player');
+      const from = rectsRef.current.get(clash.playerCard.id);
+      if (fly && from) {
+        const scale = stageScale(fly);
+        const box = fly.getBoundingClientRect();
+        const dx = (from.left + from.width / 2 - (box.left + box.width / 2)) / scale;
+        const dy = (from.top + from.height / 2 - (box.top + box.height / 2)) / scale;
+        gsap.timeline()
+          .fromTo(
+            fly,
+            // 手札のカード(168×226)の大きさから、場のカード(124×166)へ
+            { x: dx, y: dy, rotation: 0, scale: 1.35 },
+            {
+              keyframes: [
+                { x: dx * 0.45, y: dy * 0.5 - 120, rotation: 10, scale: 1.2, duration: 0.3, ease: 'power1.out' },
+                { x: 0, y: 0, rotation: 0, scale: 1, duration: 0.24, ease: 'power2.in' },
+              ],
+            },
+          )
+          .to(fly, { scaleX: 1.14, scaleY: 0.84, duration: 0.06, ease: 'power1.out' })
+          .to(fly, { scaleX: 1, scaleY: 1, duration: 0.35, ease: 'elastic.out(1, 0.4)' });
+      }
+    }
     // 合体でできたカードは Flip に まかせず、合体の演出の中で 出す(Flip が 先に見せてしまうので)
     const made = [...cells].find((cell) => cell.querySelector('.cb-hand__slot--new'));
     if (made) playMerge(section, made);
@@ -364,7 +392,8 @@ function CpuHand({
   const chained = sealed ?? leftover;
   return (
     <div className="cb-cpu-hand" aria-label="あいての てふだ">
-      <p className="cb-cpu-hand__title">あいての てふだ</p>
+      {/* うっすら桃色の暗い板。見出しは 板の上のふち(読み上げは 上の aria-label) */}
+      <p className="cb-cpu-hand__title" aria-hidden="true">あいての てふだ</p>
       <div className="cb-cpu-hand__cards">
         {state.cpu.hand.map((card: JankenCard, index) => (
           // --i:相手のターンに 1枚ずつ ずらして ゆらす
@@ -408,7 +437,7 @@ function useCardParticles(
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fireRef = useRef<ParticleFire | null>(null);
   useEffect(() => {
-    if (canvasRef.current) fireRef.current = createParticleFire(canvasRef.current, { centerY: CARD_IMAGE_Y });
+    if (canvasRef.current) fireRef.current = createParticleFire(canvasRef.current, { centerY: CARD_IMAGE_Y, centerX: CARD_CENTER_X });
     return () => {
       stopParticleFire(fireRef.current);
       fireRef.current = null;
@@ -439,7 +468,8 @@ function useCardParticles(
 
 /**
  * カードバトルの画面(戦闘システム設計書 12章)。いまは1ラウンドだけ(パック選び・3ラウンドは段階2b)。
- * 配置:左右にモンスター / 真ん中の列に 相手の手札・場・場の ひとこと・説明パネル / 下に手札(cardbattle.css)
+ * 配置:上に細い帯 / 左右のはしに モンスター / 真ん中に 相手の手札・場の円と2枚・場の ひとこと /
+ * 下に 手札のゾーン(説明と案内の1行 + 手札)(cardbattle.css)
  */
 export function CardBattle({
   player,
@@ -449,10 +479,13 @@ export function CardBattle({
   random,
   setup,
   packIntro = false,
+  round = 1,
 }: {
   player: Monster;
   cpu: Monster;
   config: BattleConfig;
+  /** 何たいめか(上の帯の ●○○。1 = 練習・2 = 2体目・3 = ボス) */
+  round?: number;
   playSound: PlaySound;
   random?: RandomSource;
   /** パックを開けたあとの状態を差しかえる(テスト・開発者メニュー用) */
@@ -479,7 +512,7 @@ export function CardBattle({
   const striking = view === 'attack' || view === 'damage';
   const attacker: Side | null = damage ? (damage.target === 'cpu' ? 'player' : 'cpu') : null;
   // 相手のカードが おもてになっている(ぽん!のあと)
-  const revealed = clash !== null && view !== 'janken';
+  const revealed = clash !== null && view !== 'place' && view !== 'janken';
   const decided = revealed && clash.winner !== 'rendan'
     ? clash.winner
     : ['rendan-result', 'attack', 'damage'].includes(view) ? rendanWinner : null;
@@ -519,12 +552,26 @@ export function CardBattle({
       )}
     >
       <Backdrop />
-      <div className="battle-topbar">
-        <div className="signboard">
-          <Logo className="battle-logo" />
-          <span className="signboard__title">カード バトル</span>
+      {/* 卓の上の置き場(自分・相手のマットと 場の台)。位置は UI に合わせて CSS で描く(cardbattle.css の .cb-mat) */}
+      <div className="cb-mats" aria-hidden="true">
+        <span className="cb-mat cb-mat--player" />
+        <span className="cb-mat cb-mat--cpu" />
+        <span className="cb-mat cb-mat--field" />
+      </div>
+      {/* 上の帯(細い1行):左に ロゴ・何たいめ(●○○)・ターン、まんなかに だれの ターンか */}
+      <div className="battle-topbar cb-topbar">
+        <div className="cb-topbar__left">
+          <Logo className="battle-logo cb-topbar__logo" />
+          <span className="cb-topbar__round" aria-label={`${round}たいめ`}>
+            <span className="cb-topbar__dots" aria-hidden="true">
+              {Array.from({ length: ROUND_COUNT }, (_, i) => (
+                <i key={i} className={cx('cb-topbar__dot', i < round && 'cb-topbar__dot--on')} />
+              ))}
+            </span>
+            {round}たいめ
+          </span>
+          <span className="round-chip cb-topbar__turn">ターン <b>{state.turn}</b></span>
         </div>
-        <span className="round-chip">ターン <b>{state.turn}</b></span>
         {turnSide && (
           <span key={turnSide} className={`cb-turn-chip cb-turn-chip--${turnSide}`} role="status">
             {turnSide === 'cpu' ? 'あいての ターン' : 'あなたの ターン'}
@@ -568,7 +615,7 @@ export function CardBattle({
         {view === 'damage' && damage && attacker && <ImpactBurst at={damage.target} theme={themes[attacker]} />}
       </div>
 
-      {/* 真ん中の列:相手の手札(マークだけ)・場(自分の出したカード・相手の ふせたカード)・場の ひとこと・説明パネル */}
+      {/* 真ん中:相手の手札(箱なし)・場の円の中の2枚(自分の出したカード・相手の ふせたカード)・場の ひとこと */}
       <section className="cb-center">
         <CpuHand state={state} clash={clash} revealed={revealed} view={view} />
         {/* 場:自分(緑の枠)と 相手(ピンクの枠)。上に「あなた」「あいて」の札 */}
@@ -585,10 +632,19 @@ export function CardBattle({
               )}
             >
               {clash
-                ? <CardView card={clash.playerCard} size="field" back={view === 'janken'} />
+                ? (
+                  <CardView
+                    card={clash.playerCard}
+                    size="field"
+                    back={view === 'place' || view === 'janken'}
+                    // 置く:手札から 飛んできて置かれる(HandRow の GSAP)
+                    className={cx(view === 'place' && 'cb-field__fly cb-field__fly--player')}
+                  />
+                )
                 : <span className="cb-field__empty" aria-hidden="true" />}
             </div>
           </div>
+          <span className="cb-field__vs" aria-hidden="true">VS</span>
           <div className="cb-field__side cb-field__side--cpu">
             <span className="cb-field__who">あいて</span>
             <div
@@ -610,16 +666,15 @@ export function CardBattle({
                 <span className="cb-field__empty cb-field__empty--cpu" aria-hidden="true" />
               ) : (
                 // ふせる:相手の手札のパネルから 裏向きのカードが飛んできて置かれる(.cb-field__fly)
-                <CardView card={{ kind: 'finisher' }} size="field" back className={cx(view === 'cpu-turn' && 'cb-field__fly')} />
+                <CardView card={{ kind: 'finisher' }} size="field" back className={cx(view === 'cpu-turn' && 'cb-field__fly cb-field__fly--cpu')} />
               )}
             </div>
           </div>
         </div>
         <div className="cb-copy-area">{copy && <FieldCopyBand copy={copy} />}</div>
-        <HandInfo battle={battle} />
       </section>
 
-      {/* 手札のゾーン(うしろを暗くして囲む)と 案内の1行。手札は その上に重ねる */}
+      {/* 手札のゾーン(うすい線の囲み)と、その上の1行(説明・案内)。手札は その上に重ねる */}
       {view !== 'pack' && <HandZone battle={battle} />}
       {view !== 'pack' && <HandRow battle={battle} />}
       {/* ラウンドのはじめ:パック選び・開封(手札は バトル スタートで 配られる) */}
@@ -688,5 +743,5 @@ export function CardBattleEntry({
   }, []);
   const trial = useMemo(() => (config ? trialConfig(config, round) : null), [config, round]);
   if (!trial) return <main className="screen loading-screen"><div className="loader" /><p>カードを じゅんびしているよ…</p></main>;
-  return <CardBattle player={player} cpu={round === 1 ? practiceCpu : cpu} config={trial} playSound={playSound} packIntro={packIntro} />;
+  return <CardBattle player={player} cpu={round === 1 ? practiceCpu : cpu} config={trial} playSound={playSound} packIntro={packIntro} round={round} />;
 }

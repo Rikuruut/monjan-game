@@ -1,18 +1,98 @@
 /* ==================================================================
    カードバトルの画面(card/。1920×1080)
    ------------------------------------------------------------------
-   配置(重ならないように割りふる):
-     上     … 立て札・ターン                                  (y  22〜118。これまでのバトルの .battle-topbar)
-     左右   … モンスター(.monster-panel を 0.8倍)              (y 128〜710。自分 x 258〜762 / 相手 x 1158〜1662。絵の中心 y≈422)
-     真ん中 … 相手の手札 / 場 / 場の ひとこと / 説明パネル      (x 766〜1154。y 128〜766)
-     下     … 自分の手札                                      (y 776〜1066。えらんだカードの浮きも ここに収める)
+   配置(枠で囲まず 余白を広く。重ならないように割りふる):
+     上     … 細い帯:ロゴ・何たいめ(●○○)・ターン / まんなかに だれのターンか   (y 16〜76)
+     左右   … モンスター(.monster-panel を 0.8倍。画面のはしへ はなす)          (y 128〜710。自分 x 78〜582 / 相手 x 1338〜1842。絵の中心 (330, 422) / (1590, 422))
+     真ん中 … 相手の手札の板 / 勝負の だ円(中心 (960, 505)・460×340)の中に 場の2枚と VS / 場の ひとこと
+     下     … 手札のゾーン(x 70〜1850・y 740〜):上のふちに 説明と案内の1行、その下に 手札
    字体:見出し・数字・カードの名前は --font-title(Dela Gothic One)、説明の文は --font-body(M PLUS Rounded。太さ 800)
    動かすのは 位置・大きさ・透明度だけ(内蔵 GPU のため。光は うしろの層の透明度で見せる)
    攻撃と命中の演出は main のバトルと同じ(effects.css)。位置だけ ここで合わせる
    ================================================================== */
 
+/* ---- 背景:夕方の 木の対戦テーブル(card-table-battle.png。1920×1080) ----
+   絵は 無地のフェルトの卓だけ(奥のふち y≈95・手前の木のふち y≈855〜)。置き場の枠は 下の .cb-mat で UI の位置に描く
+   (画像生成では 数十px の位置合わせが できないため)。
+   位置がずれないように、草原の背景(base.css の .screen::before)の はみ出し(-3%)と ゆっくり動く sceneDrift は止める */
+.cb-screen::before {
+  inset: 0;
+  background-image: url('/backgrounds/card-table-battle.png');
+  animation: none;
+  will-change: auto;
+}
+
+/* 卓の上の置き場(ポケポケなどと同じく、枠で囲まず うすい光と線だけで見せる。パネルは もとの3重のふちで十分)
+     全体:左半分は緑、右半分は赤で うっすら色づけて 陣地を分ける
+     左右:パネル(絵の中心 x 330 / 1590)のうしろの ぼんやりした光だまり(自分 = 若草 / 相手 = 桃)と、足もとの影のだ円
+     真ん中:場の2枚を囲む 勝負の だ円(中心 (960, 505)・460×340。VS を入れた2枚の幅を囲み、上の板・下のトレイに かからない) */
+.cb-mats {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, #6cf08a26, #6cf08a12 38%, transparent 50%, #ff6b8a12 62%, #ff6b8a26);
+}
+.cb-mat { position: absolute; }
+.cb-mat--player,
+.cb-mat--cpu {
+  --mat-glow: #a6ec7c38;
+  top: 90px;
+  width: 720px;
+  height: 700px;
+  background: radial-gradient(closest-side, var(--mat-glow), transparent);
+}
+.cb-mat--player { left: -30px; }
+.cb-mat--cpu { left: 1230px; --mat-glow: #ff9cc438; }
+/* 足もとの影 */
+.cb-mat--player::after,
+.cb-mat--cpu::after {
+  position: absolute;
+  left: 90px;
+  right: 90px;
+  bottom: 30px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #000a, transparent);
+  content: '';
+}
+/* 勝負の円:盤に刻まれた闘技場。中は フェルトより一段暗く、ふちは 明るい金 */
+.cb-mat--field {
+  left: 730px;
+  top: 335px;
+  width: 460px;
+  height: 340px;
+  border: 3px solid #f0c75e;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, #06140daa, #06140d70);
+  box-shadow: 0 0 14px #ffd23f55, inset 0 0 18px #0008;
+}
+/* 円の内側に もう1本 うすい金の線 */
+.cb-mat--field::before {
+  position: absolute;
+  inset: 12px;
+  border: 1px solid #f0c75e66;
+  border-radius: 50%;
+  content: '';
+}
+
 /* ---- 左右のモンスター ---- */
+/* 位置は これまでのバトル(battle.css。中心 510 / 1410)と共通なので、ここで上書きする。幅 630 の 0.8倍で 中心 330 / 1590 */
 .cb-screen .monster-panel { scale: 0.8; transform-origin: top center; }
+.cb-screen .monster-panel--player { left: 15px; }
+.cb-screen .monster-panel--cpu { left: 1275px; }
+/* 「あなた」「あいて」の札は 場の枠の上だけにする(パネルは 緑・桃の色で わかる)。
+   札の段(.monster-tag。高さ 48px)は 残すので、絵の中心 y 422 は 変わらない。ため技の札は 出る */
+.cb-screen .monster-panel .side-label { visibility: hidden; }
+/* 相手のカードは 赤むらさき系(自分は 緑のまま)。これまでのバトルと共通の .monster-card は変えず、ここだけ上書き */
+.cb-screen .monster-panel--cpu .monster-card {
+  background:
+    linear-gradient(165deg, #fff1f5, #f7d9e3) padding-box,
+    conic-gradient(from 20deg, var(--petal), #c8507a, var(--sun), #8a2a4c, var(--petal)) border-box;
+}
+.cb-screen .monster-panel--cpu .monster-card__head,
+.cb-screen .monster-panel--cpu .cb-stats { background: linear-gradient(90deg, #3d1022, #a8385f); }
+.cb-screen .monster-panel--cpu .monster-frame { background: #2a0c18; }
 .cb-fighter--defeated .monster-card { filter: grayscale(1) brightness(0.6); transition: filter 0.4s 0.4s; }
 
 /* カードの下の2段:HP(バー + 数字)/ こうげき(自分も相手も 同じ並び) */
@@ -171,13 +251,13 @@
 .cb-card__back { font-size: 90px; color: var(--sun); text-shadow: 0 5px 0 var(--ink); }
 .cb-card--field .cb-card__back { font-size: 66px; }
 
-/* ---- 真ん中の列 ---- */
+/* ---- 真ん中(左右のパネルの あいだ x 610〜1310) ---- */
 .cb-center {
   position: absolute;
   z-index: 4;
-  left: 766px;
+  left: 610px;
   top: 128px;
-  width: 388px;
+  width: 700px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -185,28 +265,40 @@
   pointer-events: none;
 }
 
-/* 相手の手札:濃い地に 大きめのカード */
+/* 相手の手札:3枚のうしろに うっすら桃色の暗い板(y 128〜316)。見出しは 板の上のふち */
 .cb-cpu-hand {
-  width: 100%;
-  padding: 6px 8px 12px;
-  border: 4px solid var(--petal);
-  border-radius: 20px;
-  background: #0f2a20f2;
-  box-shadow: 0 8px 0 var(--forest-deep);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 22px 14px;
+  border: 2px solid #ff9cc466;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #3a1a2ad0, #1f0f18d8);
+  box-shadow: 0 6px 16px #0006;
 }
 .cb-cpu-hand__title {
-  margin: 0 0 8px;
+  margin: 0;
   font-family: var(--font-title);
-  font-size: 26px;
+  font-size: 20px;
   line-height: 1.2;
-  text-align: center;
   color: var(--petal);
 }
-.cb-cpu-hand__cards { display: flex; justify-content: center; gap: 12px; min-height: 141px; }
+.cb-cpu-hand__cards { display: flex; justify-content: center; gap: 12px; min-height: 141px; align-items: center; }
 .cb-cpu-hand__slot { position: relative; }
 
 /* 場(自分の出したカード・相手の ふせたカード) */
-.cb-field { display: flex; justify-content: center; gap: 28px; align-items: flex-end; }
+.cb-field { display: flex; justify-content: center; gap: 14px; align-items: flex-end; margin-top: 56px; }
+/* 場の2枚の あいだの VS(カードの縦の真ん中。上の札のぶん 下げる) */
+.cb-field__vs {
+  align-self: flex-end;
+  margin-bottom: 58px;
+  font-family: var(--font-title);
+  font-size: 40px;
+  line-height: 1;
+  color: var(--sun);
+  text-shadow: -3px -3px 0 var(--ink), 3px -3px 0 var(--ink), -3px 3px 0 var(--ink), 3px 3px 0 var(--ink), 0 4px 0 var(--ink), 0 0 16px #ffd23f88;
+}
 /* 自分(緑)と 相手(ピンク):色の枠と 上の札で わける */
 .cb-field__side { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .cb-field__who {
@@ -223,7 +315,7 @@
 .cb-field__slot { width: 124px; height: 166px; border-radius: 16px; transition: scale 0.25s, filter 0.25s; }
 .cb-field__slot--player { box-shadow: 0 0 0 5px var(--leaf), 0 0 0 8px var(--ink); }
 .cb-field__slot--cpu { box-shadow: 0 0 0 5px var(--petal), 0 0 0 8px var(--ink); }
-.cb-field__empty { display: block; width: 124px; height: 166px; border: 5px dashed #a6ec7c; border-radius: 15px; background: #0f2a2080; }
+.cb-field__empty { display: block; width: 124px; height: 166px; border: 3px solid #a6ec7c99; border-radius: 15px; background: #ffffff0f; }
 /* 相手の 裏向きのカードは ピンクの しま模様(場・じゃんけんの見せ場) */
 .cb-field__slot--cpu .cb-card--back,
 .cb-clash__slot--cpu .cb-card--back {
@@ -279,28 +371,30 @@
 .cb-screen--notice-cpu-charge .cb-copy__main,
 .cb-screen--player .cb-copy__main { color: #d9c8ff; }
 
-/* ---- 説明パネル(真ん中の列の下。手札の浮きと重ならない高さに固定) ---- */
+/* ---- 説明(手札のゾーンの上のふちの1行の左。箱で囲まず、字のふち取りで読ませる) ---- */
 .cb-info {
+  --info-outline: -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink), 0 3px 0 var(--ink);
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 100%;
-  height: 110px;
-  padding: 8px 14px;
-  border: 4px solid var(--sun);
-  border-radius: 18px;
-  background: #0f2a20f2;
-  box-shadow: 0 8px 0 var(--forest-deep);
+  min-width: 0;
+  height: 66px;
   color: var(--white);
 }
-.cb-info--empty { visibility: hidden; }
-.cb-info--armed { border-color: #ff8a3d; background: linear-gradient(180deg, #3a2412f2, #0f2a20f2); }
-.cb-info--blocked { border-color: #ff6b6b; }
-.cb-info--special { border-color: var(--gold); box-shadow: 0 0 24px 4px #ffd23f99, 0 8px 0 var(--forest-deep); }
+.cb-info--empty { display: none; }
+.cb-info--armed .cb-info__title { color: #ffb070; }
+.cb-info--special .cb-info__title { color: var(--gold); text-shadow: var(--info-outline), 0 0 18px #ffd23f; }
 .cb-info__card { flex: none; }
-.cb-info__text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.cb-info__title { font-family: var(--font-title); font-weight: 400; font-size: 28px; line-height: 1.15; color: var(--sun); white-space: nowrap; }
-.cb-info__line { font-family: var(--font-body); font-weight: 800; font-size: 20px; line-height: 1.25; }
+/* 小さなカード(式の見本と同じ大きさ) */
+.cb-info .cb-card--tiny { width: 46px; height: 62px; padding: 2px 1px 3px; }
+.cb-info .cb-card--tiny .cb-card__icon { font-size: 24px; }
+.cb-info .cb-card--tiny .cb-card__icon--emoji { font-size: 22px; }
+.cb-info .cb-card--tiny .cb-card__name { font-size: 11px; }
+.cb-info .cb-card--tiny .cb-card__badge { font-size: 11px; }
+/* 見出しと 効果を 横1行に */
+.cb-info__text { display: flex; align-items: baseline; gap: 14px; min-width: 0; white-space: nowrap; }
+.cb-info__title { font-family: var(--font-title); font-weight: 400; font-size: 30px; line-height: 1.15; color: var(--sun); white-space: nowrap; text-shadow: var(--info-outline); }
+.cb-info__line { font-family: var(--font-body); font-weight: 800; font-size: 22px; line-height: 1.25; text-shadow: var(--info-outline); }
 .cb-info--blocked .cb-info__line { color: #ffb3b3; }
 
 /* ---- 下:自分の手札 ---- */
@@ -309,8 +403,8 @@
   z-index: 6;
   left: 0;
   right: 0;
-  /* 案内の1行に かからない高さ(扇形で はしのカードが下がっても 名前が見える) */
-  bottom: 8px;
+  /* トレイの上の帯(y 740〜802)に かからない高さ(扇形で はしのカードが下がっても 名前が見える) */
+  bottom: 4px;
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -352,7 +446,7 @@
 .cb-hand__slot--armed::before { box-shadow: 0 0 40px 16px #ff9d4d; }
 
 /* 「がったい」の枠(合成できるペアがあるときだけ)。扇形の手札とは別に、ゾーンの左はしに まっすぐ立てる(CardBattle.tsx の MergePanel) */
-.cb-hand__merge-panel { position: absolute; z-index: 4; left: 336px; bottom: 14px; }
+.cb-hand__merge-panel { position: absolute; z-index: 4; left: 330px; bottom: 14px; } /* 左下の 音量の調整(x 20〜265)に かからない位置 */
 .cb-merge {
   position: relative;
   display: flex;
@@ -554,9 +648,23 @@
   white-space: nowrap;
 }
 
-/* ---- 攻撃と命中(main と同じ部品。カードの絵の中心 y≈422 に合わせる。CardBattle.tsx の CARD_IMAGE_Y と同じ) ---- */
+/* ---- 攻撃と命中(main と同じ部品。カードの絵の中心 (330, 422) / (1590, 422) に合わせる。CardBattle.tsx の CARD_IMAGE_Y・CARD_CENTER_X と同じ)
+   main(effects.css)は 中心 510 / 1410・飛ぶ距離 ±900。ここでは 2枚の あいだ 1260(出会う点は ±630) ---- */
 .cb-screen .projectile,
 .cb-screen .impact-effect { top: 422px; }
+.cb-screen .projectile { left: 330px; --travel: 1260px; }
+.cb-screen .projectile--from-cpu { left: 1590px; --travel: -1260px; }
+.cb-screen .projectile--meet { --travel: 630px; }
+.cb-screen .projectile--from-cpu.projectile--meet { --travel: -630px; }
+/* 必殺技:飛び道具を大きくした割合で 距離を割る(effects.css と同じ式) */
+.cb-screen.battle-screen--special.battle-screen--attack .projectile { --travel: calc(1260px / var(--special-scale)); }
+.cb-screen.battle-screen--special.battle-screen--attack .projectile--from-cpu { --travel: calc(-1260px / var(--special-scale)); }
+.cb-screen.battle-screen--special.battle-screen--attack .projectile--meet { --travel: calc(630px / var(--special-scale)); }
+.cb-screen.battle-screen--special.battle-screen--attack .projectile--from-cpu.projectile--meet { --travel: calc(-630px / var(--special-scale)); }
+.cb-screen .impact-effect--player { left: 330px; }
+.cb-screen .impact-effect--cpu { left: 1590px; }
+/* 必殺技の命中の光:相手の絵の中心 (1590, 422) = (83%, 39%) から */
+.cb-screen .special-impact-flash { background: radial-gradient(circle at 83% 39%, #ffffff, var(--sp-a) 35%, transparent 80%); }
 
 /* ---- ラウンドの終わり ---- */
 .cb-round-end {
@@ -636,7 +744,7 @@
   z-index: 20;
   left: 0;
   right: 0;
-  top: 190px;
+  top: 280px; /* かけ声が 相手の手札の板(〜y 316)に かからない高さ(見せ場のカードの下は トレイの帯に かかるが、見せ場が いちばん手前) */
   height: 580px;
   display: flex;
   flex-direction: column;
@@ -722,10 +830,10 @@
 .cb-card--clash .cb-card__back { font-size: 130px; }
 
 /* ---- 相手のターン ---- */
-/* 相手の手札のパネルが光り、カードが1枚ずつ ゆれる(考えている) */
+/* 相手の手札の板の ふちが光り、カードが1枚ずつ ゆれる(考えている) */
 .cb-screen--cpu-turn .cb-cpu-hand {
   border-color: #ff7fb0;
-  box-shadow: 0 0 0 4px #ff7fb066, 0 0 34px 10px #ff7fb088, 0 8px 0 var(--forest-deep);
+  box-shadow: 0 0 0 3px #ff7fb055, 0 0 30px 8px #ff7fb088, 0 6px 16px #0006;
 }
 .cb-screen--cpu-think .cb-cpu-hand__slot { animation: cbThink 0.45s ease-in-out infinite alternate; animation-delay: calc(var(--i) * 0.15s); }
 @keyframes cbThink {
@@ -734,15 +842,18 @@
 }
 .cb-screen--cpu-turn .cb-copy__main { color: #ffb3d1; }
 /* 相手の ふせたカードの置き場(空)と、置かれるとき */
-.cb-field__empty--cpu { border-color: #ffb3d1a0; }
+.cb-field__empty--cpu { border-color: #ffb3d199; }
+/* 空きのときは 色の太い輪を出さない(ポケポケの空きスロットのように 細い線だけ) */
+.cb-field__slot:has(.cb-field__empty) { box-shadow: none; }
 /* ふせる:相手の手札のパネル(上)から 裏向きのカードが くるっと回りながら飛んできて置かれる */
 /* 動きは useCardFx.ts(GSAP。弧をえがいて飛んで、つぶれて着地) */
 .cb-field__fly { will-change: transform; }
 
-/* 立て札の横の ターンの札 */
+/* 上の帯のまんなかの ターンの札 */
 .cb-turn-chip {
   position: absolute;
-  left: calc(50% + 120px);
+  left: 50%;
+  translate: -50% 0;
   padding: 6px 26px 8px;
   border: 3px solid var(--ink);
   border-radius: 999px;
@@ -756,27 +867,77 @@
 .cb-turn-chip--player { background: var(--leaf); }
 .cb-turn-chip--cpu { background: var(--petal); }
 
+/* 上の帯(細い1行。y 16〜76):左に ロゴ(小)・●○○ 何たいめ・ターン N。まんなかに ターンの札(.cb-turn-chip) */
+.cb-topbar { top: 16px; height: 60px; }
+.cb-topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 4px 22px 4px 12px;
+  border: 3px solid #ffe9a866;
+  border-radius: 999px;
+  background: #0f2a20c8;
+  color: var(--white);
+  font-family: var(--font-title);
+  font-size: 24px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.cb-topbar__logo { display: block; width: auto; height: 46px; }
+.cb-topbar__round { display: flex; align-items: center; gap: 10px; }
+.cb-topbar__dots { display: flex; gap: 6px; }
+.cb-topbar__dot { width: 18px; height: 18px; border: 3px solid #fff3c4; border-radius: 50%; }
+.cb-topbar__dot--on { background: var(--sun); border-color: var(--sun); box-shadow: 0 0 8px #ffe27a; }
+/* 「ターン N」:これまでのバトルの .round-chip(まんなかの大きな札)を、帯の中の 小さな字にする */
+.cb-topbar .round-chip.cb-topbar__turn {
+  position: static;
+  transform: none;
+  padding: 0 0 0 18px;
+  border: none;
+  border-left: 2px solid #ffffff40;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  font-size: 24px;
+}
+.cb-topbar__turn b { color: var(--sun); }
+
 /* ==================================================================
-   UI の調整4回目:手札のゾーン(うしろを少し暗くして囲む)と 案内の1行(HandGuide.tsx)
-   ぼかし(backdrop-filter)は 内蔵 GPU の負担になるので使わず、暗くするだけ
+   手札のゾーン(HandGuide.tsx):塗らずに うすい線で囲むだけ(卓の手前の 木のふちに 手札が乗る)
+   上のふちの1行:左に 説明(HandInfo)、右に 案内。字は ふち取りで読ませる
    ================================================================== */
 .cb-hand-zone {
   position: absolute;
   z-index: 5;
-  left: 300px;
-  right: 300px;
-  top: 748px;
+  left: 70px;
+  right: 70px;
+  top: 740px;
   bottom: -6px;
-  border: 4px solid #ffe9a8b0;
+  overflow: hidden;
+  border: 3px solid #ffe9a899;
   border-bottom: none;
-  border-radius: 32px 32px 0 0;
-  background: linear-gradient(180deg, #0d2219c8, #0d2219e8);
+  border-radius: 28px 28px 0 0;
+  background: linear-gradient(180deg, #10120ee6, #0b0c09f2);
+  box-shadow: 0 -6px 20px #0007;
   pointer-events: none;
 }
 .cb-hand-zone--armed { border-color: #ff8a3dd0; }
+/* 上の 一段濃い帯:左に 説明、右に 案内 */
+.cb-hand-zone__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 36px;
+  height: 60px;
+  padding: 0 36px;
+  border-bottom: 2px solid #ffe9a840;
+  background: #000000a0;
+}
+/* 説明がないときも 案内は 右に */
+.cb-hand-zone__bar .cb-guide { margin-left: auto; }
 /* 案内の1行:いま やることを 大きく1行で */
 .cb-guide {
-  margin: 2px 0 0;
+  margin: 0;
   font-family: var(--font-title);
   font-size: 32px;
   line-height: 1.3;
@@ -906,7 +1067,7 @@
    合体の導線(説明パネルの式)
    ================================================================== */
 /* 上の段:見出し(小さく)/ まんなか:式 [カード] ＋ [カード] → [できあがり] / 下:ダメージの くらべ */
-.cb-info--merge { position: relative; flex-direction: column; justify-content: center; gap: 4px; }
+.cb-info--merge { position: relative; gap: 14px; }
 /* 見出しは 読み上げ用(見た目は 式で わかるので 隠す) */
 .cb-info__merge-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .cb-info__equation-row { display: flex; align-items: center; gap: 14px; }
@@ -919,7 +1080,7 @@
 .cb-info__equation b { font-family: var(--font-title); font-size: 26px; color: var(--sun); }
 .cb-info__result { box-shadow: inset 0 0 0 3px var(--card-color), 0 0 14px 5px #ffe27a; }
 .cb-info__equation--cancel { font-family: var(--font-title); font-size: 30px; color: #d9d9d9; }
-.cb-info--merge .cb-info__line { font-size: 19px; }
+.cb-info--merge .cb-info__line { font-size: 22px; }
 
 /* ---- 回復で まんたん:数え上がった(CARD_HP_COUNT_MS)あとに、バーが1回 キラッと光り、星が はじけて「まんたん!」(FighterPanel.tsx の HpBar) ---- */
 .cb-hp { position: relative; }

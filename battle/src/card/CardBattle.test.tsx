@@ -22,6 +22,7 @@ import {
   CARD_PACK_READY_AUTO_MS,
   CARD_PACK_SPREAD_MS,
   CARD_PACK_TEAR_MS,
+  CARD_PLAYER_PLACE_MS,
   CARD_PLAYER_TURN_BANNER_MS,
   CARD_REVEAL_MS,
   CARD_SKILL_MS,
@@ -49,9 +50,9 @@ const janken = (id: string, hand: Hand, star: 1 | 2 | 3): JankenCard => ({ id, k
 const heal: Card = { id: 'heal', kind: 'skill', skill: 'heal' };
 const seal: Card = { id: 'seal', kind: 'skill', skill: 'seal' };
 
-// 見せ場:すべりこみ → じゃん・けん・ぽん(めくる)まで / めくった結果のあと(攻撃のはじめ)まで / 攻撃 → 命中 まで
-const TO_PON = CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * 2;
-const TO_FLIP = CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * 3;
+// 出したカードを場へ置く → 見せ場:すべりこみ → じゃん・けん・ぽん(めくる)まで / めくった結果のあと(攻撃のはじめ)まで / 攻撃 → 命中 まで
+const TO_PON = CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * 2;
+const TO_FLIP = CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * 3;
 const TO_REVEAL = TO_FLIP + CARD_REVEAL_MS;
 const TO_IMPACT = TO_REVEAL + CARD_ATTACK_MS;
 // 1ターンが かならず終わる長さ(じゃんけん → めくる → 連打 → 攻撃 → 命中 → ドロー → 相手のスキル2つ → 相手のターン)
@@ -172,6 +173,11 @@ describe('カードバトル:手札と じゃんけん', () => {
     press('ArrowRight');
     press('Enter');
     press('Enter');
+    // 置く:出したカードが 裏向きで 手札から 場の自分の枠へ飛ぶ(見せ場は まだ)
+    expect(document.querySelector('.cb-field__slot--player .cb-card--back.cb-field__fly--player')).not.toBeNull();
+    expect(document.querySelector('.cb-clash')).toBeNull();
+    expect(handItems()).toHaveLength(4);
+    wait(CARD_PLAYER_PLACE_MS);
     // 見せ場:大きなカード2枚(どちらも裏向き)が すべりこむ
     expect(document.querySelectorAll('.cb-clash .cb-card--back')).toHaveLength(2);
     expect(handItems()).toHaveLength(4);

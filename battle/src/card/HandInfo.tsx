@@ -4,7 +4,7 @@ import { cardDamage, healAmount } from '../game/engine';
 import { cardLabel, CardView } from './CardView';
 import { shownPair, skillBlockedReason, type CardBattleApi } from './useCardBattle';
 
-// 説明パネル(真ん中の列の下。手札の浮いたカードと重ならない高さに固定。見た目は cardbattle.css の .cb-info)。
+// 説明(手札のゾーンの上のふちの1行の左。箱で囲まない。見た目は cardbattle.css の .cb-info)。
 // カーソルのあるものの 名前(見出しの字)・効果(説明の字)を いつも出す。決定の1回目は色を変える。
 // どのボタンを押せばいいか(action)は 手札の上の 案内の1行(HandGuide.tsx)が出すので、ここには出さない
 
@@ -28,9 +28,9 @@ export interface CardInfo {
 const ACTION_PICK = '● で えらぶ';
 const ACTION_ARMED = '● もういちど で けってい ◀▶ やめる';
 
-// 見出しの字の大きさ:パネルの文字の幅(約 270px)に1行で収まる大きさ(上限 28px)
+// 見出しの字の大きさ:1行の中で 長すぎない大きさ(上限 30px)
 function titleSize(text: string): number {
-  return Math.min(28, Math.floor(270 / Math.max(1, [...text].length)));
+  return Math.min(30, Math.floor(360 / Math.max(1, [...text].length)));
 }
 
 /** 説明パネルの中身(出さないときは null) */

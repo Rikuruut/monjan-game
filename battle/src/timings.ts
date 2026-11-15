@@ -46,6 +46,8 @@ export const PRACTICE_COACH_PAGE_MS = 6000;
 // じゃんけんの見せ場(ClashStage):大きなカード2枚が すべりこむ → じゃん・けん・ぽん の3拍 → めくって結果(約3.3秒)
 // ※ 2026年11月14日:350 / 1000ms では速すぎて わかりにくかったので のばした。そのあと 1拍を 550 → 750ms(ワンテンポ遅く)
 export const CARD_CLASH_IN_MS = 300;
+// 自分のカードを出す:決定のあと、選んだカードが 裏向きで 手札から場へ飛んで置かれる(相手の ふせる と同じ。見せ場の前の ひと呼吸)
+export const CARD_PLAYER_PLACE_MS = 800;
 export const CARD_JANKEN_BEAT_MS = 750;
 export const CARD_REVEAL_MS = 1300;
 // 相手のターン:考える(手札がゆれて「カードを えらんでいる…」)→ ふせる(裏向きのカードが 場へ飛んで置かれる)

@@ -1,3 +1,4 @@
+import { HandInfo } from './HandInfo';
 import { skillBlockedReason, type CardBattleApi } from './useCardBattle';
 
 // 案内の1行:手札のゾーンの上のふちに、いま やることを大きく1行で出す(見た目は cardbattle.css の .cb-guide)。
@@ -34,13 +35,16 @@ export function handGuide(battle: CardBattleApi): string | null {
   return '● を もういちど おすと だすよ！';
 }
 
-/** 手札のゾーン(うしろを少し暗くして囲む)と、その上のふちの 案内の1行 */
+/** 手札のゾーン(うすい線の囲み)と、その上のふちの1行:左に 説明(HandInfo)、右に 案内 */
 export function HandZone({ battle }: { battle: CardBattleApi }) {
   const guide = handGuide(battle);
   return (
-    <div className={`cb-hand-zone${battle.armed && battle.view === 'player' ? ' cb-hand-zone--armed' : ''}`} aria-hidden={guide ? undefined : true}>
-      {/* key で出しなおして、文言が変わるたびに はねて出る */}
-      {guide && <p key={guide} className="cb-guide" role="status" aria-live="polite" data-testid="hand-guide">{guide}</p>}
+    <div className={`cb-hand-zone${battle.armed && battle.view === 'player' ? ' cb-hand-zone--armed' : ''}`}>
+      <div className="cb-hand-zone__bar">
+        <HandInfo battle={battle} />
+        {/* key で出しなおして、文言が変わるたびに はねて出る */}
+        {guide && <p key={guide} className="cb-guide" role="status" aria-live="polite" data-testid="hand-guide">{guide}</p>}
+      </div>
     </div>
   );
 }

@@ -106,7 +106,7 @@ export function useCardFx(
   useGSAP(() => {
     const root = rootRef.current;
     if (view !== 'cpu-turn' || cpuStep !== 'place' || !root) return;
-    const fly = root.querySelector<HTMLElement>('.cb-field__fly');
+    const fly = root.querySelector<HTMLElement>('.cb-field__fly--cpu');
     const from = root.querySelector('.cb-cpu-hand__cards');
     if (!fly || !from) return;
     // 画面は 舞台ごと縮めて映しているので、見た目の px を 要素の px に直す
@@ -130,6 +130,12 @@ export function useCardFx(
       .call(() => shakerRef.current?.add(TIERS.small.trauma[1]))
       .to(fly, { scaleX: 1, scaleY: 1, duration: 0.4, ease: 'elastic.out(1, 0.4)' });
   }, { scope: rootRef, dependencies: [view, cpuStep] });
+
+  // ---- 自分が カードを出す:飛ぶ動きは 手札(HandRow)。着地(約 0.55 秒)で 小さく揺らす ----
+  useGSAP(() => {
+    if (view !== 'place') return;
+    gsap.delayedCall(0.56, () => shakerRef.current?.add(TIERS.small.trauma[1]));
+  }, { scope: rootRef, dependencies: [view] });
 
   // ---- スキル・相手のスキル(notice) ----
   // 回復:回復した側のカードが ふわっと ふくらんで もどる(うれしいことは 揺らさない)
