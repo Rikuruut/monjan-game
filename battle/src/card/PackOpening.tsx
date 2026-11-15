@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react';
 import { createParticleFire, stopParticleFire, type ParticleFire } from '../attackParticles';
+import { TITLE_LOGO_PATH } from '../components/Scenery';
 import { cx } from '../cx';
 import { gsap, useGSAP } from '../fx/gsap';
 import { mergeablePairs, type Card } from '../game/cards';
@@ -10,7 +11,7 @@ import { isRareCard, type CardBattleApi } from './useCardBattle';
 // パック選び・開封の画面(設計書4-1・7章・8章。見た目は cardbattle.css の .cb-pack-stage)。
 // えらぶ(パックが並び、えらんだパックが浮いて ゆれる)→ あける(ほかのパックが消え、えらんだパックが まんなかで ぶるぶる →
 // 上のふちが ビリッと ちぎれて飛び、粒が はじけ、裏向きのカードが せり上がる)→ めくる(横に広がって 左から1枚ずつ)→ バトル スタートを待つ。
-// トレーディングカードのパックを参考にした 仮の外装(あとで 画像に差しかえる)。
+// 外装は 看板モンスターの絵 + ロゴ(PackFace)。ラウンドの色(ふつう・銀・金)は 上下の帯・ふち・ホロの光で出す(絵は同じ)。
 // 進む時間は useCardBattle のタイマーが決める。ここは 見た目だけ(GSAP)
 
 // ラウンドごとの パックの色(設計書5-2:1体目 ふつう・2体目 銀・3体目 金)
@@ -21,18 +22,16 @@ const CARD_GAP = 236;
 // えらぶあいだの パックの縮み(cardbattle.css の .cb-pack の zoom と同じ。上3・下2 の2段が 画面に入る大きさ)
 const PACK_ZOOM = 0.72;
 
-function PackFace({ index, round }: { index: number; round: number }) {
+// 外装:看板モンスター3体の絵(public/assets/packs/pack-mascot.webp。cardbattle.css の .cb-pack の背景)の上に、
+// 「5まい いり」の帯(上)と タイトルロゴ(下)を重ねる。
+// 絵は 見本のモンスター(ライオン×ドライヤー・ティラノサウルス×はさみ・サメ×かさ)の元の絵を画像生成に渡して描かせた(2026年11月16日。依頼者が選んだ)
+function PackFace({ index }: { index: number }) {
   return (
     <>
       {/* 上の ちぎれる帯(ギザギザのふち) */}
       <span className="cb-pack__top" aria-hidden="true" />
-      <span className="cb-pack__body" aria-hidden="true">
-        <span className="cb-pack__logo">モンじゃん！</span>
-        <span className="cb-pack__name">カード<br />パック</span>
-        <span className="cb-pack__emblem">✦</span>
-        <span className="cb-pack__count">5まい いり</span>
-        <span className="cb-pack__round">ラウンド {round}</span>
-      </span>
+      <span className="cb-pack__count" aria-hidden="true">5まい いり</span>
+      <img className="cb-pack__logo" src={TITLE_LOGO_PATH} alt="" aria-hidden="true" draggable={false} />
       {/* 光の すじ(ホイルの照り返し) */}
       <span className="cb-pack__shine" aria-hidden="true" style={{ '--i': index } as CSSProperties} />
     </>
@@ -169,7 +168,7 @@ export function PackOpening({ battle }: { battle: CardBattleApi }) {
               aria-label={`パック ${index + 1}`}
               role="img"
             >
-              <PackFace index={index} round={state.round} />
+              <PackFace index={index} />
             </div>
           ))}
           {/* 開けた口から せり上がる 裏向きのカードの束 */}
