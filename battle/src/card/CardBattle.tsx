@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { burstAt, chargeAt, createParticleFire, healAt, stopParticleFire, type ParticleFire } from '../attackParticles';
 import { getAttributeTheme, type AttributeTheme } from '../attributes';
 import type { GameSound, GameSoundOptions } from '../audio/gameAudio';
-import { SpecialCutin } from '../battle/BattleScreen';
-import { MashDuel } from '../battle/MashDuel';
+import { SpecialCutin } from './SpecialCutin';
+import { MashDuel } from './MashDuel';
 import { AttackProjectile, ImpactBurst, ParticleLayer } from '../BattleEffects';
 import { HAND_META } from '../components/HandIcon';
 import { Backdrop, Logo } from '../components/Scenery';
@@ -20,6 +20,7 @@ import { FighterPanel } from './FighterPanel';
 import { HandZone } from './HandGuide';
 import { PackOpening } from './PackOpening';
 import { useCardFx } from './useCardFx';
+import type { CardDemoKind, ForcedResult } from './cardDev';
 import { Flip, gsap, useGSAP } from '../fx/gsap';
 import {
   shownPair,
@@ -536,6 +537,8 @@ export function CardBattle({
   packIntro = false,
   round = 1,
   onFinish,
+  demo,
+  forced,
 }: {
   player: Monster;
   cpu: Monster;
@@ -550,6 +553,10 @@ export function CardBattle({
   packIntro?: boolean;
   /** ラウンドの終わりの帯で「つぎへ」(リザルトへ)。ないときは「もういちど」(テスト・開発用) */
   onFinish?: (outcome: CardBattleOutcome) => void;
+  /** 開発者メニューの「演出を見る」(手札は setup で用意する) */
+  demo?: CardDemoKind | null;
+  /** 開発者メニューの「勝ち負けを決める」 */
+  forced?: ForcedResult;
 }) {
   const battle = useCardBattle({
     config,
@@ -562,6 +569,8 @@ export function CardBattle({
     setup,
     packIntro,
     onFinish: onFinish && ((ended) => onFinish(outcomeOf(ended, cpu))),
+    demo,
+    forced,
   });
   const { state, view, clash, damage, mash, cpuMash, rendanWinner, notice, chargeNote, finisherHit } = battle;
   usePadButtons(battle.press);
@@ -782,11 +791,17 @@ export function CardBattleEntry({
   playSound,
   packIntro = true,
   onFinish,
+  demo,
+  setup,
+  forced,
 }: {
   player: Monster;
   cpu: Monster;
   /** ラウンドの終わりの「つぎへ」(リザルトへ) */
   onFinish?: (outcome: CardBattleOutcome) => void;
+  demo?: CardDemoKind | null;
+  setup?: (state: BattleState) => BattleState;
+  forced?: ForcedResult;
   /** 練習(round = 1)の相手 */
   practiceCpu: Monster;
   /** 戦う相手(`?round=`)。1 = 練習・2 = 2体目・3 = ボス */
@@ -805,5 +820,5 @@ export function CardBattleEntry({
   }, []);
   const trial = useMemo(() => (config ? trialConfig(config, round) : null), [config, round]);
   if (!trial) return <main className="screen loading-screen"><div className="loader" /><p>カードを じゅんびしているよ…</p></main>;
-  return <CardBattle player={player} cpu={round === 1 ? practiceCpu : cpu} config={trial} playSound={playSound} packIntro={packIntro} round={round} onFinish={onFinish} />;
+  return <CardBattle player={player} cpu={round === 1 ? practiceCpu : cpu} config={trial} playSound={playSound} packIntro={packIntro && !demo} round={round} onFinish={onFinish} demo={demo} setup={setup} forced={forced} />;
 }

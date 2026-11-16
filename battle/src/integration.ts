@@ -54,15 +54,13 @@ export interface Launch {
   photoId: string | null;
   /** 見本(`?play=demo`)のときの名前。テストプレイで選んだことにしたもの */
   playerName?: string | null;
-  /** タイトルを飛ばして、すぐバトル(ルール説明)から始めるか */
+  /** タイトルを飛ばして、すぐバトル(パック選び)から始めるか */
   skipTitle: boolean;
   /** スタートで撮影の画面へ進むか。false なら、これまでどおり見本のモンスターでバトルへ */
   toGenerator: boolean;
-  /** 作りかけのカードバトル(card/)を開く(`?card=1`。できあがったら これまでのバトルと入れかえる) */
-  card?: boolean;
-  /** カードバトルで戦う相手(`?round=`。1 = 練習・2 = 2体目・3 = ボス。3ラウンドの通しができるまでの、1ラウンドだけの確かめ用) */
+  /** 戦う相手(`?round=`。1 = 練習・2 = 2体目・3 = ボス。3ラウンドの通しができるまでの、1ラウンドだけの確かめ用) */
   cardRound?: number;
-  /** カードバトルの パック選び・開封を飛ばす(`?pack=0`。開発用) */
+  /** パック選び・開封を飛ばす(`?pack=0`。開発用) */
   cardSkipPack?: boolean;
 }
 
@@ -72,24 +70,20 @@ export interface Launch {
  * - `?play=demo&name=<名前>` … 開発者メニューのテストプレイから来た。見本のゴリラ × はさみで、すぐバトル
  * - `?play=sample`  … バトルの見本のモンスターで、すぐバトル
  * - `?standalone=1` … サーバーにつながず、単体で遊ぶ(スタートで撮影の画面へ行かない)
- * - `?card=1` / `?card=0` … カードバトル / これまでのバトル。作業中の枝(card-battle)では、すぐバトルに入るとき(上の3つ)は
- *   何も付けなくてもカードバトルになる(`?card=0` で これまでのバトル)。`?round=` で戦う相手(1 = 練習・2 = 2体目・3 = ボス)。
- *   はじめは パック選び(`?pack=0` で 飛ばして すぐ戦闘から)
+ * - `?card=1`      … 見本のモンスターで、タイトルを飛ばして すぐバトル(開発用)
+ * - `?round=` で戦う相手(1 = 練習・2 = 2体目・3 = ボス)。はじめは パック選び(`?pack=0` で 飛ばして すぐ戦闘から)
  * ビルドしていない開発用(npm.cmd run dev)とテストは、これまでどおり単体で動く。
  */
 export function readLaunch(search: string = window.location.search, integrated: boolean = import.meta.env.PROD): Launch {
   const params = new URLSearchParams(search);
   const demo = params.get('play') === 'demo';
   const photoId = demo ? DEMO_PHOTO_ID : params.get('photo') || null;
-  const skipTitle = photoId !== null || params.get('play') === 'sample';
-  // カードバトル:`?card=1` か、すぐバトルに入るとき(撮影の画面の「たたかう!」など)。`?card=0` なら これまでのバトル
-  const card = params.has('card') ? params.get('card') !== '0' : skipTitle;
+  const skipTitle = photoId !== null || params.get('play') === 'sample' || params.get('card') === '1';
   return {
     photoId,
     playerName: demo ? params.get('name') : null,
     skipTitle,
     toGenerator: integrated && !params.has('standalone'),
-    ...(card ? { card: true } : {}),
     ...(params.has('round') ? { cardRound: Number(params.get('round')) || 2 } : {}),
     ...(params.get('pack') === '0' ? { cardSkipPack: true } : {}),
   };

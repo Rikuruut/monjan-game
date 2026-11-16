@@ -28,7 +28,7 @@ document.body.insertAdjacentHTML("beforeend", `
         <button class="dev-link" data-dev-page="/battle/" title="バトルのタイトル画面(会場で最初に出る画面)">タイトル</button>
         <button class="dev-link" data-dev-page="/" title="撮影・合体の画面を最初から">撮影</button>
         <button class="dev-link" data-dev-page="/?autotest=1" title="見本のゴリラ × はさみで、がったいから誕生まで自動で流す">テストプレイ</button>
-        <button class="dev-link" data-dev-page="/battle/?play=demo" title="見本のゴリラ × はさみで、バトルのルール説明から">見本でバトル</button>
+        <button class="dev-link" data-dev-page="/battle/?play=demo" title="見本のゴリラ × はさみで、バトルのパック選びから">見本でバトル</button>
       </p>
     </section>
     <section>

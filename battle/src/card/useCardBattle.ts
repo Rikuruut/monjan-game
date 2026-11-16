@@ -19,13 +19,14 @@ import { pickCpuMash, type RandomSource } from '../game/logic';
 import { useTimers } from '../hooks/useTimers';
 import type { PadButton } from '../integration';
 import type { Hand } from '../types';
-import { useCardDev, type CardDevCommand } from './cardDev';
+import { applyCardDev, DEMO_CARD_ID, forceCpuCard, useCardDev, type CardDemoKind, type CardDevCommand, type ForcedResult } from './cardDev';
 import {
   CARD_ATTACK_MS,
   CARD_DAMAGE_MS,
   CARD_CLASH_IN_MS,
   CARD_CPU_PLACE_MS,
   CARD_CPU_THINK_MS,
+  CARD_DEV_DEMO_LEAD_MS,
   CARD_DRAW_MS,
   CARD_FINISHER_ATTACK_MS,
   CARD_FINISHER_DRAW_MS,
@@ -167,6 +168,8 @@ export function useCardBattle({
   setup,
   packIntro = false,
   onFinish,
+  demo = null,
+  forced = 'normal',
 }: {
   config: BattleConfig;
   playerAttack: number;
@@ -182,6 +185,10 @@ export function useCardBattle({
   packIntro?: boolean;
   /** ラウンドの終わりの帯で 中ボタンを押したとき(リザルトへ)。ないときは「もういちど」で やり直す(テスト・開発用) */
   onFinish?: (state: BattleState) => void;
+  /** 開発者メニューの「演出を見る」:自分のターンから始めて、その演出を すぐ流す(手札は setup で用意しておく) */
+  demo?: CardDemoKind | null;
+  /** 開発者メニューの「勝ち負けを決める」:カードを出すと その結果になる */
+  forced?: ForcedResult;
 }) {
   const { schedule, clearTimers } = useTimers();
   // パックを開ける(setup があれば そのあとの状態を差しかえる)
@@ -194,7 +201,7 @@ export function useCardBattle({
   // 画面に見せている状態。じゃんけんの あいだは「出す前」のままにして、ダメージのところで「出したあと」に入れかえる
   const [state, setState] = useState<BattleState>(() => (packIntro ? startMatch(config, playerAttack, random, playerHp) : deal()));
   // ラウンドのはじめは パック選び(packIntro)か 相手のターンから(はじめの予約は 下の useEffect)
-  const [view, setView] = useState<CardBattleView>(packIntro ? 'pack' : 'cpu-turn');
+  const [view, setView] = useState<CardBattleView>(demo ? 'player' : packIntro ? 'pack' : 'cpu-turn');
 
   // ---- パック選び・開封(設計書4-1・8章):えらぶ → あける → めくる → バトル スタート ----
   // はじめのカーソル:上の段(3つ。cardbattle.css の .cb-pack-row)の まんなか
@@ -339,8 +346,10 @@ export function useCardBattle({
   };
 
   // はじめ:パック選び(packIntro)か 相手のターンから(StrictMode で2回呼ばれても、片づけで予約は消える)
+  // 演出を見る(demo)ときは 自分のターンから、少し置いて その演出を流す
   useEffect(() => {
-    if (packIntro) schedule(() => openChosenPack(), config.packAutoOpenMs);
+    if (demo) schedule(() => runDemo(demo), CARD_DEV_DEMO_LEAD_MS);
+    else if (packIntro) schedule(() => openChosenPack(), config.packAutoOpenMs);
     else startCpuTurn();
   }, []);
 
@@ -447,7 +456,9 @@ export function useCardBattle({
 
   // カードを出す:じゃん・けん・ぽん → めくる →(連打勝負)→ ダメージ
   const play = (card: Card) => {
-    const step = playCard(state, card.id);
+    // 開発者メニューで勝ち負けを決めているときは、相手の ふせたカードを その結果になる手に差しかえてから出す
+    const base = card.kind === 'janken' ? forceCpuCard(state, card, forced) : state;
+    const step = playCard(base, card.id);
     const janken = step.events.find((event) => event.type === 'janken');
     setArmed(false);
     if (!janken || janken.type !== 'janken') {
@@ -665,25 +676,44 @@ export function useCardBattle({
     else play(item.card);
   };
 
-  // 開発者メニュー(「カードバトル」タブ)の命令。自分のターン(手札えらび)のときだけ効く
-  const addCard = (face: CardFace) => {
-    const card = { ...face, id: `c${state.cardSeq + 1}` } as Card;
-    const next: BattleState = { ...state, cardSeq: state.cardSeq + 1, player: { ...state.player, hand: sortHand([...state.player.hand, card]) } };
+  // 開発者メニューの命令。自分のターン(手札えらび)で効く。ほかの場面で押したときは ためておいて、次の自分のターンで当てる
+  const pendingDevRef = useRef<CardDevCommand[]>([]);
+  const applyDev = (commands: CardDevCommand[]) => {
+    let next = state;
+    let focusId: string | undefined;
+    for (const command of commands) {
+      const applied = applyCardDev(next, command);
+      next = applied.state;
+      focusId = applied.focusId ?? focusId;
+    }
     setState(next);
     setArmed(false);
     setMergePick(null);
-    placeCursor(next, card.id);
+    placeCursor(next, focusId);
+    playSound('toggle');
   };
   useCardDev((command: CardDevCommand) => {
-    if (view !== 'player') return;
-    if (command === 'add-finisher') addCard({ kind: 'finisher' });
-    else if (command === 'add-heal') addCard({ kind: 'skill', skill: 'heal' });
-    else if (command === 'add-seal') addCard({ kind: 'skill', skill: 'seal' });
-    else if (command === 'player-pinch') setState({ ...state, player: { ...state.player, hp: Math.floor(state.player.maxHp * 0.3) } });
-    else if (command === 'cpu-half') setState({ ...state, cpu: { ...state.cpu, hp: Math.floor(state.cpu.maxHp * 0.5) } });
-    else if (command === 'cpu-charge') setState({ ...state, cpu: { ...state.cpu, chargeAnnounced: true } });
-    playSound('toggle');
+    if (view === 'player') applyDev([command]);
+    else pendingDevRef.current.push(command);
   });
+  useEffect(() => {
+    if (view !== 'player' || pendingDevRef.current.length === 0) return;
+    const commands = pendingDevRef.current;
+    pendingDevRef.current = [];
+    applyDev(commands);
+  }, [view]);
+
+  // 演出を見る:用意した手札(cardDev.ts の demoSetup)で、その演出を起こす
+  const runDemo = (kind: CardDemoKind) => {
+    const card = state.player.hand.find((item) => item.id === DEMO_CARD_ID);
+    if (kind === 'merge') {
+      if (pairs[0]) merge(pairs[0]);
+      return;
+    }
+    if (!card) return;
+    if (card.kind === 'skill') castSkill(card);
+    else play(card);
+  };
 
   /** 連打勝負の画面のゲージを押した(マウス) */
   const pressMash = () => {

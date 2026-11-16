@@ -3,16 +3,16 @@ import { assetUrl, BASE_URL, battleMonsterUrl, cardPreviewUrl, padButtonOf, read
 
 describe('撮影・合体の画面とのつなぎ', () => {
   it('?photo= があれば、そのモンスターですぐバトルから始める', () => {
-    expect(readLaunch('?photo=abc', true)).toEqual({ photoId: 'abc', playerName: null, skipTitle: true, toGenerator: true, card: true });
+    expect(readLaunch('?photo=abc', true)).toEqual({ photoId: 'abc', playerName: null, skipTitle: true, toGenerator: true });
   });
 
   it('テストプレイ(?play=demo)は見本のゴリラ × はさみを、選んだ名前ですぐバトルから始める', () => {
     expect(readLaunch('?play=demo&name=%E3%82%B4%E3%83%AA%E3%82%B7%E3%82%B6%E3%83%BC', true))
-      .toEqual({ photoId: 'demo', playerName: 'ゴリシザー', skipTitle: true, toGenerator: true, card: true });
+      .toEqual({ photoId: 'demo', playerName: 'ゴリシザー', skipTitle: true, toGenerator: true });
   });
 
   it('?play=sample はバトルの見本のモンスターですぐバトルから始める', () => {
-    expect(readLaunch('?play=sample', true)).toEqual({ photoId: null, playerName: null, skipTitle: true, toGenerator: true, card: true });
+    expect(readLaunch('?play=sample', true)).toEqual({ photoId: null, playerName: null, skipTitle: true, toGenerator: true });
   });
 
   it('何もなければタイトルから。ビルドしたものだけスタートで撮影の画面へ行く', () => {
@@ -21,11 +21,10 @@ describe('撮影・合体の画面とのつなぎ', () => {
     expect(readLaunch('?standalone=1', true).toGenerator).toBe(false);
   });
 
-  it('カードバトル:すぐバトルに入るときは カードバトル。?card=0 で これまでのバトル、?card=1 で タイトルなしでも カードバトル', () => {
-    expect(readLaunch('?photo=abc&card=0', true).card).toBeUndefined();
-    expect(readLaunch('', true).card).toBeUndefined();
-    expect(readLaunch('?card=1', true)).toMatchObject({ card: true, skipTitle: false });
-    expect(readLaunch('?photo=abc&round=3', true)).toMatchObject({ card: true, cardRound: 3 });
+  it('?card=1 は 見本で タイトルを飛ばす。?round= で相手、?pack=0 で パック選びを飛ばす', () => {
+    expect(readLaunch('?card=1', true)).toMatchObject({ photoId: null, skipTitle: true });
+    expect(readLaunch('?photo=abc&round=3', true)).toMatchObject({ cardRound: 3 });
+    expect(readLaunch('?photo=abc&pack=0', true)).toMatchObject({ cardSkipPack: true });
   });
 
   it('ありがとうの画面のカードは、撮影のモンスターだけ実際に刷ったカードのページ', () => {
