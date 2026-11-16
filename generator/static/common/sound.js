@@ -20,7 +20,16 @@
     tick:    { src: "/static/sounds/tick.wav",    volume: 0.7 },   // ひびが増えた・進み具合が上がった
     crack:   { src: "/static/sounds/crack.wav",   volume: 0.8 },   // 割れる・ひらく(誕生の瞬間)
     fanfare: { src: "/static/sounds/fanfare.wav", volume: 0.6 },   // モンスターが生まれた
+    // がったい中の嵐(fusion のテーマ。2026年11月16日。仮の音は tools/make_storm_sounds.py で合成)
+    thunder: { src: "/static/sounds/thunder.wav", volume: 1.0 },   // 落雷
+    rumble:  { src: "/static/sounds/rumble.wav",  volume: 0.6 },   // 遠くの稲光(ゴロゴロ)
+    gust:    { src: "/static/sounds/gust.wav",    volume: 0.6 },   // 突風
+    zap:     { src: "/static/sounds/zap.wav",     volume: 0.45 },  // 連打で 雷パワーを ためる(たまるほど 高く鳴らす)
   };
+  // 嵐の環境音(雨と風。くり返し)。window.sfx.storm(大きさ) で流す・0 で止める。
+  // がったい中の BGM(FUSION_BGM_VOLUME)の上に重ねるので、大きさは STORM_MAX_VOLUME を上限に その割合
+  const STORM = { src: "/static/sounds/storm.wav" };
+  const STORM_MAX_VOLUME = 0.45;
   // 撮影・合体の BGM「光差し込む森」(OpenTracks(旧 DOVA-SYNDROME)のフリー BGM)
   const BGM = { src: "/static/sounds/bgm.mp3", volume: 0.3 };
   const BGM_DUCK_VOLUME = 0.08;   // がったい中の、いつもの BGM の音量
@@ -88,11 +97,36 @@
     fadeTo(bgm, fusionHowl ? BGM_DUCK_VOLUME : BGM.volume);
   }
 
+  // 嵐の環境音。最初に使うときに作る(嵐のないテーマでは 読みこまない)
+  let stormHowl = null;
+  let stormVolume = 0;
+  function setStorm(level) {
+    if (!bgm) return;
+    const target = Math.max(0, Math.min(1, level)) * STORM_MAX_VOLUME;
+    if (target === stormVolume) return;
+    if (target > 0 && !stormHowl) {
+      stormHowl = new Howl({ src: [STORM.src], volume: 0, loop: true });
+    }
+    if (!stormHowl) return;
+    if (target > 0 && !stormHowl.playing()) stormHowl.play();
+    stormHowl.fade(stormHowl.volume(), target, target > stormVolume ? 1200 : FADE_MS);
+    if (target === 0) {
+      stormHowl.once("fade", () => { if (stormVolume === 0) stormHowl.stop(); });
+    }
+    stormVolume = target;
+  }
+
   window.sfx = {
-    play(name) {
+    // rate:再生の速さ(= 音の高さ。1 がそのまま)。同じ音の くり返しに聞こえないよう、少し変えて鳴らすときに使う
+    play(name, { rate = 1, volume } = {}) {
       const h = howls[name];
-      if (h) h.play();
+      if (!h) return;
+      const id = h.play();
+      if (rate !== 1) h.rate(rate, id);
+      if (volume !== undefined) h.volume(volume, id);
     },
+    // 嵐の環境音(雨と風)の大きさ(0〜1)。0 で フェードして止める。同じ値で何度呼んでもよい
+    storm(level) { setStorm(level); },
     // がったい中の BGM を流す(true)・止める(false)。同じ値で何度呼んでもよい
     fusionBgm(on) {
       if (on === fusionOn) return;

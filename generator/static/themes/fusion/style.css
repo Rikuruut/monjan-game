@@ -294,22 +294,68 @@ body {
   background: radial-gradient(circle, #fff 0%, #fffbe6 20%, #ffe9a8cc 42%, #ffe9a844 62%, transparent 72%);
   transform: scale(0.5);
 }
-/* 画像生成の途中の絵:中心の光の上に、ぼんやり透けて見える。data-partial(何枚目か)が進むほど、はっきりする */
+/* 画像生成の途中の絵:丸い窓に「かげ → ぼんやり」と だんだん見えてくる(2026年11月16日。それまでは 300px・うすく透けるだけで、ほとんど見えなかった)。
+   途中の絵は背景つきの 4:3 の絵なので、切り抜きのシルエットにはできない。暗く・強くぼかして 影絵のように見せる。
+   ぼかしは ここでかける(テストプレイは できあがりの絵を途中の絵として送るため)。色つきの はっきりした絵は 誕生で はじめて見せる。
+   うずの帯(.bands)より上に出す。うずは進むほど縮む(.condense)ので、窓は大きめにしてある */
 .vortex-peek {
-  left: 150px;
-  top: 150px;
-  width: 300px;
-  height: 300px;
+  z-index: 1;
+  left: 80px;
+  top: 80px;
+  width: 440px;
+  height: 440px;
   object-fit: cover;
   border-radius: 50%;
-  -webkit-mask-image: radial-gradient(circle, #000 45%, transparent 70%);
-          mask-image: radial-gradient(circle, #000 45%, transparent 70%);
+  -webkit-mask-image: radial-gradient(circle closest-side, #000 80%, transparent 100%);
+          mask-image: radial-gradient(circle closest-side, #000 80%, transparent 100%);
   opacity: 0;
   pointer-events: none;
 }
-[data-scene="s3"][data-partial="1"] .vortex-peek { opacity: 0.35; filter: blur(12px) saturate(0.7); }
-[data-scene="s3"][data-partial="2"] .vortex-peek { opacity: 0.55; filter: blur(6px) saturate(0.85); }
-[data-scene="s3"][data-partial="3"] .vortex-peek { opacity: 0.7;  filter: blur(2px); }
+/* 窓のふちの 金の光の輪(届いた瞬間に effects.js が広げて、ここへ戻す) */
+.peek-ring {
+  z-index: 1;
+  left: 76px;
+  top: 76px;
+  width: 448px;
+  height: 448px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 6px solid var(--sun);
+  box-shadow: 0 0 24px 6px #ffe9a8aa, inset 0 0 24px 6px #ffe9a888;
+  opacity: 0;
+  pointer-events: none;
+}
+/* 1枚目「かげ」:色をぬいて 明暗を強め、モンスターの形が 影のように うかぶ(暗くしすぎると ただの黒い円になる) */
+[data-scene="s3"][data-partial="1"] .vortex-peek { opacity: 0.9;  filter: grayscale(1) contrast(2.2) brightness(0.6) blur(6px); }
+/* 2枚目「ぼんやり」:形と うすい色が 分かる */
+[data-scene="s3"][data-partial="2"] .vortex-peek { opacity: 0.95; filter: brightness(0.75) saturate(0.5) blur(4px); }
+/* 3枚目(枚数を増やしたとき用) */
+[data-scene="s3"][data-partial="3"] .vortex-peek { opacity: 1;    filter: brightness(0.9) saturate(0.8) blur(2px); }
+[data-scene="s3"][data-partial] .peek-ring { opacity: 0.85; }
+
+/* がったい中の ひとこと。うずの下・進み具合の札の上。途中の絵の段で文を変える(GSAP がなくても出る) */
+.peek-caption {
+  position: absolute;
+  z-index: 3;
+  top: 556px;
+  left: -200px;
+  right: -200px;
+  margin: 0;
+  display: none;
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 34px;
+  color: var(--sun);
+  text-shadow:
+    -3px -3px 0 var(--ink), 3px -3px 0 var(--ink), -3px 3px 0 var(--ink), 3px 3px 0 var(--ink),
+    0 5px 0 var(--ink);
+}
+.peek-caption-text { display: inline-block; }
+.peek-caption-text::after { content: "なにが うまれるかな…?"; }
+[data-scene="s3"] .peek-caption { display: block; }
+[data-scene="s3"][data-partial="1"] .peek-caption-text::after { content: "なにか みえてきた…!"; }
+[data-scene="s3"][data-partial="2"] .peek-caption-text::after,
+[data-scene="s3"][data-partial="3"] .peek-caption-text::after { content: "もうすこしで うまれるよ!"; }
 
 .center-mark {
   position: absolute;
@@ -791,7 +837,313 @@ html:not(.fx) [data-scene="s4"] .card { animation: card-born 0.8s cubic-bezier(.
 @media (prefers-reduced-motion: reduce) {
   .warp, .drift { display: none; }
   .arms, .orb-ring, .orbit-x, .orbit-y { animation: none !important; }
+  .rain, .clouds { animation: none !important; }   /* 嵐の雨・雲も止める(止まった雨の線だけ見える) */
+  .power-stripes { animation: none !important; }   /* ゲージの中の しま模様も止める */
 }
 
 /* がったい中の名前えらび(core.js が #stage に naming を付ける):3つのボタンの名前を、どれも同じ大きさ・色にする */
 .stage.naming .knob-label { font-family: var(--font-title); font-weight: 400; font-size: 32px; color: var(--sun); }
+
+/* ------------------------------------------------------------------ */
+/* がったい中の嵐(2026年11月16日):進むほど 天気が悪くなり、嵐の雷で生まれる      */
+/* 段ごとの 雲・暗さ・雨は ここの静的な指定。落雷・風の筋などの動きは effects.js     */
+/* 内蔵 GPU のため、動かすのは 位置・大きさ・回転・透明度だけ                  */
+/*   段:1 雲がかかる / 2 小雨 / 3 大雨・遠くの稲光 / 4・5 嵐(落雷)/ s4 で晴れる  */
+/* ------------------------------------------------------------------ */
+/* 空の上の 黒い雲(横に長くして、ゆっくり 左右に流す。流れは飾りの動き) */
+.clouds {
+  position: absolute;
+  left: -240px;
+  top: -40px;
+  width: 2400px;
+  height: 600px;
+  background:
+    radial-gradient(ellipse 22% 38% at 12% 30%, #2b333bf2, transparent 70%),
+    radial-gradient(ellipse 26% 42% at 34% 22%, #252c34f2, transparent 70%),
+    radial-gradient(ellipse 24% 40% at 56% 32%, #2e363ff2, transparent 70%),
+    radial-gradient(ellipse 26% 44% at 78% 24%, #242b33f2, transparent 70%),
+    radial-gradient(ellipse 20% 36% at 95% 34%, #2b333bf2, transparent 70%),
+    linear-gradient(180deg, #1b2127 0%, #1b2127cc 35%, transparent 100%);
+  opacity: 0;
+  animation: cloud-drift 26s ease-in-out infinite alternate;
+}
+@keyframes cloud-drift { from { transform: translateX(-120px); } to { transform: translateX(120px); } }
+/* 雲の奥が光る(遠くの稲光・落雷で effects.js が 透明度だけ動かす) */
+.cloud-flash {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 620px;
+  background: radial-gradient(ellipse 60% 70% at 50% 10%, #e8f0ffcc, #b9cbff55 50%, transparent 80%);
+  opacity: 0;
+}
+/* 雨:ななめの短い線の模様(1マス 160×220)を、縦に長い要素に描き、
+   1マスの整数倍(横 160・縦 440)だけ動かして くり返す(つなぎ目が見えない)。背景の位置は動かさない(重い) */
+.rain {
+  position: absolute;
+  left: -200px;
+  top: -440px;
+  width: 2320px;
+  height: 1520px;
+  background-size: 160px 220px;
+  opacity: 0;
+}
+.rain-a {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='220'%3E%3Cg stroke='%23d6e6ff' stroke-width='2.4' stroke-linecap='round' opacity='.75'%3E%3Cline x1='20' y1='10' x2='34.5' y2='50'/%3E%3Cline x1='95' y1='70' x2='109.5' y2='110'/%3E%3Cline x1='60' y1='150' x2='74.5' y2='190'/%3E%3Cline x1='135' y1='175' x2='149.5' y2='215'/%3E%3C/g%3E%3C/svg%3E");
+  animation: rain-fall 0.55s linear infinite;
+}
+.rain-b {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='220'%3E%3Cg stroke='%23eef4ff' stroke-width='1.8' stroke-linecap='round' opacity='.6'%3E%3Cline x1='50' y1='30' x2='61' y2='60'/%3E%3Cline x1='120' y1='110' x2='131' y2='140'/%3E%3Cline x1='10' y1='120' x2='21' y2='150'/%3E%3Cline x1='85' y1='185' x2='96' y2='215'/%3E%3C/g%3E%3C/svg%3E");
+  animation: rain-fall 0.4s linear infinite;
+}
+@keyframes rain-fall { from { transform: translate(0, 0); } to { transform: translate(160px, 440px); } }
+/* 背景を暗くして、うずの光を目立たせる */
+.dim { position: absolute; inset: 0; background: var(--forest-deep); opacity: 0; }
+/* 段ごとの天気(誕生(s4)では どれも 0 にもどる = 晴れる) */
+[data-scene="s3"][data-level="1"] .clouds { opacity: 0.5; }
+[data-scene="s3"][data-level="2"] .clouds { opacity: 0.75; }
+[data-scene="s3"][data-level="3"] .clouds { opacity: 0.9; }
+[data-scene="s3"][data-level="4"] .clouds,
+[data-scene="s3"][data-level="5"] .clouds { opacity: 1; }
+[data-scene="s3"][data-level="1"] .dim { opacity: 0.15; }
+[data-scene="s3"][data-level="2"] .dim { opacity: 0.3; }
+[data-scene="s3"][data-level="3"] .dim { opacity: 0.45; }
+[data-scene="s3"][data-level="4"] .dim,
+[data-scene="s3"][data-level="5"] .dim { opacity: 0.6; }
+[data-scene="s3"][data-level="2"] .rain-a { opacity: 0.5; }
+[data-scene="s3"][data-level="3"] .rain-a,
+[data-scene="s3"][data-level="4"] .rain-a,
+[data-scene="s3"][data-level="5"] .rain-a { opacity: 0.85; }
+[data-scene="s3"][data-level="3"] .rain-b { opacity: 0.6; }
+[data-scene="s3"][data-level="4"] .rain-b,
+[data-scene="s3"][data-level="5"] .rain-b { opacity: 0.85; }
+/* 雨と雲が 見えていないときは 動かさない(描き直しを減らす) */
+[data-scene="s1"] .rain, [data-scene="s2"] .rain, [data-scene="s4"] .rain,
+[data-scene="s1"] .clouds, [data-scene="s2"] .clouds, [data-scene="s4"] .clouds { animation-play-state: paused; }
+/* 稲妻(effects.js が 落ちるたびに 形を作って 一瞬 光らせる)。うずの前 */
+.bolts {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: visible;
+  pointer-events: none;
+  /* ※ 画面全体の要素に filter(drop-shadow)を付けると、雷が光るたびに 全体のぼかしを描き直して重かった(2026年11月16日)。
+     光のにじみは 太くて うすい線(.bolt-glow)で描く */
+}
+.bolt { opacity: 0; }
+.bolt path { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.bolt-glow { stroke: #b9d4ff; stroke-width: 26; opacity: 0.35; }
+.bolt-core { stroke: #ffffff; stroke-width: 7; }
+.bolt-big .bolt-glow { stroke-width: 40; }   /* 誕生の 特大の落雷 */
+.bolt-big .bolt-core { stroke-width: 11; }
+/* 誕生:嵐が晴れて、上から差しこむ光の筋 */
+.sun-break {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  background: repeating-conic-gradient(from 160deg at 50% -10%, #fff6c8aa 0deg 4deg, transparent 4deg 11deg);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 30%, transparent 85%);
+          mask-image: linear-gradient(180deg, #000 0%, #000 30%, transparent 85%);
+  opacity: 0;
+  pointer-events: none;
+}
+/* 突風(2段目):画面のふちが 緑に ふわっと光る */
+.edge-glow { position: absolute; inset: 0; box-shadow: inset 0 0 140px 40px #6CC04Acc; opacity: 0; }
+/* 風の筋:画面を ななめに 走りぬける(2段目から 嵐のあいだ 流れ続ける) */
+.gale {
+  position: absolute;
+  left: 0;
+  width: 560px;
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #ffffffdd 45%, #fff 55%, transparent);
+  opacity: 0;
+}
+/* もうすぐ(4段目):うずの上に 大きく はねて出る */
+.soon-banner {
+  position: absolute;
+  z-index: 5;
+  top: 228px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 104px;
+  line-height: 1.1;
+  color: var(--sun);
+  text-shadow:
+    -4px -4px 0 var(--ink), 4px -4px 0 var(--ink), -4px 4px 0 var(--ink), 4px 4px 0 var(--ink),
+    0 9px 0 var(--ink), 0 0 40px #fff2c0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* がったい中の連打:雷パワーを ためる(2026年11月16日。同じ日に 手ごたえを調整)  */
+/* たまり具合は core.js が付ける #stage の --power(0〜1)・data-power-step(0〜3)・ */
+/* data-power-full。ここは 静的な指定だけ(押したときの はずみ・雷・火花は effects.js) */
+/* ------------------------------------------------------------------ */
+.power-gauge {
+  position: absolute;
+  z-index: 5;
+  left: 1590px;
+  top: 270px;
+  width: 140px;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+[data-scene="s3"] .power-gauge { display: flex; }
+.power-label {
+  margin: 0;
+  padding: 4px 16px 6px;
+  border: 3px solid var(--sun);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--sun);
+  font-family: var(--font-title);
+  font-size: 26px;
+  white-space: nowrap;
+}
+.power-tube {
+  position: relative;
+  width: 90px;
+  height: 460px;
+  overflow: hidden;
+  border: 6px solid var(--ink);
+  border-radius: 999px;
+  background: #0d2219d9;
+  box-shadow: 0 0 0 4px var(--sun), inset 0 0 18px #000a, 0 10px 24px #0008;
+}
+/* 中身:下から たまる。高さは いつも満タンのまま、上を clip-path で隠して たまり具合を見せる
+   (高さを変えると レイアウトの計算が起きるので。2026年11月16日。--power は core.js が #power-meter に書く) */
+.power-fill {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(calc((1 - var(--power, 0)) * 100%) 0 0 0);
+  overflow: hidden;
+  background: linear-gradient(0deg, #3F8F4A, #6CC04A 50%, #b8f08a);
+}
+/* 段で色が変わる:緑 → 黄色 → だいだい → 白く光る金 */
+[data-power-step="1"] .power-fill { background: linear-gradient(0deg, #d99a1e, #F2C14E 50%, #FFE9A8); }
+[data-power-step="2"] .power-fill { background: linear-gradient(0deg, #d4520f, #ff8a2a 50%, #ffc35a); }
+[data-power-step="3"] .power-fill { background: linear-gradient(0deg, #F2C14E, #FFE9A8 45%, #ffffff); }
+/* 中で 電気が流れる:ななめの しま模様を 上へ動かす(1くり返し = 縦 約34px だけ動かして つなぎ目を消す。位置だけ) */
+.power-stripes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -40px;
+  height: 520px;
+  background: repeating-linear-gradient(135deg, #ffffff55 0 10px, transparent 10px 24px);
+  animation: power-flow 0.6s linear infinite;
+}
+[data-power-full] .power-stripes { animation-duration: 0.25s; }
+@keyframes power-flow { from { transform: translateY(0); } to { transform: translateY(-33.94px); } }
+/* たまった先が光る 線(位置は transform で動かす。bottom を変えると レイアウトの計算が起きる。460px は 管の中の高さ) */
+.power-head {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: -5px;
+  transform: translateY(calc(var(--power, 0) * -460px));
+  height: 10px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 0 12px 4px #fffbe0, 0 0 26px 8px #FFE9A8aa;
+}
+/* 目盛り(1/3・2/3):線と ⚡。こえると 光る */
+.power-mark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 3px dashed #ffffff55;
+  color: #ffffff66;
+  font-size: 26px;
+  line-height: 0;
+  text-align: center;
+}
+.power-mark-1 { bottom: 33.33%; }
+.power-mark-2 { bottom: 66.67%; }
+[data-power-step="1"] .power-mark-1,
+[data-power-step="2"] .power-mark-1, [data-power-step="2"] .power-mark-2,
+[data-power-step="3"] .power-mark-1, [data-power-step="3"] .power-mark-2 {
+  border-top-color: #fff;
+  color: #fff;
+  text-shadow: 0 0 10px #FFE9A8, 0 2px 0 var(--ink);
+}
+/* 数字(「45%」。core.js が書く) */
+.power-percent {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 36px;
+  line-height: 1;
+  color: var(--white);
+  text-shadow:
+    -3px -3px 0 var(--ink), 3px -3px 0 var(--ink), -3px 3px 0 var(--ink), 3px 3px 0 var(--ink);
+}
+[data-power-full] .power-percent { color: var(--sun); }
+/* 満タン:ゲージのまわりが 金に光る(脈打つ動きは effects.js) */
+[data-power-full] .power-tube { box-shadow: 0 0 0 4px #fff, 0 0 40px 14px #FFE9A8, inset 0 0 18px #fff8, 0 10px 24px #0008; }
+[data-power-full] .power-label { background: var(--sun); color: var(--ink); }
+/* 区切りの ひとこと(「いいぞ!」「もっと!」「パワー MAX!」)。ゲージの左に はねて出る */
+.power-pop {
+  position: absolute;
+  z-index: 6;
+  left: 1040px;   /* 右はしが ゲージ(1590〜)に かからないように */
+  top: 380px;
+  width: 520px;
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 72px;
+  line-height: 1.1;
+  color: var(--sun);
+  text-shadow:
+    -4px -4px 0 var(--ink), 4px -4px 0 var(--ink), -4px 4px 0 var(--ink), 4px 4px 0 var(--ink),
+    0 7px 0 var(--ink), 0 0 30px #fff2c0;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+/* 連打の 細い雷 */
+.bolt-tap {
+  fill: none;
+  stroke: #fffbe0;
+  stroke-width: 4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0;
+}
+/* 押すと ゲージへ飛ぶ 火花(effects.js が 位置と大きさだけ動かす) */
+.power-sparks { position: absolute; z-index: 6; inset: 0; pointer-events: none; }
+.power-sparks i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #FFE9A8 45%, #F2C14E00 72%);
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* 軽くするため(2026年11月16日):がったい中だけ、揺らす層と 透明度を動かす大きな幕を GPU にまかせる。     */
+/* 動かすたびに 中身(雨・雲・うず)を描き直さないように。GPU のメモリを使うので s3 のときだけ        */
+/* ------------------------------------------------------------------ */
+[data-scene="s3"] .land,
+[data-scene="s3"] .scene-art { will-change: transform; }
+[data-scene="s3"] .dim,
+[data-scene="s3"] .cloud-flash,
+[data-scene="s3"] .edge-glow { will-change: opacity; }
+/* 光の筋は 誕生(s4)のはじめに出るので、s3 の終わりから s4 まで */
+[data-scene="s3"] .sun-break,
+[data-scene="s4"] .sun-break { will-change: opacity; }

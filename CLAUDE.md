@@ -23,7 +23,7 @@
 cd generator; .\.venv\Scripts\python.exe -m app.main     # 展示。キオスクで /battle/ が開く(直下の start.bat でも同じ)
 cd generator; .\.venv\Scripts\python.exe -m pytest       # API は呼ばない
 cd battle; npm.cmd install                # 最初の1回(版は package.json で固定してある)
-cd battle; npm.cmd test                   # vitest
+cd battle; npm.cmd test                   # vitest(場所は大文字の C:\ から。小文字の c:\ だと vitest が二重に読まれ、全部「reading 'config'」で落ちる)
 cd battle; npm.cmd run sim                    # カードバトルのシミュレーション(全クリア率など。下の「カードバトルへの作り直し」)
 cd battle; npm.cmd run build              # 型チェック + ../generator/static/battle/ に出力
 cd battle; npm.cmd run dev                # バトルだけを単体で開発(見本のモンスター。サーバー不要)
@@ -35,6 +35,10 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
 /battle/(タイトル)→ スタート → /(撮影・合体・誕生)→ たたかう! → /battle/?photo=<photo_id>(ルール → バトル)
  → 勝ち/負け/引き分け → ありがとう → タイトルへ もどる(/battle/)
 ```
+- ページをまたぐときは「葉のカーテン」(2026年11月16日。依頼者が選んだ):葉と花びらが うずを巻いて画面を覆い → 移る → 次のページは 覆われた状態から 葉が風に散って開く。
+  部品は `generator/static/common/curtain.js` の1つ(依存なし・Web Animations。CSS も中)で、撮影側の `themes/fusion/index.html` と `battle/index.html` の `<head>` で読む。
+  `window.monjanCurtain.leave(url)` で閉じてから移る(撮影側 `core.js` の `goBattle`・バトル側 `integration.ts` の `navigateTo`。読めていなければ すぐ移る)。
+  前のページが `sessionStorage` の `monjan-curtain` に印を付け、次のページは `<html class="curtain-closed">` で最初の描画から覆い、`load`(おそくとも3秒)で開く。撮影ページの中の場面の切りかえは これまでの木もれ日の光のまま
 - サーバー(`generator/app/main.py`)が `generator/static/battle/` を `/battle/` で配る(`battle/vite.config.ts` の `base`・`build.outDir`)
 - 受け渡しは `GET /api/battle-monster/{id}`(`generator/app/battle.py`)。バトルの JSON 形式(`battle/docs/DATA_SPEC.md`)で返す
   - `name` は子供が選んだ名前、`attribute` はタイプ(火 など8つ。バトルの属性と同じ)、`image` は `/api/monster-image/{photo_id}`
@@ -74,6 +78,7 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
   - `card/useCardFx.ts`:命中(止める → 揺れ・少し寄る・のけぞる・数字がはずむ・HP がゆれる)・必殺技の揺れ・相手がふせるカードの弧・回復/封じ手/ため技の予告・ターンの札。`ClashStage.tsx` はすべりこむ → はねる → めくる → 勝ち負け を GSAP で。手札は Flip(`.cb-hand__cell` が並びの位置、中の `.cb-hand__slot` が扇形の傾き)。必殺技の名前・結果とありがとうの見出しは SplitText で1文字ずつ。タイトル・結果・ありがとうは 登場の動き
   - 光の点滅は 1秒に3回以下(WCAG 2.3.1):命中の白(1回)+ 必殺技の命中(2回。同時)・カットイン(0.9秒で2回)・HP の赤(1秒に1回)。「動きを減らす」の設定では 揺れ3割・ヒットストップなし
 - 段階2b のパック選び(2026年11月15日):**ラウンドのはじめ**に(依頼者と決めた。生成 →「たたかう!」→ パック選び → 1体目 が その1回目)。view `pack` と `packStep`(choose → opening → reveal → ready。`useCardBattle.ts`)、画面は `card/PackOpening.tsx`。外装(2026年11月16日。依頼者が選んだ)は 看板モンスター3体の絵 `battle/public/assets/packs/pack-mascot.webp`(見本のライオン×ドライヤー・ティラノサウルス×はさみ・サメ×かさ の元の絵を `images.edit` に渡して描かせた。文字なし)の上に、「5まい いり」の帯(上)と タイトルロゴ(下。`TITLE_LOGO_PATH`)を重ねる。ミツキング(`monster_mitsuki`)は人の写真から作られ本人の顔立ちが残るので、看板にしない。パックは `config.packChoices`(3。あとで5にできる)から ←→ で えらび、決定1回で開ける(`packAutoOpenMs` 10秒で 自動)→ ほかのパックが落ちる → ぶるぶる → 上の帯が ビリッと飛ぶ(音 `pack-tear`・粒は この1回だけ・光の筋)→ 裏のカードが せり上がる → 横に広がって 左から1枚ずつめくる(`card-flip`。1枚ごとに音程が上がる。★3・スキル・必殺技は めくる前から 裏が光る)→ ペアに ✨ →「● で バトル スタート!」(`CARD_PACK_READY_AUTO_MS` 6秒で 自動)→ 相手のターン。中身は 開けたときに抽選(エンジンの `openPack`)。時間は `timings.ts` の `CARD_PACK_*`。パックの色は ラウンドで ふつう・銀・金(ふちと上下の帯の色。絵は同じ。いまは `trialConfig` で いつも ラウンド1 なので ふつう)。「もういちど」も パック選びから。`?pack=0` で飛ばせる(開発用)。テストの `CardBattle` は 既定の `packIntro=false` で すぐ戦闘から
+- 相手の手札(2026年11月16日。依頼者と決めた):練習のほかは **グー・チョキ・パー を1枚ずつに固定**し、この順に並べる(出した手と同じ手を足す。★は1枚ごとに抽選。`engine.ts` の `fillCpuHand`)。それまでは1枚ずつランダムで、同じ手が2枚そろうこともあった。練習は これまでどおり全部グー。シミュレーション(いまの設定):全クリア 77〜91%・平均 5.7〜7.8 ターン
 - これから(依頼者の方針:カードの機能・UI・ゲームデザインを先に固めて、通し(2b)は そのあと):UI・レベルデザイン・ゲーム性の調整(つづき)→ 2b の残り:3ラウンド(ラウンドの終わり → `startNextRound` → パック選び)・リザルト・練習の吹き出し・ボスの読みこみ(直前の来場者)→ 2e 開発者メニュー・自動プレイ・これまでのバトルと入れかえ → 段階3 演出 → 段階4 生成側・カード印刷・`POST /api/battle-result`
 
 ## エージェントのスキル

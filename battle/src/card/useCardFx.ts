@@ -93,7 +93,9 @@ export function useCardFx(
   useGSAP(() => {
     if (view !== 'cpu-turn') return;
     const panels = rootRef.current?.querySelectorAll('.battlefield .monster-panel');
-    if (panels?.length) gsap.set(panels, { clearProps: 'transform' });
+    // transformOrigin も消す:とどめで付けた '50% 50%' が残ると、cardbattle.css の scale: 0.8 が
+    // 上端ではなく中心を基準に縮み、相手のカードが下にずれる(clearProps: 'transform' だけでは 消えない)
+    if (panels?.length) gsap.set(panels, { clearProps: 'transform,transformOrigin' });
   }, { scope: rootRef, dependencies: [view] });
 
   // ---- 必殺技のカットイン:たたきつける瞬間に 大きく揺らす ----

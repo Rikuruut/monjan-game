@@ -95,6 +95,12 @@ document.body.insertAdjacentHTML("beforeend", `
         <button data-demo-sfx="crack" title="crack">割れる</button>
         <button data-demo-sfx="fanfare" title="fanfare">誕生</button>
       </p>
+      <p class="dev-row dev-field"><span class="dev-label">嵐(fusion)</span>
+        <button data-demo-sfx="thunder" title="thunder">落雷</button>
+        <button data-demo-sfx="rumble" title="rumble">遠雷</button>
+        <button data-demo-sfx="gust" title="gust">突風</button>
+        <button id="demo-storm" title="雨と風の音(storm.wav)を 流す・止める">雨と風</button>
+      </p>
       <p class="dev-row dev-field"><span class="dev-label">がったい中の BGM</span>
         <span id="fusion-bgm-choices" class="dev-row"></span>
       </p>
@@ -463,6 +469,13 @@ el("dev-card-open").addEventListener("click", () => showCardPreview(cardId()));
 el("dev-card-print").addEventListener("click", printCard);
 document.querySelectorAll("[data-demo-sfx]").forEach((btn) => {
   btn.addEventListener("click", () => sound(btn.dataset.demoSfx));
+});
+// 嵐の雨と風の音:押すたびに 流す(いちばん強い大きさ)・止める
+let demoStormOn = false;
+el("demo-storm").addEventListener("click", () => {
+  if (!window.sfx || !window.sfx.storm) return;
+  demoStormOn = !demoStormOn;
+  window.sfx.storm(demoStormOn ? 1 : 0);
 });
 
 // がったい中の BGM を選ぶ(1〜3・なし)。選んでいるものを太字にする

@@ -24,7 +24,10 @@
 //   #toast(class="show" が付く)、#tip、#name-help、#name-list、#st-naming / #st-drawing / #st-soon、
 //   #card-name、#card-element、#card-recipe、#card-desc、#card-img
 //   (なくてもよい)#stage.naming:がったい中に3つのボタンが名前の候補になっているあいだ付く(名前を同じ見た目にするため)
-//   (なくてもよい)#partial-img:画像生成の途中の絵。届くと src が入り、#stage に data-partial(何枚目か。1から)が付く
+//   (なくてもよい)#partial-img:画像生成の途中の絵。届くと src が入り、#stage に data-partial(何枚目か。1から)が付く。
+//     読みこめたときに #stage に partialchange イベント(detail: { index })も送る
+//   (なくてもよい)がったい中の連打のパワー:#power-meter(なければ #stage)の --power(0〜1)、#stage の data-power-step(0〜3)・data-power-full(満タン)、
+//     #power-percent(あれば「45%」を書く)、押すたびに powertap イベント(detail: { power, peak, max, pos })。テーマは ゲージなどで見せる
 // ── 進み具合の見せ方 ──
 //   #stage に CSS 変数 --progress(0〜1)と data-level(0〜5)を付ける。
 //   level:0 まだ / 1 なまえを考えている / 2 絵をかき始めた / 3 半分すぎ / 4 もうすぐ / 5 できた
@@ -44,7 +47,7 @@
 //   ?demo=1&play=birth で、割れる直前から誕生後までの流れを見本のデータで動かす。
 //   同じことは、開発者メニューの「演出を見る」のボタンからもできる(ふつうの画面のまま使える。dev.js)。
 
-const sound = (name) => { if (window.sfx) window.sfx.play(name); };
+const sound = (name, options) => { if (window.sfx) window.sfx.play(name, options); };
 const fusionBgm = (on) => { if (window.sfx && window.sfx.fusionBgm) window.sfx.fusionBgm(on); };
 const stage = el("stage");
 const params = new URLSearchParams(location.search);
@@ -56,6 +59,8 @@ const state = {
   generating: false,   // がったい中か(この間に届いた写真は無視する)
   nameChoices: [],
   chosenName: "",
+  power: 0,            // がったい中に 連打でためた パワー(0〜POWER_MAX。手を止めると 少しずつ減る)
+  powerPeak: 0,        // この回で いちばん たまった値(区切りの ひとことを 1回だけ出すため)
 };
 
 // ----------------------------------------------------------------------
@@ -79,7 +84,7 @@ function headlineFor(scene) {
   if (scene === "s3") {
     if (state.chosenName) return "「" + state.chosenName + "」に けってい!";
     if (state.nameChoices.length) return "なまえを えらんでね!";
-    return "なにが うまれるかな...?";
+    return state.generating ? "ボタンを れんだ! パワーを ためよう" : "なにが うまれるかな...?";
   }
   return "たんじょう!";
 }
@@ -96,6 +101,92 @@ function nameButtons() {
   return buttons;
 }
 
+// がったい中の「雷パワーを ためる」連打(2026年11月16日。待ち時間に 退屈しないように。依頼者が選んだ)。
+// 名前えらびでないとき(候補が届く前・名前を決めたあと)、3つのボタンは どれも「⚡ れんだ!」。押すたびに パワー +1。
+// たまり具合は #stage の --power(0〜1)・data-power-step(0〜3)・data-power-full、#power-percent(あれば「45%」)、
+// 押すたびに powertap イベント(テーマが見せ方を決める)。
+// できる絵・名前・バトルの数値は 変えない(テーマの誕生の演出が強くなるだけ)
+// 2026年11月16日の調整:30回では 4〜6秒で満タンになり 速すぎたので 100回にし、手を止めると 少しずつ減るようにした
+// (1秒に6回の連打で 約17秒。満タンになったら 減らさない)
+const POWER_MAX = 100;
+const NAME_LOCK_MS = 1000;      // 連打の最後から この時間は、名前の候補を押せない
+const POWER_DECAY_DELAY_MS = 600;   // 最後に押してから この時間たつと 減りはじめる
+const POWER_DECAY_PER_SEC = 4;
+const POWER_DECAY_TICK_MS = 100;
+let lastPowerTap = 0;
+let powerUnlockTimer = null;
+let powerDecayTimer = null;
+
+function powerLocked() { return Date.now() - lastPowerTap < NAME_LOCK_MS; }
+
+function powerButtons() {
+  const tap = (pos) => ({ label: "⚡ れんだ!", action: () => tapPower(pos), quiet: true });
+  return { left: tap("left"), center: tap("center"), right: tap("right") };
+}
+
+// ※ 軽くするため(2026年11月16日):--power は ゲージ(#power-meter)に書く。#stage に書くと 連打のたび・減るたびに
+//   舞台ぜんたいのスタイルを計算し直して重かった。#stage の data-power-step・data-power-full と「45%」は 変わったときだけ書く
+let shownPower = { ratio: null, step: null, full: null, percent: null };
+function showPower() {
+  const ratio = state.power / POWER_MAX;
+  if (ratio !== shownPower.ratio) {
+    (el("power-meter") || stage).style.setProperty("--power", ratio);
+    shownPower.ratio = ratio;
+  }
+  // 段:0 〜1/3 / 1 〜2/3 / 2 〜満タン前 / 3 満タン(テーマが ゲージの色・目盛りを変える)
+  const step = ratio >= 1 ? 3 : ratio >= 2 / 3 ? 2 : ratio >= 1 / 3 ? 1 : 0;
+  if (step !== shownPower.step) { stage.dataset.powerStep = step; shownPower.step = step; }
+  const full = ratio >= 1;
+  if (full !== shownPower.full) {
+    if (full) stage.dataset.powerFull = "";
+    else delete stage.dataset.powerFull;
+    shownPower.full = full;
+  }
+  const percent = Math.floor(ratio * 100);
+  const percentEl = el("power-percent");
+  if (percentEl && percent !== shownPower.percent) { percentEl.textContent = percent + "%"; shownPower.percent = percent; }
+}
+
+function tapPower(pos) {
+  lastPowerTap = Date.now();
+  state.power = Math.min(POWER_MAX, Math.floor(state.power) + 1);
+  state.powerPeak = Math.max(state.powerPeak, state.power);
+  showPower();
+  // ビリッ:たまるほど 高く
+  sound("zap", { rate: 0.85 + 0.5 * (state.power / POWER_MAX) });
+  // peak:この回で いちばん たまった値(テーマは 区切りを こえた「はじめての1回」だけ ほめる)
+  stage.dispatchEvent(new CustomEvent("powertap", { detail: { power: state.power, peak: state.powerPeak, max: POWER_MAX, pos } }));
+  startPowerDecay();
+  // 名前の候補が出ているときは、ロックが解けたら 押せるように描き直す
+  clearTimeout(powerUnlockTimer);
+  powerUnlockTimer = setTimeout(() => { if (state.scene === "s3") renderControls(); }, NAME_LOCK_MS + 20);
+}
+
+// 手を止めると 少しずつ減る(満タンは減らない)。0 になったら タイマーを止める
+function startPowerDecay() {
+  if (powerDecayTimer) return;
+  powerDecayTimer = setInterval(() => {
+    if (state.scene !== "s3" || !state.generating || state.power <= 0) { stopPowerDecay(); return; }
+    if (state.power >= POWER_MAX || Date.now() - lastPowerTap < POWER_DECAY_DELAY_MS) return;
+    state.power = Math.max(0, state.power - POWER_DECAY_PER_SEC * POWER_DECAY_TICK_MS / 1000);
+    showPower();
+  }, POWER_DECAY_TICK_MS);
+}
+
+function stopPowerDecay() {
+  clearInterval(powerDecayTimer);
+  powerDecayTimer = null;
+}
+
+function resetPower() {
+  state.power = 0;
+  state.powerPeak = 0;
+  lastPowerTap = 0;
+  clearTimeout(powerUnlockTimer);
+  stopPowerDecay();
+  showPower();
+}
+
 // ボタンの中身。null は「ボタンを出さない」、disabled は「出すが押せない」
 function buttonsFor(scene) {
   if (scene === "s1") return { left: null, center: { label: "スマホで とる", action: requestCapture }, right: null };
@@ -104,7 +195,16 @@ function buttonsFor(scene) {
     center: { label: "がったい!", action: startFusion },
     right: null,
   };
-  if (scene === "s3") return nameButtons() || { left: null, center: { label: "まってね", disabled: true }, right: null };
+  if (scene === "s3") {
+    const names = nameButtons();
+    if (names) {
+      // 連打の すぐあとは 名前を押せない(連打のまま候補が届いて、うっかり決まらないように)
+      if (powerLocked()) for (const pos of NAME_BUTTON_POSITIONS) if (names[pos]) names[pos].disabled = true;
+      return names;
+    }
+    if (state.generating) return powerButtons();
+    return { left: null, center: { label: "まってね", disabled: true }, right: null };
+  }
   return {
     left: { label: "もう一回", action: restart },
     center: { label: "たたかう!", action: goBattle },
@@ -195,9 +295,12 @@ function printCard() {
 // テストプレイ・確認用の見本(写真の ID がない)では、見本のゴリラ × はさみで戦う(名前は選んだことにしたもの)
 function goBattle() {
   const id = cardId();
-  location.href = id !== "demo"
+  const url = id !== "demo"
     ? "/battle/?photo=" + id
     : "/battle/?play=demo&name=" + encodeURIComponent(shownDemoName());
+  // 葉のカーテン(common/curtain.js)を閉じてから移る。読めていなければ すぐ移る
+  if (window.monjanCurtain) window.monjanCurtain.leave(url);
+  else location.href = url;
 }
 
 let currentButtons = buttonsFor("s1");
@@ -270,18 +373,19 @@ function setScene(scene, { instant = false } = {}) {
 // ボタン(クリックとキーボードの両方)
 // ----------------------------------------------------------------------
 // ボタンを押した見た目と音(テストプレイで「押したことにする」ときも使う)
-function flashButton(pos) {
+// quiet:押した音(press)を鳴らさない(連打のボタン。かわりに それぞれの音を鳴らす)
+function flashButton(pos, { quiet = false } = {}) {
   const btn = el("btn-" + pos);
   btn.classList.add("pressed");
   setTimeout(() => btn.classList.remove("pressed"), 160);
-  sound("press");
+  if (!quiet) sound("press");
 }
 
 function press(pos) {
   const btn = el("btn-" + pos);
   const conf = currentButtons[pos];
   if (!conf || conf.disabled || btn.disabled) return;
-  flashButton(pos);
+  flashButton(pos, { quiet: !!conf.quiet });
   conf.action();
 }
 
@@ -420,6 +524,7 @@ function birth(data) {
   setProgress(1);
   fillCard(data);
   state.generating = false;
+  if (state.scene === "s3") renderControls();   // 連打のボタンを「まってね」に戻す(誕生の演出中は ためない)
   return new Promise((resolve) => {
     const img = el("card-img");
     const show = () => {
@@ -531,11 +636,15 @@ const TIPS = [
 // 進み具合(0〜1)を画面に渡す。見せ方はテーマの CSS が決める(--progress と data-level)。
 // 同じ値のときは書かない(#stage に書くと、舞台全体のスタイルを計算し直すため。目安の時間を過ぎると 0.95 のまま続く)
 let shownProgress = null;
+const PROGRESS_STEP = 0.02;
 function setProgress(ratio) {
   const r = Math.max(0, Math.min(1, ratio));
-  if (r !== shownProgress) {
-    stage.style.setProperty("--progress", r);
-    shownProgress = r;
+  // 0.02 きざみに丸めて、変わったときだけ書く(2026年11月16日。軽くするため。絵を描いているあいだ 0.4秒ごとに書いていた。
+  // 書くたびに うずの大きさ・玉の輪(幅と高さ)を計算し直すので、約1秒に1回に減らした。段(data-level)は 丸める前の値で決める)
+  const shown = Math.round(r / PROGRESS_STEP) / Math.round(1 / PROGRESS_STEP);
+  if (shown !== shownProgress) {
+    stage.style.setProperty("--progress", shown);
+    shownProgress = shown;
   }
   const prev = Number(stage.dataset.level || 0);
   const level = r <= 0 ? 0 : r < 0.3 ? 1 : r < 0.5 ? 2 : r < 0.7 ? 3 : r < 1 ? 4 : 5;
@@ -595,11 +704,15 @@ function onProgress(msg) {
 }
 
 // 画像生成の途中の絵。テーマに #partial-img があるときだけ見せる(fusion はうずの中心に透かす)。
-// 見せ方はテーマの CSS が決める(#stage の data-partial = 何枚目か。1 から)
+// 見せ方はテーマの CSS が決める(#stage の data-partial = 何枚目か。1 から)。
+// 読みこめたら partialchange イベントも送る(テーマが1回きりの演出を足せるように)
 function showPartial(url, index) {
   const img = el("partial-img");
   if (!img) return;
-  img.onload = () => { stage.dataset.partial = index; };   // 読みこめてから見せる(読みこみ中に空の枠が出ないように)
+  img.onload = () => {   // 読みこめてから見せる(読みこみ中に空の枠が出ないように)
+    stage.dataset.partial = index;
+    stage.dispatchEvent(new CustomEvent("partialchange", { detail: { index } }));
+  };
   img.src = url;
 }
 
@@ -718,6 +831,7 @@ function resetMachine() {
   el("name-help").textContent = "したの ボタンで えらんでね";
   el("card-name").textContent = "???";
   clearPartial();
+  resetPower();
 }
 
 // ----------------------------------------------------------------------

@@ -90,6 +90,30 @@ describe('試合のはじまりとパック', () => {
   });
 });
 
+describe('相手の手札(練習のほか)', () => {
+  const handsOf = (state: BattleState) => state.cpu.hand.map((card) => card.hand);
+
+  it('パックを開けると、相手は グー・チョキ・パー を1枚ずつ この順に持つ(シードを変えても同じ)', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { state } = openPack({ ...startMatch(config, ATTACK, seededRandom(1)), round: 2 }, seededRandom(seed));
+      expect(handsOf(state)).toEqual(['rock', 'scissors', 'paper']);
+    }
+  });
+
+  it('ふせたカードを出したあと、次のターンも グー・チョキ・パー にもどる', () => {
+    const start = playerTurn({
+      hand: [janken('p', 'paper', 1), janken('q', 'rock', 1)],
+      cpuHand: [janken('x', 'scissors', 2), janken('y', 'rock', 1), janken('z', 'paper', 3)],
+    });
+    const played = playCard(start, 'p').state;
+    expect(handsOf(played)).toEqual(['rock', 'paper']);
+    const next = beginNextTurn(played, seededRandom(7)).state;
+    expect(handsOf(next)).toEqual(['rock', 'scissors', 'paper']);
+    // 残っていたカード(★もそのまま)は 入れかえない
+    expect(next.cpu.hand.filter((card) => card.id === 'y' || card.id === 'z')).toHaveLength(2);
+  });
+});
+
 describe('じゃんけんの勝負', () => {
   it('勝つと ★のダメージ + 攻撃力 を与える。ふせたカードは相手の手札から なくなる', () => {
     const start = playerTurn({ hand: [janken('p', 'paper', 2)], cpuHand: [janken('x', 'rock', 3), janken('y', 'paper', 1), janken('z', 'rock', 1)] });

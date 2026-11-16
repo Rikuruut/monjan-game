@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>モンじゃん! たんじょうのもり</title>
+  <!-- ページをまたぐ「葉のカーテン」(バトル側と共通)。前のページが閉じて移ってきたら、最初の描画から覆うため いちばん先に読む -->
+  <script src="/static/common/curtain.js"></script>
   <!-- フォントは手元に置いてある(ガチャのテーマと同じ。SIL Open Font License。ネットが切れても字体が変わらないように) -->
   <link rel="stylesheet" href="/static/vendor/fonts/gacha.css">
   <link rel="stylesheet" href="/static/common/common.css">
@@ -24,6 +26,18 @@
   <!-- 風景:背景は1枚の絵(bg.webp。style.css の .stage)。その上に、ふちを暗くする影・うずの下の光・ゆっくり舞い落ちる葉と花びら -->
   <div class="land" aria-hidden="true">
     <span class="vignette"></span>
+    <!-- がったい中の嵐(2026年11月16日):進むほど 雲がかかり・暗くなり・雨が強くなる(段ごとの見た目は style.css。動きは effects.js)。
+         どれも うずより後ろ(途中の絵・名前えらびを隠さない)。雲の奥が光る幕・雨2層・暗くする幕・画面のふちの光・走りぬける風の筋 -->
+    <!-- 暗くする幕は いちばん下(雲・稲光・雨は 暗さの上に のせて はっきり見せる) -->
+    <span class="dim"></span>
+    <span class="clouds"></span>
+    <span class="cloud-flash"></span>
+    <span class="rain rain-a"></span>
+    <span class="rain rain-b"></span>
+    <span class="edge-glow"></span>
+    <span class="gale" style="top:250px"></span><span class="gale" style="top:380px"></span>
+    <span class="gale" style="top:500px"></span><span class="gale" style="top:610px"></span>
+    <span class="gale" style="top:720px"></span><span class="gale" style="top:330px"></span>
     <span class="ground-glow"></span>
     <span class="drift" style="left:180px;--d:0s;--t:13s"></span>
     <span class="drift" style="left:520px;--d:-4s;--t:15s"></span>
@@ -105,8 +119,10 @@
           <path d="M0.8 -10.0 L2.6 -9.0 L4.2 -8.3 L5.6 -7.6 L7.0 -6.8 L8.3 -5.8 L9.5 -4.7 L10.7 -3.4 L11.8 -2.0 L12.7 -0.4 L13.6 1.4 L14.3 3.5 L14.8 5.7 L15.0 8.2 L15.0 10.9 L14.6 13.7 L13.9 16.8 L12.6 20.0 L10.9 23.3 L8.5 26.5 L5.5 29.8 L1.8 32.8 L-2.6 35.6 L-7.7 38.0 L-13.6 39.8 L-20.1 40.9 L-27.3 41.1 L-35.1 40.2 L-43.4 38.2 L-51.9 34.9 L-60.5 30.0 L-69.1 23.5 L-77.2 15.3 L-84.8 5.3 L-91.3 -6.5 L-96.6 -20.0 L-100.2 -35.2 L-101.8 -52.0 L-101.0 -70.1 L-97.5 -89.2 L-90.9 -109.1 L-81.0 -129.3 L-67.4 -149.3 L-50.1 -168.6 L-28.8 -186.5 L-3.5 -202.5 L25.8 -215.6 L58.7 -225.4 L95.2 -231.2 L95.2 -231.2 L58.4 -227.3 L24.7 -218.7 L-5.4 -206.3 L-31.9 -191.0 L-54.5 -173.3 L-73.2 -154.0 L-88.1 -133.7 L-99.4 -112.8 L-107.3 -91.9 L-111.9 -71.5 L-113.6 -51.9 L-112.6 -33.4 L-109.3 -16.3 L-104.1 -0.8 L-97.2 13.0 L-88.9 25.0 L-79.7 35.1 L-69.8 43.4 L-59.4 49.8 L-48.9 54.4 L-38.5 57.4 L-28.3 58.8 L-18.6 58.8 L-9.6 57.5 L-1.3 55.1 L6.2 51.8 L12.7 47.6 L18.3 42.9 L22.8 37.7 L26.4 32.3 L29.0 26.7 L30.7 21.1 L31.5 15.7 L31.5 10.5 L30.8 5.6 L29.4 1.2 L27.5 -2.7 L25.3 -6.1 L22.6 -8.9 L19.8 -11.2 L16.9 -12.8 L13.9 -13.9 L11.0 -14.4 L8.3 -14.4 L5.9 -14.0 L3.7 -13.1 L1.9 -11.9 L0.8 -10.0Z"/>
         </svg>
         <div class="vortex-core"></div>
-        <!-- 画像生成の途中の絵(core.js が src と #stage の data-partial を付ける)。うずの中心の光の上に、ぼんやり透けて見える -->
+        <!-- 画像生成の途中の絵(core.js が src と #stage の data-partial を付ける)。丸い窓に「かげ → ぼんやり」と だんだん見えてくる。
+             色つきの はっきりした絵は 誕生で はじめて見せる。まわりに金の光の輪(届いた瞬間に effects.js が広げる) -->
         <img id="partial-img" class="vortex-peek" alt="" decoding="async">
+        <span class="peek-ring" aria-hidden="true"></span>
         <svg class="arms bands" viewBox="-300 -300 600 600" aria-hidden="true">
           <path d="M43.5 111.8 L34.9 113.2 L27.1 115.3 L19.3 117.2 L11.5 118.9 L3.7 120.3 L-4.3 121.3 L-12.3 121.9 L-20.4 122.2 L-28.6 122.0 L-36.9 121.5 L-45.2 120.5 L-53.5 119.1 L-61.9 117.3 L-70.4 115.0 L-78.8 112.2 L-87.2 109.0 L-95.5 105.2 L-103.8 101.0 L-112.0 96.2 L-120.1 90.9 L-128.1 85.0 L-135.9 78.7 L-143.5 71.7 L-150.9 64.2 L-158.0 56.1 L-164.8 47.5 L-171.3 38.2 L-177.4 28.4 L-183.0 18.1 L-188.2 7.1 L-192.9 -4.3 L-197.0 -16.4 L-200.5 -28.9 L-203.3 -41.9 L-205.4 -55.4 L-206.8 -69.4 L-207.3 -83.8 L-207.0 -98.5 L-205.8 -113.6 L-203.7 -129.0 L-200.6 -144.6 L-196.5 -160.4 L-191.3 -176.3 L-185.0 -192.4 L-177.7 -208.4 L-169.3 -224.5 L-159.8 -240.6 L-150.1 -257.4 L-150.1 -257.4 L-165.6 -245.3 L-179.0 -231.5 L-191.2 -216.9 L-202.2 -201.7 L-212.0 -186.0 L-220.5 -169.9 L-227.9 -153.4 L-234.1 -136.7 L-239.1 -119.9 L-243.0 -103.1 L-245.7 -86.2 L-247.2 -69.4 L-247.7 -52.9 L-247.0 -36.5 L-245.3 -20.5 L-242.6 -4.8 L-238.9 10.4 L-234.3 25.1 L-228.8 39.3 L-222.4 52.9 L-215.3 65.8 L-207.4 78.0 L-198.9 89.4 L-189.8 100.1 L-180.1 109.9 L-169.9 119.0 L-159.4 127.1 L-148.5 134.4 L-137.3 140.9 L-125.9 146.4 L-114.4 151.0 L-102.8 154.8 L-91.1 157.7 L-79.6 159.7 L-68.1 160.8 L-56.9 161.2 L-45.9 160.7 L-35.2 159.5 L-24.8 157.5 L-14.8 154.9 L-5.3 151.6 L3.7 147.6 L12.1 143.1 L20.0 138.1 L27.2 132.5 L33.8 126.4 L39.4 119.8 L43.5 111.8Z"/>
           <path d="M-43.5 -111.8 L-34.9 -113.2 L-27.1 -115.3 L-19.3 -117.2 L-11.5 -118.9 L-3.7 -120.3 L4.3 -121.3 L12.3 -121.9 L20.4 -122.2 L28.6 -122.0 L36.9 -121.5 L45.2 -120.5 L53.5 -119.1 L61.9 -117.3 L70.4 -115.0 L78.8 -112.2 L87.2 -109.0 L95.5 -105.2 L103.8 -101.0 L112.0 -96.2 L120.1 -90.9 L128.1 -85.0 L135.9 -78.7 L143.5 -71.7 L150.9 -64.2 L158.0 -56.1 L164.8 -47.5 L171.3 -38.2 L177.4 -28.4 L183.0 -18.1 L188.2 -7.1 L192.9 4.3 L197.0 16.4 L200.5 28.9 L203.3 41.9 L205.4 55.4 L206.8 69.4 L207.3 83.8 L207.0 98.5 L205.8 113.6 L203.7 129.0 L200.6 144.6 L196.5 160.4 L191.3 176.3 L185.0 192.4 L177.7 208.4 L169.3 224.5 L159.8 240.6 L150.1 257.4 L150.1 257.4 L165.6 245.3 L179.0 231.5 L191.2 216.9 L202.2 201.7 L212.0 186.0 L220.5 169.9 L227.9 153.4 L234.1 136.7 L239.1 119.9 L243.0 103.1 L245.7 86.2 L247.2 69.4 L247.7 52.9 L247.0 36.5 L245.3 20.5 L242.6 4.8 L238.9 -10.4 L234.3 -25.1 L228.8 -39.3 L222.4 -52.9 L215.3 -65.8 L207.4 -78.0 L198.9 -89.4 L189.8 -100.1 L180.1 -109.9 L169.9 -119.0 L159.4 -127.1 L148.5 -134.4 L137.3 -140.9 L125.9 -146.4 L114.4 -151.0 L102.8 -154.8 L91.1 -157.7 L79.6 -159.7 L68.1 -160.8 L56.9 -161.2 L45.9 -160.7 L35.2 -159.5 L24.8 -157.5 L14.8 -154.9 L5.3 -151.6 L-3.7 -147.6 L-12.1 -143.1 L-20.0 -138.1 L-27.2 -132.5 L-33.8 -126.4 L-39.4 -119.8 L-43.5 -111.8Z"/>
@@ -127,6 +143,8 @@
       <span class="shock shock-1" aria-hidden="true"></span>
       <span class="shock shock-2" aria-hidden="true"></span>
       <p id="center-sub" class="center-sub">スマホで どうぶつを えらんで「とる!」を おしてね</p>
+      <!-- がったい中の ひとこと(途中の絵の段ごとに style.css の ::after で文を変える) -->
+      <p class="peek-caption" aria-hidden="true"><span class="peek-caption-text"></span></p>
     </div>
 
     <!-- がったい中:中央の下に進み具合。
@@ -140,6 +158,36 @@
       <p id="name-help" class="name-help">スマホで えらんでね</p>
       <ul id="name-list" class="name-list"></ul>
     </aside>
+    <!-- もうすぐ(4段目)の見せ場:大きな「もうすぐ!」が 1文字ずつ はねて出て 消える(effects.js) -->
+    <p class="soon-banner" aria-hidden="true">もうすぐ!</p>
+    <!-- 嵐の稲妻(effects.js が 落ちるたびに ジグザグの形を作って 光らせる)。うずの前 -->
+    <svg class="bolts" viewBox="0 0 1920 1080" aria-hidden="true">
+      <!-- 1本 = 太くて うすい光のにじみ + 白い芯(ぼかしの filter は 重いので使わない) -->
+      <g class="bolt"><path class="bolt-glow" d="" /><path class="bolt-core" d="" /></g>
+      <g class="bolt"><path class="bolt-glow" d="" /><path class="bolt-core" d="" /></g>
+      <g class="bolt"><path class="bolt-glow" d="" /><path class="bolt-core" d="" /></g>
+      <!-- 連打の 細い雷(3本を順に使い回す。押すたびに effects.js が形を作る。画面は光らせない) -->
+      <path class="bolt-tap" d="" /><path class="bolt-tap" d="" /><path class="bolt-tap" d="" />
+    </svg>
+    <!-- がったい中の連打:雷パワーの ゲージ(たまり具合は #stage の --power・data-power-step。core.js)と、区切りの ひとこと。
+         中身は 段で色が変わり、ななめの しま模様が 上へ流れ、上はしが光る。1/3・2/3 の目盛りは こえると光る -->
+    <div id="power-meter" class="power-gauge" aria-hidden="true">
+      <p class="power-label">⚡ パワー</p>
+      <div class="power-tube">
+        <span class="power-fill"><span class="power-stripes"></span></span>
+        <span class="power-head"></span>
+        <span class="power-mark power-mark-1">⚡</span>
+        <span class="power-mark power-mark-2">⚡</span>
+      </div>
+      <p id="power-percent" class="power-percent">0%</p>
+    </div>
+    <p class="power-pop" aria-hidden="true"></p>
+    <!-- 押すと 雷の落ちたところから ゲージへ 飛ぶ 火花(effects.js が 使い回す) -->
+    <div class="power-sparks" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <!-- 誕生:嵐が晴れて、上から差しこむ光の筋 -->
+    <span class="sun-break" aria-hidden="true"></span>
     <div class="status-plate">
       <ol class="status-steps">
         <li id="st-naming">なまえを かんがえているよ</li>

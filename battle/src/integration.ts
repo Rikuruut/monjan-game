@@ -38,9 +38,15 @@ export function cardPreviewUrl(launch: Launch): string | null {
     : url;
 }
 
-/** 別のページ(撮影・合体の画面)へ移る。 */
+/**
+ * 別のページ(撮影・合体の画面)へ移る。
+ * 撮影側の「葉のカーテン」(`generator/static/common/curtain.js`。`index.html` で読む)があれば、閉じてから移る。
+ * 読めていないとき(テスト・サーバーなしの開発)は すぐ移る。
+ */
 export function navigateTo(url: string) {
-  window.location.href = url;
+  const curtain = (window as Window & { monjanCurtain?: { leave(url: string): void } }).monjanCurtain;
+  if (curtain) curtain.leave(url);
+  else window.location.href = url;
 }
 
 export interface Launch {

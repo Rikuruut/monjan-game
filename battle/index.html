@@ -6,6 +6,10 @@
     <meta name="theme-color" content="#0d2219" />
     <meta name="description" content="モンスターといっしょにじゃんけんバトル！ モンじゃん！" />
     <title>モンじゃん！</title>
+    <!-- ページをまたぐ「葉のカーテン」(撮影側と共通。撮影側のサーバーが /static で配る。npm run dev は vite.config の転送で 8000 番から。
+         読めなければ 何もしない)。前のページが閉じて移ってきたら、最初の描画から覆うため いちばん先に読む。
+         type="module" でないので Vite は そのまま残す -->
+    <script src="/static/common/curtain.js"></script>
   </head>
   <body>
     <div id="root"></div>

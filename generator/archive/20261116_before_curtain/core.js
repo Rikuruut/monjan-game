@@ -1,0 +1,860 @@
+// モンじゃん! 大画面(展示のモニター)の共通の動き(本体)
+//
+// 読む順:shared.js → core.js(このファイル)→ dev.js(開発者メニュー・見本・テストプレイ)→ boot.js(起動)。
+// どれも素の script なので、関数はページ全体で共有される。このファイルは読み込んだときに画面を動かさない
+// (ボタン・キーの受け付けを登録するだけ。起動は boot.js)。
+//
+// 画面の見た目はテーマごとに static/themes/<テーマ名>/ に分けてあり、このファイルはどのテーマでも共通。
+// テーマの切りかえ:/?theme=fusion のように付ける(何も付けないときは .env の PC_THEME)。
+//
+// 場面は4つ。#stage の data-scene で切りかえる。
+//   s1 しゃしんを とろう      … 中ボタンでスマホに撮影の合図。写真が届いたら s2 へ
+//   s2 しゃしん × どうぶつ = ? … 中ボタン「がったい!」で生成を始めて s3 へ。左ボタンで撮り直し
+//   s3 がったい中            … サーバーからの progress に合わせて、進み具合を画面に渡す。名前の候補が届いたら
+//                              3つのボタンが候補になり、押して名前を決める。結果が届き、名前が決まったら s4 へ
+//   s4 たんじょう            … カードを見せる。左「もう一回」/中「たたかう!」(じゃんけんバトル /battle/ へ)/右「いんさつ」
+// 操作は3つのボタン。キーボードの ← / Enter(Space)/ → でも押せる(USB の大きなボタンはキーとして届く)。
+// 開発者メニューは右下のボタンか D キーで開く(このファイルが画面に足す)。
+//
+// ── テーマとの約束(新しいテーマを作るときは、index.html にこれらを用意する)──
+//   #stage(data-scene / data-level / --progress をこのファイルが付ける)、#headline、
+//   .lamps li[data-step="s1〜s4"](段階の印。done / now の class が付く)、
+//   #photo(写真)、#animal-icon、#animal-name、
+//   #btn-left / #btn-center / #btn-right(中に .knob-label。押せないときは disabled、出さないときは class="empty")、
+//   #toast(class="show" が付く)、#tip、#name-help、#name-list、#st-naming / #st-drawing / #st-soon、
+//   #card-name、#card-element、#card-recipe、#card-desc、#card-img
+//   (なくてもよい)#stage.naming:がったい中に3つのボタンが名前の候補になっているあいだ付く(名前を同じ見た目にするため)
+//   (なくてもよい)#partial-img:画像生成の途中の絵。届くと src が入り、#stage に data-partial(何枚目か。1から)が付く。
+//     読みこめたときに #stage に partialchange イベント(detail: { index })も送る
+//   (なくてもよい)がったい中の連打のパワー:#power-meter(なければ #stage)の --power(0〜1)、#stage の data-power-step(0〜3)・data-power-full(満タン)、
+//     #power-percent(あれば「45%」を書く)、押すたびに powertap イベント(detail: { power, peak, max, pos })。テーマは ゲージなどで見せる
+// ── 進み具合の見せ方 ──
+//   #stage に CSS 変数 --progress(0〜1)と data-level(0〜5)を付ける。
+//   level:0 まだ / 1 なまえを考えている / 2 絵をかき始めた / 3 半分すぎ / 4 もうすぐ / 5 できた
+//   テーマはこれを CSS で見せ方に変える(fusion:うずの帯・風の筋の明るさ)。JavaScript は書かなくてよい。
+//   段が変わったときは、#stage に levelchange イベント(detail: { level, prev })も送る。
+// ── テーマの演出(なくてもよい)──
+//   テーマが window.themeFx.birth(showCard) を用意していれば、誕生の演出をまかせる。
+//   テーマは「ため」の演出のあと showCard()(s4 にする)を呼び、演出が終わったら Promise を終える。
+//   用意していないテーマ・途中で失敗したときは、すぐに s4 にして CSS の演出で見せる。
+//   誕生の効果音(crack・fanfare)も、themeFx を用意したテーマは自分で鳴らす(演出に合わせるため)。
+// ── 効果音 ──
+//   static/common/sound.js(window.sfx)を core.js より前に読む。読んでいなければ鳴らないだけ。
+// ── 場面転換 ──
+//   切りかえのあいだ #stage に class="shut" が付く。閉じる・開く時間は、テーマの CSS 変数
+//   --scene-close-ms / --scene-open-ms で変えられる(初期値 340 / 140)。
+// 確認用:?demo=1&scene=s3&progress=0.8&photo=…&img=…&animal=…&name=… で、APIを使わずにその場面を表示する。&dev=1 で開発者メニューを開く。
+//   ?demo=1&play=birth で、割れる直前から誕生後までの流れを見本のデータで動かす。
+//   同じことは、開発者メニューの「演出を見る」のボタンからもできる(ふつうの画面のまま使える。dev.js)。
+
+const sound = (name, options) => { if (window.sfx) window.sfx.play(name, options); };
+const fusionBgm = (on) => { if (window.sfx && window.sfx.fusionBgm) window.sfx.fusionBgm(on); };
+const stage = el("stage");
+const params = new URLSearchParams(location.search);
+
+const state = {
+  scene: "s1",
+  photoId: null,
+  animal: "",
+  generating: false,   // がったい中か(この間に届いた写真は無視する)
+  nameChoices: [],
+  chosenName: "",
+  power: 0,            // がったい中に 連打でためた パワー(0〜POWER_MAX。手を止めると 少しずつ減る)
+  powerPeak: 0,        // この回で いちばん たまった値(区切りの ひとことを 1回だけ出すため)
+};
+
+// ----------------------------------------------------------------------
+// 舞台の拡大・縮小(1920×1080 を、モニターの大きさに合わせる)
+// ----------------------------------------------------------------------
+function fitStage() {
+  const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+  document.documentElement.style.setProperty("--scale", scale);
+}
+window.addEventListener("resize", fitStage);
+fitStage();
+
+// ----------------------------------------------------------------------
+// 場面ごとの見出しとボタン
+// ----------------------------------------------------------------------
+const SCENES = ["s1", "s2", "s3", "s4"];
+
+function headlineFor(scene) {
+  if (scene === "s1") return "スマホで しゃしんを とってね";
+  if (scene === "s2") return "しゃしん × " + (state.animal || "どうぶつ") + " = ?";
+  if (scene === "s3") {
+    if (state.chosenName) return "「" + state.chosenName + "」に けってい!";
+    if (state.nameChoices.length) return "なまえを えらんでね!";
+    return state.generating ? "ボタンを れんだ! パワーを ためよう" : "なにが うまれるかな...?";
+  }
+  return "たんじょう!";
+}
+
+// がったい中の名前えらび:候補が届いて まだ決めていなければ、左・中・右のボタンが そのまま候補1〜3になる
+// (2026年11月9日。それまではスマホで選んでいた。元は archive/20261109_before_pc_naming/)
+const NAME_BUTTON_POSITIONS = ["left", "center", "right"];
+function nameButtons() {
+  if (state.chosenName || !state.nameChoices.length) return null;
+  const buttons = { left: null, center: null, right: null };
+  state.nameChoices.slice(0, NAME_BUTTON_POSITIONS.length).forEach((name, i) => {
+    buttons[NAME_BUTTON_POSITIONS[i]] = { label: name, action: () => chooseName(name) };
+  });
+  return buttons;
+}
+
+// がったい中の「雷パワーを ためる」連打(2026年11月16日。待ち時間に 退屈しないように。依頼者が選んだ)。
+// 名前えらびでないとき(候補が届く前・名前を決めたあと)、3つのボタンは どれも「⚡ れんだ!」。押すたびに パワー +1。
+// たまり具合は #stage の --power(0〜1)・data-power-step(0〜3)・data-power-full、#power-percent(あれば「45%」)、
+// 押すたびに powertap イベント(テーマが見せ方を決める)。
+// できる絵・名前・バトルの数値は 変えない(テーマの誕生の演出が強くなるだけ)
+// 2026年11月16日の調整:30回では 4〜6秒で満タンになり 速すぎたので 100回にし、手を止めると 少しずつ減るようにした
+// (1秒に6回の連打で 約17秒。満タンになったら 減らさない)
+const POWER_MAX = 100;
+const NAME_LOCK_MS = 1000;      // 連打の最後から この時間は、名前の候補を押せない
+const POWER_DECAY_DELAY_MS = 600;   // 最後に押してから この時間たつと 減りはじめる
+const POWER_DECAY_PER_SEC = 4;
+const POWER_DECAY_TICK_MS = 100;
+let lastPowerTap = 0;
+let powerUnlockTimer = null;
+let powerDecayTimer = null;
+
+function powerLocked() { return Date.now() - lastPowerTap < NAME_LOCK_MS; }
+
+function powerButtons() {
+  const tap = (pos) => ({ label: "⚡ れんだ!", action: () => tapPower(pos), quiet: true });
+  return { left: tap("left"), center: tap("center"), right: tap("right") };
+}
+
+// ※ 軽くするため(2026年11月16日):--power は ゲージ(#power-meter)に書く。#stage に書くと 連打のたび・減るたびに
+//   舞台ぜんたいのスタイルを計算し直して重かった。#stage の data-power-step・data-power-full と「45%」は 変わったときだけ書く
+let shownPower = { ratio: null, step: null, full: null, percent: null };
+function showPower() {
+  const ratio = state.power / POWER_MAX;
+  if (ratio !== shownPower.ratio) {
+    (el("power-meter") || stage).style.setProperty("--power", ratio);
+    shownPower.ratio = ratio;
+  }
+  // 段:0 〜1/3 / 1 〜2/3 / 2 〜満タン前 / 3 満タン(テーマが ゲージの色・目盛りを変える)
+  const step = ratio >= 1 ? 3 : ratio >= 2 / 3 ? 2 : ratio >= 1 / 3 ? 1 : 0;
+  if (step !== shownPower.step) { stage.dataset.powerStep = step; shownPower.step = step; }
+  const full = ratio >= 1;
+  if (full !== shownPower.full) {
+    if (full) stage.dataset.powerFull = "";
+    else delete stage.dataset.powerFull;
+    shownPower.full = full;
+  }
+  const percent = Math.floor(ratio * 100);
+  const percentEl = el("power-percent");
+  if (percentEl && percent !== shownPower.percent) { percentEl.textContent = percent + "%"; shownPower.percent = percent; }
+}
+
+function tapPower(pos) {
+  lastPowerTap = Date.now();
+  state.power = Math.min(POWER_MAX, Math.floor(state.power) + 1);
+  state.powerPeak = Math.max(state.powerPeak, state.power);
+  showPower();
+  // ビリッ:たまるほど 高く
+  sound("zap", { rate: 0.85 + 0.5 * (state.power / POWER_MAX) });
+  // peak:この回で いちばん たまった値(テーマは 区切りを こえた「はじめての1回」だけ ほめる)
+  stage.dispatchEvent(new CustomEvent("powertap", { detail: { power: state.power, peak: state.powerPeak, max: POWER_MAX, pos } }));
+  startPowerDecay();
+  // 名前の候補が出ているときは、ロックが解けたら 押せるように描き直す
+  clearTimeout(powerUnlockTimer);
+  powerUnlockTimer = setTimeout(() => { if (state.scene === "s3") renderControls(); }, NAME_LOCK_MS + 20);
+}
+
+// 手を止めると 少しずつ減る(満タンは減らない)。0 になったら タイマーを止める
+function startPowerDecay() {
+  if (powerDecayTimer) return;
+  powerDecayTimer = setInterval(() => {
+    if (state.scene !== "s3" || !state.generating || state.power <= 0) { stopPowerDecay(); return; }
+    if (state.power >= POWER_MAX || Date.now() - lastPowerTap < POWER_DECAY_DELAY_MS) return;
+    state.power = Math.max(0, state.power - POWER_DECAY_PER_SEC * POWER_DECAY_TICK_MS / 1000);
+    showPower();
+  }, POWER_DECAY_TICK_MS);
+}
+
+function stopPowerDecay() {
+  clearInterval(powerDecayTimer);
+  powerDecayTimer = null;
+}
+
+function resetPower() {
+  state.power = 0;
+  state.powerPeak = 0;
+  lastPowerTap = 0;
+  clearTimeout(powerUnlockTimer);
+  stopPowerDecay();
+  showPower();
+}
+
+// ボタンの中身。null は「ボタンを出さない」、disabled は「出すが押せない」
+function buttonsFor(scene) {
+  if (scene === "s1") return { left: null, center: { label: "スマホで とる", action: requestCapture }, right: null };
+  if (scene === "s2") return {
+    left: { label: "とりなおす", action: requestCapture },
+    center: { label: "がったい!", action: startFusion },
+    right: null,
+  };
+  if (scene === "s3") {
+    const names = nameButtons();
+    if (names) {
+      // 連打の すぐあとは 名前を押せない(連打のまま候補が届いて、うっかり決まらないように)
+      if (powerLocked()) for (const pos of NAME_BUTTON_POSITIONS) if (names[pos]) names[pos].disabled = true;
+      return names;
+    }
+    if (state.generating) return powerButtons();
+    return { left: null, center: { label: "まってね", disabled: true }, right: null };
+  }
+  return {
+    left: { label: "もう一回", action: restart },
+    center: { label: "たたかう!", action: goBattle },
+    right: { label: "いんさつ", action: printCard },
+  };
+}
+
+// ----------------------------------------------------------------------
+// カードの印刷(2026年11月9日の試作。カードのページは /card。static/card/・app/card.py)
+// ----------------------------------------------------------------------
+// いまのモンスターのカードの id。テストプレイ・見本(写真の ID がない)は demo
+function cardId() {
+  const id = state.photoId || "";
+  return /^[0-9a-f]{32}$/.test(id) ? id : "demo";
+}
+
+// 見本(demo)のモンスターの名前(テストプレイで選んだことにした名前。なければ見本の名前)
+function shownDemoName() { return state.chosenName || demoName(); }
+
+function cardUrl(id, extra = "") {
+  const name = id === "demo" ? "&name=" + encodeURIComponent(shownDemoName()) : "";
+  return "/card?id=" + encodeURIComponent(id) + name + extra;
+}
+
+// カードの PDF を outputs/<フォルダ>/card.pdf に残す(見本は残さない)。終わるまで画面は待たない
+function saveCardPdf(id) {
+  if (id === "demo") return Promise.resolve(null);
+  return fetchJson("/api/card-pdf/" + encodeURIComponent(id), { method: "POST" })
+    .catch((e) => ({ ok: false, error: String(e) }));
+}
+
+// カードを、いまの画面の上に重ねて見せる(開発者メニュー用)。
+// ※ 2026年11月9日:はじめは新しいタブで開いていたが、キオスクにはタブの切りかえがなく、戻れなかった。
+//   閉じるのは「とじる」・外側のクリック・どのキーでも(カードの中でキーを押したときは card.js が知らせてくる)
+function showCardPreview(id) {
+  closeCardPreview();
+  const box = document.createElement("div");
+  box.id = "card-preview";
+  box.className = "card-preview";
+  box.innerHTML = '<iframe class="card-preview-frame" title="カード"></iframe>' +
+    '<button type="button" class="card-preview-close">× とじる(どのキーでも)</button>';
+  box.querySelector("iframe").src = cardUrl(id);
+  box.addEventListener("click", (ev) => { if (ev.target === box) closeCardPreview(); });
+  box.querySelector("button").addEventListener("click", closeCardPreview);
+  document.body.appendChild(box);
+}
+
+function closeCardPreview() {
+  const box = el("card-preview");
+  if (!box) return false;
+  box.remove();
+  return true;
+}
+
+// 印刷が終わったら、見えない iframe を外す(カードのページのキラキラが、見えないまま動き続けないように)。
+// 念のため少し待つ(印刷の送り出しの途中で外さないように)
+const PRINT_FRAME_CLEANUP_MS = 10000;
+
+window.addEventListener("message", (ev) => {
+  if (ev.origin !== location.origin) return;
+  if (ev.data === "monjan-card-close") closeCardPreview();
+  else if (ev.data === "monjan-card-printed") {
+    const frame = el("print-frame");
+    if (frame && ev.source === frame.contentWindow) {
+      setTimeout(() => { if (el("print-frame") === frame) frame.remove(); }, PRINT_FRAME_CLEANUP_MS);
+    }
+  }
+});
+
+// 「いんさつ」:誕生の画面のまま、見えない iframe でカードのページを開いて印刷する(ページが自分で印刷する)。
+// .env の KIOSK_PRINTING=true のキオスクでは、ダイアログを出さずに既定のプリンターで刷る
+function printCard() {
+  const id = cardId();
+  el("print-frame")?.remove();
+  const frame = document.createElement("iframe");
+  frame.id = "print-frame";
+  frame.className = "print-frame";
+  frame.setAttribute("aria-hidden", "true");
+  frame.src = cardUrl(id, "&print=1");
+  document.body.appendChild(frame);
+  toast("いんさつ しているよ");
+  saveCardPdf(id).then((res) => {
+    if (res && !res.ok) console.warn("カードの PDF を作れませんでした:", res.error);
+  });
+}
+
+// じゃんけんバトル(友人の担当。/battle/)へ。できたモンスターは、バトルが /api/battle-monster/<photo_id> から読む。
+// テストプレイ・確認用の見本(写真の ID がない)では、見本のゴリラ × はさみで戦う(名前は選んだことにしたもの)
+function goBattle() {
+  const id = cardId();
+  location.href = id !== "demo"
+    ? "/battle/?photo=" + id
+    : "/battle/?play=demo&name=" + encodeURIComponent(shownDemoName());
+}
+
+let currentButtons = buttonsFor("s1");
+
+function renderScene(scene) {
+  state.scene = scene;
+  stage.dataset.scene = scene;
+  fusionBgm(scene === "s3");   // がったい中の BGM(sound.js)
+
+  // 段階のランプ
+  const index = SCENES.indexOf(scene);
+  document.querySelectorAll(".lamps li").forEach((li) => {
+    const i = SCENES.indexOf(li.dataset.step);
+    li.classList.toggle("done", i < index);
+    li.classList.toggle("now", i === index);
+  });
+
+  renderControls();
+}
+
+// 見出しと操作盤だけを、いまの場面・状態に合わせて描き直す(場面はそのまま。名前の候補が届いた・決まったときにも使う)
+function renderControls() {
+  const scene = state.scene;
+  el("headline").textContent = headlineFor(scene);
+  currentButtons = buttonsFor(scene);
+  // 名前えらびのあいだは、3つの名前を同じ見た目にする(テーマの CSS が #stage.naming で見せ方を変える)
+  stage.classList.toggle("naming", scene === "s3" && !!nameButtons());
+  ["left", "center", "right"].forEach((pos) => {
+    const btn = el("btn-" + pos);
+    const conf = currentButtons[pos];
+    btn.classList.toggle("empty", !conf);
+    btn.disabled = !conf || !!conf.disabled;
+    btn.querySelector(".knob-label").textContent = conf ? conf.label : "";
+  });
+}
+
+// 場面転換の時間(テーマの CSS 変数)。テーマの CSS は途中で変わらないので、最初に使うときに1回だけ読む
+let sceneTimes = null;
+function getSceneTimes() {
+  if (!sceneTimes) {
+    const style = getComputedStyle(stage);
+    sceneTimes = {
+      closeMs: parseInt(style.getPropertyValue("--scene-close-ms"), 10) || 340,
+      openMs: parseInt(style.getPropertyValue("--scene-open-ms"), 10) || 140,
+    };
+  }
+  return sceneTimes;
+}
+
+// 場面を切りかえる。ふつうは鉄のシャッターが閉じて開く。instant のときはすぐ切りかえる(誕生の演出など)
+function setScene(scene, { instant = false } = {}) {
+  if (instant || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    renderScene(scene);
+    return Promise.resolve();
+  }
+  const { closeMs, openMs } = getSceneTimes();
+  return new Promise((resolve) => {
+    stage.classList.add("shut");
+    setTimeout(() => {
+      renderScene(scene);
+      setTimeout(() => {
+        stage.classList.remove("shut");
+        resolve();
+      }, openMs);
+    }, closeMs);
+  });
+}
+
+// ----------------------------------------------------------------------
+// ボタン(クリックとキーボードの両方)
+// ----------------------------------------------------------------------
+// ボタンを押した見た目と音(テストプレイで「押したことにする」ときも使う)
+// quiet:押した音(press)を鳴らさない(連打のボタン。かわりに それぞれの音を鳴らす)
+function flashButton(pos, { quiet = false } = {}) {
+  const btn = el("btn-" + pos);
+  btn.classList.add("pressed");
+  setTimeout(() => btn.classList.remove("pressed"), 160);
+  if (!quiet) sound("press");
+}
+
+function press(pos) {
+  const btn = el("btn-" + pos);
+  const conf = currentButtons[pos];
+  if (!conf || conf.disabled || btn.disabled) return;
+  flashButton(pos, { quiet: !!conf.quiet });
+  conf.action();
+}
+
+["left", "center", "right"].forEach((pos) => {
+  el("btn-" + pos).addEventListener("click", () => press(pos));
+});
+
+document.addEventListener("keydown", (ev) => {
+  // 開発者メニューの入力欄に文字を打っているときは、ボタンの操作にしない
+  const tag = (ev.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "select" || tag === "textarea") return;
+  if (ev.repeat) return;
+  // カードを重ねて見せているあいだは、どのキーでも閉じるだけにする(うしろの画面は動かさない)
+  if (el("card-preview")) {
+    ev.preventDefault();
+    closeCardPreview();
+    return;
+  }
+  // 開発者メニューのボタンを押したあとは、そこにフォーカスが残る。
+  // そのまま Enter・Space を押すと、メニューのボタンと大きなボタンの両方が動くので、D キーだけを受け付ける
+  const inDev = ev.target.closest && ev.target.closest("#dev");
+  if (inDev && ev.key !== "d" && ev.key !== "D") return;
+
+  if (ev.key === "ArrowLeft") press("left");
+  else if (ev.key === "ArrowRight") press("right");
+  else if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); press("center"); }
+  else if (ev.key === "d" || ev.key === "D") toggleDev();
+});
+
+// ----------------------------------------------------------------------
+// 短いお知らせ
+// ----------------------------------------------------------------------
+let toastTimer = null;
+function toast(text, seconds = 2.5) {
+  const t = el("toast");
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), seconds * 1000);
+}
+
+// ----------------------------------------------------------------------
+// s1 → s2:撮影の合図と、写真の受け取り
+// ----------------------------------------------------------------------
+async function requestCapture() {
+  try {
+    const data = await fetchJson("/api/capture-request", { method: "POST" });
+    if (data.ok) {
+      toast("スマホを みてね!");
+      if (state.scene !== "s1") setScene("s1");
+    } else {
+      toast("スマホが つながっていないよ");
+      showDevError(data.error || "合図を送れませんでした");
+    }
+  } catch (e) {
+    toast("つうしんに しっぱいしたよ");
+    showDevError("通信に失敗しました: " + e.message);
+  }
+}
+
+function onPhotoReceived(msg) {
+  if (state.generating) return;   // がったい中は、新しい写真で場面を変えない
+  clearTimeout(endTimer);         // 撮り直し・失敗のあとに s1 へ戻る予定があれば取り消す(届いた写真を消さないように)
+  state.photoId = msg.photo_id;
+  state.animal = msg.animal || "";
+  el("photo").src = msg.photo_url + "?t=" + Date.now();
+  el("animal-icon").textContent = iconFor(state.animal);
+  el("animal-name").textContent = state.animal || "どうぶつ";
+  stage.classList.add("has-photo", "has-animal");
+  setScene("s2");
+}
+
+// ----------------------------------------------------------------------
+// s2 → s3 → s4:がったい と たんじょう
+// ----------------------------------------------------------------------
+async function startFusion() {
+  if (!state.photoId || state.generating) return;
+  await beginFusion();
+
+  try {
+    const data = await postForm("/api/generate", { photo_id: state.photoId }).then((r) => r.json());
+    showDevResult(data);
+    if (!data.ok) {
+      failFusion((data.step ? "【" + data.step + "】で失敗\n" : "") + (data.error || "生成に失敗しました"));
+    } else if (data.needs_retake) {
+      endWithMessage("もういちど とってね", data.retake_reason || "");
+    } else {
+      // 名前の候補が WebSocket で届かなかったとき(つなぎ直しの最中など)は、結果の候補を使う
+      if (!state.nameChoices.length) setNameChoices(nameChoicesFromMonster(data.monster));
+      // 名前を選ぶまで誕生を待つ(画面の下で選んでいる途中にカードが出ないように)
+      const run = fusionRun;
+      await waitForName();
+      if (run !== fusionRun) return;   // 待っているあいだに「はじめに もどす」などで取り消された
+      await birth(data);
+      reportRevealed(state.photoId);   // スマホにも絵を見せてよい(誕生の演出が終わった)
+    }
+  } catch (e) {
+    failFusion("通信に失敗しました: " + e.message);
+  }
+}
+
+// 生成の失敗:開発者メニューに理由を出し、画面には「うまく できなかったよ…」
+function failFusion(devMessage) {
+  showDevError(devMessage);
+  endWithMessage("うまく できなかったよ…", "もういちど とってね");
+}
+
+// がったい中(s3)にして、ローディングを始める(本番とテストプレイで共通)
+async function beginFusion() {
+  state.generating = true;
+  resetMachine();
+  await setScene("s3");
+  startTips();
+  startNaming();
+}
+
+// 撮り直し・失敗:見出しで知らせて、少ししたら s1 に戻る
+let endTimer = null;
+function endWithMessage(headline, detail) {
+  state.generating = false;
+  stopTimers();
+  stopNameWait();
+  // 名前のボタンが出ていたら、ふつうのボタンに戻す(撮り直し・失敗のあとに名前を選べないように)
+  state.nameChoices = [];
+  renderControls();
+  fusionBgm(false);   // 撮り直し・エラーの表示のあいだは、がったい中の BGM を止める
+  el("headline").textContent = headline;
+  if (detail) toast(detail, 4.5);
+  clearTimeout(endTimer);
+  endTimer = setTimeout(restart, 5000);
+}
+
+// たんじょう:カードを用意し、画像を読みこんでから、誕生の演出で見せる
+function birth(data) {
+  stopTimers();
+  setProgress(1);
+  fillCard(data);
+  state.generating = false;
+  if (state.scene === "s3") renderControls();   // 連打のボタンを「まってね」に戻す(誕生の演出中は ためない)
+  return new Promise((resolve) => {
+    const img = el("card-img");
+    const show = () => {
+      // 1回きり。残しておくと、あとで絵だけ入れかえたとき(開発者メニューの「s4 たんじょう」など)に、
+      // 前の誕生の演出と音がもう一度流れた(2026年11月9日)
+      img.onload = img.onerror = null;
+      playBirth().then(resolve);
+    };
+    if (!img.getAttribute("src") || (img.complete && img.naturalWidth)) show();
+    else { img.onload = show; img.onerror = show; }
+  });
+}
+
+// PC で誕生の演出が終わったことをサーバーに知らせる(サーバーがスマホに revealed を送り、スマホが絵を見せる)
+async function reportRevealed(photoId) {
+  if (!photoId) return;
+  try {
+    await postForm("/api/revealed", { photo_id: photoId });
+  } catch (e) {
+    // 送れなくても、スマホは少し待てば絵を見せる(phone.js の REVEAL_FALLBACK_SECONDS)
+  }
+}
+
+const CSS_BIRTH_MS = 1800;   // themeFx のないテーマで、CSS のカードの登場が終わるまで(テーマの card-born。いちばん長いガチャが 0.95秒待って 0.8秒)
+
+// 誕生の演出。テーマの演出(window.themeFx.birth)があればまかせ、なければすぐ s4 にする
+async function playBirth() {
+  const fx = window.themeFx;
+  if (!fx || typeof fx.birth !== "function") {
+    sound("crack");
+    setTimeout(() => sound("fanfare"), 500);   // CSS のカードの登場(0.5秒あと)に合わせる
+    await setScene("s4", { instant: true });
+    // CSS のカードの登場が終わるまで待つ(終わってからスマホに絵を見せるため)
+    return new Promise((resolve) => setTimeout(resolve, CSS_BIRTH_MS));
+  }
+  let shown = false;
+  const showCard = () => { if (!shown) { shown = true; renderScene("s4"); } };
+  try {
+    await fx.birth(showCard);
+  } catch (e) {
+    console.error("テーマの演出に失敗しました", e);
+  }
+  showCard();   // テーマが呼ばなかった・失敗したときも、かならずカードは見せる
+}
+
+// タイプごとのアイコンと色(カードの右上のバッジ)。タイプと色はじゃんけんバトルの属性と同じ
+const ELEMENT_STYLES = {
+  "火": { icon: "🔥", cls: "el-fire" },
+  "水": { icon: "💧", cls: "el-water" },
+  "草": { icon: "🌿", cls: "el-nature" },
+  "光": { icon: "✨", cls: "el-light" },
+  "闇": { icon: "🌙", cls: "el-dark" },
+  "風": { icon: "🌪️", cls: "el-wind" },
+  "土": { icon: "🪨", cls: "el-earth" },
+  "無": { icon: "⚪", cls: "el-neutral" },
+};
+
+function fillCard(data) {
+  const m = data.monster || {};
+  el("card-name").textContent = state.chosenName || m.monster_name || "???";
+  const st = ELEMENT_STYLES[m.element] || { icon: "", cls: "" };
+  el("card-element").className = "card-element " + st.cls;
+  el("card-element").textContent = m.element ? st.icon + " " + m.element + "タイプ" : "";
+  const animal = (data.settings || {}).animal || state.animal;
+  el("card-recipe").textContent = animal && m.object_name ? animal + " × " + m.object_name : "";
+  el("card-desc").textContent = m.description || "";
+  if (data.monster_url) el("card-img").src = data.monster_url + "?t=" + Date.now();
+}
+
+// 動いているもの(撮り直しのあとの戻り・テストプレイ・ローディングのタイマー)を止める
+function cancelRunning() {
+  clearTimeout(endTimer);
+  stopTestPlay();
+  stopTimers();
+  stopNameWait();
+  fusionRun += 1;   // 名前を待っている「がったい!」の続き(誕生)を動かさない
+  state.generating = false;
+}
+
+function restart() {
+  cancelRunning();
+  state.photoId = null;
+  state.animal = "";
+  resetMachine();   // 名前の候補・選んだ名前も消す
+  el("photo").removeAttribute("src");
+  el("animal-icon").textContent = "";
+  el("animal-name").textContent = "どうぶつ";
+  el("card-img").removeAttribute("src");
+  stage.classList.remove("has-photo", "has-animal");
+  setScene("s1");
+}
+
+// ----------------------------------------------------------------------
+// がったい中(進み具合・あそびかた・なまえ)
+// ----------------------------------------------------------------------
+const SOON_RATIO = 0.7;
+let drawTimer = null;
+let tipTimer = null;
+
+// ※ あそびかたの説明は仮の文。対戦システム(友人の担当)のルールが決まったら差しかえる
+const TIPS = [
+  "モンスターは 3つの ボタンで たたかうよ",
+  "せいしつは 6しゅるい 🔥💧⚡🪨🗡️☁️",
+  "いろんな ものを とると ちがう モンスターに なるよ",
+  "なまえは したの 3つの ボタンで えらぶよ",
+  "うまれた モンスターは カードに なるよ",
+];
+
+// 進み具合(0〜1)を画面に渡す。見せ方はテーマの CSS が決める(--progress と data-level)。
+// 同じ値のときは書かない(#stage に書くと、舞台全体のスタイルを計算し直すため。目安の時間を過ぎると 0.95 のまま続く)
+let shownProgress = null;
+const PROGRESS_STEP = 0.02;
+function setProgress(ratio) {
+  const r = Math.max(0, Math.min(1, ratio));
+  // 0.02 きざみに丸めて、変わったときだけ書く(2026年11月16日。軽くするため。絵を描いているあいだ 0.4秒ごとに書いていた。
+  // 書くたびに うずの大きさ・玉の輪(幅と高さ)を計算し直すので、約1秒に1回に減らした。段(data-level)は 丸める前の値で決める)
+  const shown = Math.round(r / PROGRESS_STEP) / Math.round(1 / PROGRESS_STEP);
+  if (shown !== shownProgress) {
+    stage.style.setProperty("--progress", shown);
+    shownProgress = shown;
+  }
+  const prev = Number(stage.dataset.level || 0);
+  const level = r <= 0 ? 0 : r < 0.3 ? 1 : r < 0.5 ? 2 : r < 0.7 ? 3 : r < 1 ? 4 : 5;
+  if (stage.dataset.level !== String(level)) stage.dataset.level = level;
+  if (level !== prev) stage.dispatchEvent(new CustomEvent("levelchange", { detail: { level, prev } }));
+  if (state.scene === "s3" && level > prev && level < 5) sound("tick");
+}
+
+function setSteps(now) {
+  const order = ["naming", "drawing", "soon"];
+  const index = order.indexOf(now);
+  order.forEach((name, i) => {
+    const li = el("st-" + name);
+    li.classList.toggle("done", i < index);
+    li.classList.toggle("now", i === index);
+  });
+}
+
+function startNaming() {
+  setSteps("naming");
+  setProgress(0.12);
+}
+
+// 決まった進み具合で止めて見せる(見本・開発者メニュー)
+function showProgressAt(ratio) {
+  setSteps(ratio >= SOON_RATIO ? "soon" : "drawing");
+  setProgress(ratio);
+}
+
+
+function onProgress(msg) {
+  if (state.scene !== "s3") return;
+  if (msg.stage === "naming") {
+    startNaming();
+  } else if (msg.stage === "drawing") {
+    setSteps("drawing");
+    // 詳しいプロンプトでは、名前の候補はここで届く(短いプロンプトでは届かないので、空で上書きしない)
+    if (nameChoicesOf(msg).length) setNameChoices(nameChoicesOf(msg));
+    // 画像生成の目安の時間にあわせて、30% → 95% まで進める(目安を過ぎても 95% で止める)
+    const expected = Math.max(5, msg.expected_seconds || 30);
+    const started = Date.now();
+    clearInterval(drawTimer);
+    drawTimer = setInterval(() => {
+      const r = (Date.now() - started) / 1000 / expected;
+      setProgress(0.3 + Math.min(r, 1) * 0.65);
+      if (r >= SOON_RATIO) setSteps("soon");
+    }, 400);
+  } else if (msg.stage === "names") {
+    // 短いプロンプトでは、名前の候補は絵を作っているあいだに届く
+    setNameChoices(nameChoicesOf(msg));
+  } else if (msg.stage === "partial") {
+    showPartial(msg.image_url, msg.index);
+  } else if (msg.stage === "done") {
+    clearInterval(drawTimer);
+    setProgress(1);
+  }
+}
+
+// 画像生成の途中の絵。テーマに #partial-img があるときだけ見せる(fusion はうずの中心に透かす)。
+// 見せ方はテーマの CSS が決める(#stage の data-partial = 何枚目か。1 から)。
+// 読みこめたら partialchange イベントも送る(テーマが1回きりの演出を足せるように)
+function showPartial(url, index) {
+  const img = el("partial-img");
+  if (!img) return;
+  img.onload = () => {   // 読みこめてから見せる(読みこみ中に空の枠が出ないように)
+    stage.dataset.partial = index;
+    stage.dispatchEvent(new CustomEvent("partialchange", { detail: { index } }));
+  };
+  img.src = url;
+}
+
+function clearPartial() {
+  delete stage.dataset.partial;
+  const img = el("partial-img");
+  if (img) { img.onload = null; img.removeAttribute("src"); }
+}
+
+// 名前の候補(ボタンの数 = 3つまで)を受け取り、がったい中なら見出しとボタンを名前えらびにする
+function setNameChoices(names) {
+  state.nameChoices = (names || []).slice(0, NAME_BUTTON_POSITIONS.length);
+  const ul = el("name-list");
+  ul.innerHTML = "";
+  state.nameChoices.forEach((n) => {
+    const li = document.createElement("li");
+    li.textContent = n;
+    li.classList.toggle("chosen", n === state.chosenName);
+    ul.appendChild(li);
+  });
+  el("name-help").textContent = state.chosenName ? "けってい!" : "したの ボタンで えらんでね";
+  if (state.scene === "s3") renderControls();
+}
+
+// 生成の結果(monster)から名前の候補を作る(サーバーの session.remember_name_choices と同じ並び:採用した名前 → 合格した候補)
+function nameChoicesFromMonster(monster) {
+  const m = monster || {};
+  const names = [m.monster_name];
+  (m.name_candidates || []).forEach((c) => {
+    if (c && c.ok && c.name && !names.includes(c.name)) names.push(c.name);
+  });
+  return names.filter(Boolean);
+}
+
+// 名前が決まった(PC のボタン・サーバーからの知らせ・開発者メニュー)
+function applyChosenName(name) {
+  state.chosenName = name;
+  setNameChoices(state.nameChoices.length ? state.nameChoices : [name]);
+  renderControls();
+  const card = el("card-name");
+  card.textContent = name;
+  replayAnimation(card, "pop");
+  if (state.scene === "s4") toast("なまえは「" + name + "」に けってい!");
+  finishNameWait();
+}
+
+// 子供が下の3つのボタンで名前を選んだ。サーバーに送って、保存する名前にする(バトル・カードもこの名前)。
+// テストプレイ・見本(写真の ID がない)は送らない。送れなくても止めない(最初の名前のまま進む)
+function chooseName(name) {
+  if (state.chosenName || !name) return;
+  applyChosenName(name);
+  if (cardId() !== "demo") {
+    postForm("/api/choose-name", { photo_id: state.photoId, name }).catch(() => {});
+  }
+}
+
+// サーバーからの知らせ(自分で選んだ名前が返ってくる・開発者が別の画面から選んだ)
+function onNameChosen(msg) {
+  if (msg.photo_id && state.photoId && msg.photo_id !== state.photoId) return;
+  if (msg.name && msg.name !== state.chosenName) applyChosenName(msg.name);
+}
+
+// 絵ができても名前を選んでいなければ、選ぶまで誕生を待つ。
+// 子供がいなくなったときのために、AUTO_NAME_SECONDS たったら1つ目の名前に決める(2026年11月2日にスマホで 60秒にしたのと同じ)
+const AUTO_NAME_SECONDS = 60;
+let nameWaiter = null;      // 名前を待っている Promise を終わらせる関数
+let autoNameTimer = null;
+let fusionRun = 0;          // 何回目の「がったい!」か(取り消したあとに、待っていた誕生が動かないように見分ける)
+
+function waitForName() {
+  if (state.chosenName || !state.nameChoices.length) return Promise.resolve();
+  renderControls();
+  return new Promise((resolve) => {
+    nameWaiter = resolve;
+    clearTimeout(autoNameTimer);
+    autoNameTimer = setTimeout(() => chooseName(state.nameChoices[0]), AUTO_NAME_SECONDS * 1000);
+  });
+}
+
+function finishNameWait() {
+  clearTimeout(autoNameTimer);
+  autoNameTimer = null;
+  const resolve = nameWaiter;
+  nameWaiter = null;
+  if (resolve) resolve();
+}
+
+// 待つのをやめる(誕生には進まない)
+function stopNameWait() {
+  clearTimeout(autoNameTimer);
+  autoNameTimer = null;
+  nameWaiter = null;
+}
+
+function startTips() {
+  let i = 0;
+  el("tip").textContent = TIPS[0];
+  clearInterval(tipTimer);
+  tipTimer = setInterval(() => {
+    i = (i + 1) % TIPS.length;
+    el("tip").textContent = TIPS[i];
+  }, 6000);
+}
+
+function stopTimers() {
+  clearInterval(drawTimer);
+  clearInterval(tipTimer);
+}
+
+function resetMachine() {
+  setProgress(0);
+  setSteps("");
+  state.nameChoices = [];
+  state.chosenName = "";
+  el("name-list").innerHTML = "";
+  el("name-help").textContent = "したの ボタンで えらんでね";
+  el("card-name").textContent = "???";
+  clearPartial();
+  resetPower();
+}
+
+// ----------------------------------------------------------------------
+// 動物のアイコン
+// ----------------------------------------------------------------------
+let animalIcons = {};
+let defaultAnimalIcon = "🐾";
+function iconFor(animal) {
+  return animalIcons[animal] || (animal ? defaultAnimalIcon : "");
+}
+
+// ----------------------------------------------------------------------
+// WebSocket
+// ----------------------------------------------------------------------
+function connectPc() {
+  connectWebSocket("pc", (msg) => {
+    if (msg.type === "phone_status") setPhoneStatus(msg.connected);
+    else if (msg.type === "photo_received") onPhotoReceived(msg);
+    else if (msg.type === "progress") onProgress(msg);
+    else if (msg.type === "name_chosen") onNameChosen(msg);
+  }, () => setPhoneStatus(false));
+}
+
+// スマホの接続の表示(開発者メニューの「スマホ」タブ。dev.js が画面に足す)
+function setPhoneStatus(connected) {
+  const s = el("phone-status");
+  s.textContent = connected ? "接続中" : "未接続";
+  s.className = "status " + (connected ? "status-on" : "status-off");
+}

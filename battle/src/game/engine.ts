@@ -6,7 +6,7 @@
 //   どちらかの HP が 0 → round_end ─(roundDestination で行き先)─ startNextRound → pack
 //
 // 「起きたこと」(BattleEvent)は起きた順に並ぶ。画面はこれを順に演出する
-import type { Hand } from '../types';
+import { HANDS, type Hand } from '../types';
 import {
   canMerge,
   canSeal,
@@ -171,13 +171,26 @@ export function startMatch(config: BattleConfig, playerAttack: number, random: R
   return setupRound(base, 1, random);
 }
 
-// CPU の手札を cpuHandSize 枚にする(練習は全部グー)
+// CPU の手札を cpuHandSize 枚にする(練習は全部グー)。
+// 練習のほかは グー・チョキ・パー を1枚ずつに固定し、この順に並べる(2026年11月16日。依頼者と決めた。
+// それまでは1枚ずつ ランダムな手を引いていて、同じ手が2枚そろうなど 手札ごとに中身が変わっていた)。
+// 出した手の分だけ 同じ手を足すので、いつも3種類になる。★は これまでどおり1枚ごとに抽選
 function fillCpuHand(state: BattleState, random: RandomSource): BattleState {
   const round = roundConfig(state);
   const missing = Math.max(0, state.config.cpuHandSize - state.cpu.hand.length);
-  const faces = Array.from({ length: missing }, () => rollJanken(state.config, random, round.cpuAllRock ? 'rock' : undefined));
+  const held = new Set(state.cpu.hand.map((card) => card.hand));
+  const lacking = HANDS.filter((hand) => !held.has(hand));
+  // 足りない手から順に足す(cpuHandSize が 4 以上で 足りない手が尽きたら、その分は ランダムな手)
+  // 手を決めて足すときも、乱数の並びを変えないように 手の分を1回引いて捨てる(シード付きのテスト・シミュレーションを そろえる)
+  const faces = Array.from({ length: missing }, (_, index) => {
+    if (round.cpuAllRock) return rollJanken(state.config, random, 'rock');
+    const rolled = HANDS[pickIndex(random, HANDS.length)];
+    return rollJanken(state.config, random, lacking[index] ?? rolled);
+  });
   const { cards, cardSeq } = withIds(state, faces);
-  return { ...state, cardSeq, cpu: { ...state.cpu, hand: [...state.cpu.hand, ...(cards as JankenCard[])] } };
+  const hand = [...state.cpu.hand, ...(cards as JankenCard[])];
+  if (!round.cpuAllRock) hand.sort((a, b) => HANDS.indexOf(a.hand) - HANDS.indexOf(b.hand));
+  return { ...state, cardSeq, cpu: { ...state.cpu, hand } };
 }
 
 // ふせるカードを、封じられていない手の中から ランダムに選ぶ

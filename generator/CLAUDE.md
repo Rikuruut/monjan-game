@@ -48,6 +48,10 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 4. PC の「がったい!」→ `POST /api/generate`:判定 → チェック → (撮り直しなら理由を出して終了)→ 画像生成 → 保存(simple は 6. のとおり分けて同時に)
 5. 画像を作っているあいだ、PC で子供が名前を選ぶ:候補(最大3つ)が届くと、下の3つのボタン(← / Enter / →)がそのまま3つの名前になり、押すと `POST /api/choose-name`。
    選ぶまで誕生は待ち(見出し「なまえを えらんでね!」)、絵ができてから60秒で1つ目に自動で決める(`core.js` の `chooseName`・`waitForName`・`AUTO_NAME_SECONDS`)。
+   **名前えらびの前後は「雷パワーを ためる」連打**(2026年11月16日。待ち時間に退屈しないように。依頼者が選んだ):3つのボタンが どれも「⚡ れんだ!」で、押すたびにパワー +1(`POWER_MAX` 100)。
+   手を止めて0.6秒たつと 1秒に4ずつ減る(満タンは減らない。同じ日に「たまるのが速すぎる」と言われて 30 → 100 にし、減るようにした。1秒6回で約17秒)。
+   `#stage` に `--power`(0〜1)・`data-power-step`(0〜3)・`data-power-full`、`#power-percent` に「45%」、押すたびに `powertap` イベント(detail に `peak` = この回の いちばん高い値。テーマが見せる)。できる絵・名前・バトルの数値は変えない(fusion の誕生が強くなるだけ)。
+   連打のまま候補が届いて うっかり決まらないよう、連打の最後から1秒(`NAME_LOCK_MS`)は名前のボタンを押せない。押した音は press ではなく `zap`(たまるほど高く)
    2026年11月9日まではスマホで選んでいた(スマホ → PC → スマホ と行き来するのが分かりにくかった。元は `archive/20261109_before_pc_naming/`)
 
 - WebSocket は `/ws?role=pc|phone`。メッセージ:`capture_request` / `photo_received` / `phone_status` / `upload_done` /
@@ -65,12 +69,31 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
 - **見た目はテーマで切りかえる**:`static/themes/<名前>/`(index.html・style.css・theme.json)。`/?theme=名前`、なければ `.env` の `PC_THEME`(既定 fusion。`.env` が知らない名前のときも fusion)。フォルダを足すだけで選べる
   - 今あるテーマは fusion(たんじょうのもり)だけ(2026年11月2日に依頼者が決めた。ほかのテーマと元の背景 bg.png は `archive/20261102_before_fusion_only/`)。
     写真と動物がうずのまわりを回りながら吸いこまれ、一点に縮んでから風がはじけて葉と花びらが舞う。背景は `static/themes/fusion/bg.webp`(依頼者の絵を 1920×1080 の WebP に)
+  - がったい中の待ち時間に飽きないよう、途中の絵を うずの中心の丸い窓(金の輪)で だんだん見せる(2026年11月16日。依頼者が選んだ。元は `archive/20261116_before_partial_reveal/`):
+    まだ =「なにが うまれるかな…?」→ 1枚目「かげ」(灰色で明暗を強め、ぼかす)→ 2枚目「ぼんやり」(うすい色)。色つきの絵は誕生で はじめて見せる。ひとことは `.peek-caption`(段ごとに CSS の content)。
+    届いた瞬間は core.js の `partialchange` イベントで effects.js が 中心の光をふくらませ・窓をまぶしい状態から晴らし・輪と ひとことを はずませる(揺れ・ヒットストップなし)
+  - **進むほど天気が悪くなり、嵐の雷で生まれる**(2026年11月16日。依頼者と決めた:本格的な嵐・音は足さない。
+    その前の「段ごとの見せ場」は `archive/20261116_before_storm/`、さらに前は `archive/20261116_before_level_shows/`):
+    1 雲がかかる / 2 突風(風の筋・画面のふちが緑に光る)・小雨、このあと風の筋が流れ続ける / 3 大雨・遠くの稲光 /
+    4 「もうすぐ!」+ うずへ落雷 → 2〜3.5秒ごとに落雷(うずと画面のあちこち。画面もゆれる)・鼓動 /
+    誕生 うずへ特大の落雷 → はじける → 雲と雨が消え(s4 の CSS)上から光の筋(`.sun-break`)。
+    雲・暗さ・雨は style.css の段ごとの静的な指定(暗さの幕 `.dim` がいちばん下)、動きは `effects.js` の `LEVEL_SHOWS`・`startWeather`・`strike`。
+    光の点滅は1秒に3回以下(落雷どうしは2秒以上あけ、4段目は遠くの稲光をやめる。画面の白い光は 前から0.5秒以上あいたときだけ)。誕生のはじめ・撮り直しなどで `stopShows()` が止める
+  - 連打のパワー(上の 4. の名前えらび):うずの右に 縦のゲージ(`.power-gauge`。90×460px)。段で色が変わり(緑 → 黄 → だいだい → 白く光る金)、中を しま模様が上へ流れ、
+    たまった先が光り、1/3・2/3 の目盛りが こえると光り、下に「45%」。押すたびに 細い雷(3本を使い回し、7割は うずのふち・3割は地面、始まりは上のはしのどこでも。画面は光らせない)
+    → 火花がゲージへ飛んで はずむ・画面が小さく揺れる(たまるほど強く)。1/3「いいぞ!」・2/3「もっと!」・満タン「パワー MAX!」+ 落雷(この回ではじめてこえたときだけ)、満タンのあいだゲージが脈打つ。
+    誕生で 葉と花びらが 60〜120、満タンなら特大の落雷が2本。元は `archive/20261116_before_power_tap/`、手ごたえの調整の前は `archive/20261116_before_power_tune/`
+  - **重くしないための約束**(2026年11月16日。「全体的に重い」と言われて直した。元は `archive/20261116_before_lighten/`):
+    画面全体の要素に filter(drop-shadow・blur)を付けない(稲妻の光は 太くうすい線 `.bolt-glow` で描く)/ `#stage` に しょっちゅう書かない(連打の `--power` は `#power-meter` に、
+    段と満タンは変わったときだけ、`--progress` は 0.02 きざみで変わったときだけ)/ 連打のたびに 形を測らない(火花の行き先は offset で1回だけ)/
+    高さ・位置(height・bottom)を動かさず clip-path・transform で見せる / 揺らす層と 透明度を動かす大きな幕は s3 のあいだだけ `will-change`
+  - 揺れ(`shakeScene`。同じ日に依頼者の希望で強くした):落雷 20px・うずへの落雷とパワー MAX 30px・誕生の特大 42px・突風 14px・連打 3〜7px(0.5秒、大きいほど少し回る)。強い揺れの最中は 弱い揺れで消さない
   - テーマに用意する要素(ID)は `core.js` 先頭の「テーマとの約束」。テーマの index.html は shared.js → core.js → dev.js → boot.js の順に読む
   - 進み具合は `#stage` の `--progress`(0〜1)と `data-level`(0〜5)を CSS で見せる。**段ごとの見た目は静的な指定で出し、transition やアニメーションを使わない**(回る・ゆれる要素の中で途中のまま止まって見えた)
   - 場面転換は `#stage.shut` を CSS で見せる。時間は `--scene-close-ms` / `--scene-open-ms`
   - JavaScript の演出は任意:`window.themeFx.birth(showCard)` で誕生をまかせられる(失敗しても `core.js` がカードを出す)。段が変わると `#stage` に `levelchange`。
     今は fusion の `effects.js`(GSAP・tsParticles)。ライブラリが読めないときは `<html>` に `fx` が付かず、CSS の演出で動く
-  - 効果音 `window.sfx.play(名前)`:press・tick(段が上がった)・crack・fanfare。themeFx のあるテーマは誕生の音を自分で鳴らす。BGM は `sounds/bgm.mp3` をくり返す。がったい中(s3)は `fusion1〜3.mp3` の1つを流し、`bgm.mp3` を小さくする(開発者メニューで選ぶ)。`?sound=0` で消す
+  - 効果音 `window.sfx.play(名前, { rate, volume })`:press・tick(段が上がった)・crack・fanfare、嵐の thunder・rumble・gust と 雨風の環境音 `window.sfx.storm(0〜1)`(仮の音は `tools/make_storm_sounds.py`。くわしくは `static/sounds/README.md`)。themeFx のあるテーマは誕生の音を自分で鳴らす。BGM は `sounds/bgm.mp3` をくり返す。がったい中(s3)は `fusion1〜3.mp3` の1つを流し、`bgm.mp3` を小さくする(開発者メニューで選ぶ)。`?sound=0` で消す
 - 確認用(API なし):`/?theme=…&demo=1&scene=s3&progress=0.8&photo=…&img=…&animal=…&name=…`、`&play=birth` で割れる直前から誕生後まで流す、`&dev=1` で開発者メニュー。`photo`・`img` を付けなければ見本(`static/demo/`)を使う
 
 ### スマホ(`/phone`)
