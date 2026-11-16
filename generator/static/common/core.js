@@ -393,6 +393,17 @@ function press(pos) {
   el("btn-" + pos).addEventListener("click", () => press(pos));
 });
 
+// キオスクで 右クリック・長押しのメニュー(画像検索など)・ドラッグ・文字の選択を 始めさせない(CSS の common.css と2重に)。
+// 入力欄と 開発者メニューの中は ふつうのまま(バトル側は battle/src/main.tsx に同じもの)
+["contextmenu", "dragstart", "selectstart"].forEach((type) => {
+  document.addEventListener(type, (ev) => {
+    // selectstart は 文字(テキストノード)が対象になることがあるので、そのときは 親の要素で見る
+    const t = ev.target && ev.target.nodeType === Node.TEXT_NODE ? ev.target.parentElement : ev.target;
+    if (t && t.closest && t.closest("input, textarea, select, [contenteditable='true'], .dev")) return;
+    ev.preventDefault();
+  });
+});
+
 document.addEventListener("keydown", (ev) => {
   // 開発者メニューの入力欄に文字を打っているときは、ボタンの操作にしない
   const tag = (ev.target.tagName || "").toLowerCase();

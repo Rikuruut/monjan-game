@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getAttributeTheme } from './attributes';
 import { BattleScreen } from './battle/BattleScreen';
-import { CardBattleEntry } from './card/CardBattle';
+import { CardBattleEntry, type CardBattleOutcome } from './card/CardBattle';
 import type { BattlePhase, HandWinner, Screen, TutorialMode } from './battle/phases';
 import { practiceData, type BattleData } from './battle/practice';
 import { PRACTICE_INTRO_PAGES } from './battle/PracticeIntro';
@@ -35,6 +35,7 @@ import {
   type PadButton,
 } from './integration';
 import { preloadBattleImages } from './preload';
+import { CardResultScreen } from './screens/CardResultScreen';
 import { ResultScreen } from './screens/ResultScreen';
 import { ThanksScreen } from './screens/ThanksScreen';
 import { TitleScreen } from './screens/TitleScreen';
@@ -107,7 +108,11 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   const [data, setData] = useState<GameData | null>(null);
   const [error, setError] = useState('');
   const [screen, setScreen] = useState<Screen>('title');
-  const [tutorialMode, setTutorialMode] = useState<TutorialMode | null>(null);
+  // カードバトル(?card=1)の画面:バトル → リザルト → カードゲット。cardRun は 単体の開発用で やり直すとき 作り直す印
+  const [cardStage, setCardStage] = useState<'battle' | 'result' | 'card'>('battle');
+  const [cardOutcome, setCardOutcome] = useState<CardBattleOutcome | null>(null);
+  const [cardRun, setCardRun] = useState(0);
+  const [tutorialMode,setTutorialMode] = useState<TutorialMode | null>(null);
   // 練習ラウンド(最初のスタートのあと、本物のバトル画面で1回だけ。必ず勝つ。♡は本番の前にもどす)
   const [practice, setPractice] = useState(false);
   // 練習の はじめの説明で見せているページ(0 から。null は説明なし)。時間で進み、終わるまで手は選べない
@@ -442,11 +447,37 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
     setScreen('thanks');
   };
 
+  // ---- カードバトルの おわり:リザルト → カードゲット → タイトル ----
+  const finishCardBattle = (outcome: CardBattleOutcome) => {
+    setCardOutcome(outcome);
+    setCardStage('result');
+  };
+  const showCardGet = () => {
+    playSound('card-get');
+    setCardStage('card');
+  };
+  const leaveCardGet = () => {
+    // 撮影の画面とつながっているときは タイトル(/battle/)へ。単体の開発用は バトルを はじめから
+    if (launch.toGenerator) {
+      navigateTo(BASE_URL);
+      return;
+    }
+    setCardOutcome(null);
+    setCardStage('battle');
+    setCardRun((run) => run + 1);
+  };
+
   // 会場の3つのボタン。手は左からグー・チョキ・パー(画面のボタンの並びと同じ)。
   // 見直しのルール説明のあいだはチュートリアルが受け取る。練習の結果では 中ボタンで「れんしゅうクリア」へ、そこから中ボタンで本番へ
   const pressPad = (button: PadButton) => {
-    // カードバトル(?card=1)は 自分でボタンを受け取る
-    if (!data || launch.card) return;
+    // カードバトル(?card=1)は バトルのあいだ 自分でボタンを受け取る。リザルト・カードゲットは 中ボタンで進む
+    if (data && launch.card) {
+      if (button !== 'center') return;
+      if (cardStage === 'result') showCardGet();
+      else if (cardStage === 'card') leaveCardGet();
+      return;
+    }
+    if (!data) return;
     if (screen === 'title') {
       if (button === 'center') pressStart();
     } else if (screen === 'battle') {
@@ -606,10 +637,24 @@ export function App({ launch = readLaunch() }: { launch?: Launch }) {
   }
 
   let content: ReactNode;
-  if (launch.card) {
+  if (launch.card && cardStage === 'result' && cardOutcome) {
+    content = <CardResultScreen monster={data.player} outcome={cardOutcome} onContinue={showCardGet} />;
+  } else if (launch.card && cardStage === 'card') {
+    // 実際に刷るカード(main の /card。撮影のモンスターのとき)と「この カードを ゲット！」
+    content = (
+      <ThanksScreen
+        monster={data.player}
+        cardUrl={cardPreviewUrl(launch)}
+        onTitle={leaveCardGet}
+        lead="この カードを"
+      />
+    );
+  } else if (launch.card) {
     // 作りかけのカードバトル(?card=1)。できあがったら これまでのバトルと入れかえる
     content = (
       <CardBattleEntry
+        key={cardRun}
+        onFinish={finishCardBattle}
         player={data.player}
         cpu={data.cpu}
         practiceCpu={data.practiceCpu}

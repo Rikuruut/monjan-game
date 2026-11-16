@@ -166,6 +166,7 @@ export function useCardBattle({
   attributes = { player: '', cpu: '' },
   setup,
   packIntro = false,
+  onFinish,
 }: {
   config: BattleConfig;
   playerAttack: number;
@@ -179,6 +180,8 @@ export function useCardBattle({
   setup?: (state: BattleState) => BattleState;
   /** ラウンドのはじめに パック選び・開封の画面を出す(false なら パックを そのまま開けて 相手のターンから。テスト用) */
   packIntro?: boolean;
+  /** ラウンドの終わりの帯で 中ボタンを押したとき(リザルトへ)。ないときは「もういちど」で やり直す(テスト・開発用) */
+  onFinish?: (state: BattleState) => void;
 }) {
   const { schedule, clearTimers } = useTimers();
   // パックを開ける(setup があれば そのあとの状態を差しかえる)
@@ -528,6 +531,12 @@ export function useCardBattle({
     }
   };
 
+  /** ラウンドの終わりの帯の ボタン:リザルトへ(onFinish がなければ やり直す) */
+  const finish = () => {
+    if (onFinish) onFinish(state);
+    else restart();
+  };
+
   /** はじめから(パックを開けたところから)やり直す */
   const restart = () => {
     clearTimers();
@@ -602,7 +611,7 @@ export function useCardBattle({
       return;
     }
     if (view === 'round-end') {
-      if (button === 'center') restart();
+      if (button === 'center') finish();
       return;
     }
     if (view === 'pack') {
@@ -710,6 +719,7 @@ export function useCardBattle({
     press,
     pressMash,
     restart,
+    finish,
   };
 }
 

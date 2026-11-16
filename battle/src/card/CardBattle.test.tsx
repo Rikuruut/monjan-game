@@ -31,7 +31,7 @@ import {
   SPECIAL_DISPLAY_MS,
 } from '../timings';
 import type { Hand, Monster } from '../types';
-import { CardBattle, trialConfig } from './CardBattle';
+import { CardBattle, trialConfig, type CardBattleOutcome } from './CardBattle';
 import { sendCardDev } from './cardDev';
 
 // ♥4(HP 100)にしておく(HP の数字を 100 で書いているテストが多いので)。♥ と HP の読みかえは 下の「こうげき・HP の見せ方」で見る
@@ -81,7 +81,12 @@ function withHands(hand: Card[], cpuHand: JankenCard[], extra: (state: BattleSta
   });
 }
 
-function renderBattle(options: { seed?: number; setup?: (state: BattleState) => BattleState; keepCpuTurn?: boolean } = {}) {
+function renderBattle(options: {
+  seed?: number;
+  setup?: (state: BattleState) => BattleState;
+  keepCpuTurn?: boolean;
+  onFinish?: (outcome: CardBattleOutcome) => void;
+} = {}) {
   const playSound = vi.fn();
   const view = render(
     <CardBattle
@@ -91,6 +96,7 @@ function renderBattle(options: { seed?: number; setup?: (state: BattleState) => 
       playSound={playSound}
       random={seededRandom(options.seed ?? 1)}
       setup={options.setup}
+      onFinish={options.onFinish}
     />,
   );
   // はじめは 相手のターン(カードを えらんで置く)。待って 自分のターンから
@@ -478,6 +484,21 @@ describe('カードバトル:必殺技', () => {
     expect(document.querySelector('.special-impact-flash')).not.toBeNull();
     wait(CARD_DAMAGE_MS);
     expect(screen.getByText('かった！')).toBeInTheDocument();
+  });
+
+  it('onFinish があると、おわりの帯は「つぎへ」で、中ボタンで 結果を渡す(リザルトへ)', () => {
+    const onFinish = vi.fn();
+    const cpu = [janken('x', 'rock', 3), janken('y', 'paper', 2)];
+    renderBattle({ setup: withHands([janken('a', 'scissors', 1), finisher], cpu), onFinish });
+    press('ArrowRight');
+    press('Enter');
+    press('Enter');
+    wait(SPECIAL_DISPLAY_MS + CARD_FINISHER_ATTACK_MS + CARD_DAMAGE_MS);
+    expect(screen.getByRole('button', { name: '● つぎへ' })).toBeInTheDocument();
+    press('Enter');
+    expect(onFinish).toHaveBeenCalledTimes(1);
+    expect(onFinish.mock.calls[0][0]).toMatchObject({ result: 'win', turns: 1, playerHp: 100, playerMaxHp: 100, finisherUsed: true });
+    expect(onFinish.mock.calls[0][0].cpu.name).toBe('ドライオン');
   });
 
   it('ボス:相手の HP が半分以下になったら、次のドローで 必殺技のカードが かならず来る', () => {

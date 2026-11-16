@@ -34,6 +34,30 @@ import {
 
 type PlaySound = (sound: GameSound, options?: GameSoundOptions) => void;
 
+/** カードバトルの結果(リザルト画面に渡す) */
+export interface CardBattleOutcome {
+  result: 'win' | 'lose';
+  /** 何ターンで決着したか */
+  turns: number;
+  playerHp: number;
+  playerMaxHp: number;
+  /** 戦った相手 */
+  cpu: Monster;
+  /** 必殺技を使った */
+  finisherUsed: boolean;
+}
+
+export function outcomeOf(state: BattleState, cpu: Monster): CardBattleOutcome {
+  return {
+    result: state.roundResult === 'win' ? 'win' : 'lose',
+    turns: state.turn,
+    playerHp: Math.max(0, state.player.hp),
+    playerMaxHp: state.player.maxHp,
+    cpu,
+    finisherUsed: state.finisherUsed,
+  };
+}
+
 // カードの絵の中心の高さ(左右のモンスターを 0.8倍にしているので、main の 490 より上。cardbattle.css の .projectile の top と同じ)
 const CARD_IMAGE_Y = 422;
 // カードの絵の中心の 横の位置(左右のパネルを 画面のはしへ はなしたので、main の 510 / 1410 より外。cardbattle.css の上書きと同じ)
@@ -511,6 +535,7 @@ export function CardBattle({
   setup,
   packIntro = false,
   round = 1,
+  onFinish,
 }: {
   player: Monster;
   cpu: Monster;
@@ -523,6 +548,8 @@ export function CardBattle({
   setup?: (state: BattleState) => BattleState;
   /** ラウンドのはじめに パック選び・開封を出す(本番。テストは 既定の false で すぐ戦闘から) */
   packIntro?: boolean;
+  /** ラウンドの終わりの帯で「つぎへ」(リザルトへ)。ないときは「もういちど」(テスト・開発用) */
+  onFinish?: (outcome: CardBattleOutcome) => void;
 }) {
   const battle = useCardBattle({
     config,
@@ -534,6 +561,7 @@ export function CardBattle({
     attributes: { player: player.attribute, cpu: cpu.attribute },
     setup,
     packIntro,
+    onFinish: onFinish && ((ended) => onFinish(outcomeOf(ended, cpu))),
   });
   const { state, view, clash, damage, mash, cpuMash, rendanWinner, notice, chargeNote, finisherHit } = battle;
   usePadButtons(battle.press);
@@ -731,7 +759,7 @@ export function CardBattle({
       {view === 'round-end' && (
         <div className={`cb-round-end cb-round-end--${state.roundResult}`} role="status" aria-live="assertive">
           <strong>{state.roundResult === 'win' ? 'かった！' : 'まけちゃった…'}</strong>
-          <button type="button" className="cb-round-end__again" onClick={battle.restart}>● もういちど</button>
+          <button type="button" className="cb-round-end__again" onClick={battle.finish}>{onFinish ? '● つぎへ' : '● もういちど'}</button>
         </div>
       )}
     </main>
@@ -753,9 +781,12 @@ export function CardBattleEntry({
   round = 2,
   playSound,
   packIntro = true,
+  onFinish,
 }: {
   player: Monster;
   cpu: Monster;
+  /** ラウンドの終わりの「つぎへ」(リザルトへ) */
+  onFinish?: (outcome: CardBattleOutcome) => void;
   /** 練習(round = 1)の相手 */
   practiceCpu: Monster;
   /** 戦う相手(`?round=`)。1 = 練習・2 = 2体目・3 = ボス */
@@ -774,5 +805,5 @@ export function CardBattleEntry({
   }, []);
   const trial = useMemo(() => (config ? trialConfig(config, round) : null), [config, round]);
   if (!trial) return <main className="screen loading-screen"><div className="loader" /><p>カードを じゅんびしているよ…</p></main>;
-  return <CardBattle player={player} cpu={round === 1 ? practiceCpu : cpu} config={trial} playSound={playSound} packIntro={packIntro} round={round} />;
+  return <CardBattle player={player} cpu={round === 1 ? practiceCpu : cpu} config={trial} playSound={playSound} packIntro={packIntro} round={round} onFinish={onFinish} />;
 }

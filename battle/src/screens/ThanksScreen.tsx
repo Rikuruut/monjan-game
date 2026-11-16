@@ -12,7 +12,18 @@ import type { Monster } from '../types';
 // 撮影のモンスターは、実際に刷ったカード(generator の /card。No. つき)をそのまま見せる
 // (2026年11月9日。画面と手元のカードをそろえ、スタッフが No. を見て渡せるように)。
 // バトルの見本・単体の開発用は、刷ったカードがないので、これまでのカード
-export function ThanksScreen({ monster, cardUrl, onTitle }: { monster: Monster; cardUrl: string | null; onTitle: () => void }) {
+// lead:見出しの「ゲット！」の前の ことば。カードバトルからは「この カードを」(カードゲットの画面。2026年11月16日)
+export function ThanksScreen({
+  monster,
+  cardUrl,
+  onTitle,
+  lead = 'きみだけのモンスターを',
+}: {
+  monster: Monster;
+  cardUrl: string | null;
+  onTitle: () => void;
+  lead?: string;
+}) {
   const theme = getAttributeTheme(monster.attribute);
   const rootRef = useRef<HTMLElement>(null);
   // もらえるカードが 上から落ちて はずみ、「ゲット!」が1文字ずつ たたきつけられ、ことばが ポンと出る
@@ -47,7 +58,7 @@ export function ThanksScreen({ monster, cardUrl, onTitle }: { monster: Monster; 
         </div>
         <div className="thanks-card__side">
           <p className="acquisition-kicker">✦ SPECIAL MONSTER CARD ✦</p>
-          <h1>きみだけのモンスターを<br /><span>ゲット！</span></h1>
+          <h1>{lead}<br /><span>ゲット！</span></h1>
           <p className="thanks-message">あそんでくれて ありがとう！<br />スタッフから カードを うけとってね！</p>
         </div>
       </section>

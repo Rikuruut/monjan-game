@@ -34,6 +34,14 @@
 * { box-sizing: border-box; }
 
 html, body, #root { width: 100%; height: 100%; margin: 0; }
+
+/* キオスクで 文字・画像を押しても、選択・Edge の画像検索(ビジュアル検索)・長押しのメニュー・ドラッグが 起きないように
+   (2026年11月16日。撮影側の generator/static/common/common.css にも 同じもの。片方を変えたら もう片方も)。
+   入力欄と 開発者メニュー(.dev。JSON を写せるように)は 選べるまま。画像は どれも 押すものではないので マウスを通す */
+html { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+input, textarea, select, [contenteditable="true"], .dev, .dev * { -webkit-user-select: text; user-select: text; }
+img, svg, canvas, video { -webkit-user-drag: none; }
+img { pointer-events: none; }
 body {
   overflow: hidden;
   background: var(--forest-deep);   /* 舞台のまわりの余白(画面の縦横比がちがうとき) */

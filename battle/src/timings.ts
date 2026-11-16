@@ -74,12 +74,14 @@ export const CARD_HP_COUNT_MS = 800;
 export const CARD_MERGE_MS = 1500;
 // 合体に気づかせる:新しいペアができたターンの はじめ、枠が はずんで 案内の1行が「がったい できるよ!」になる時間
 export const CARD_MERGE_HINT_MS = 2200;
-// パック開封(設計書8章「選ぶ時間 + 約4秒」):あける(えらばなかったパックが消える → ため → 袋が破れる → カードが せり上がる)・
+// パック開封:あける(えらばなかったパックが消える → ため → 袋が破れる → カードが せり上がる)・
 // 破れる瞬間(音と粒)・5枚が横に広がる・1枚めくる間隔・めくり終わって 押さなくても バトルへ進むまで
-export const CARD_PACK_OPEN_MS = 1500;
-export const CARD_PACK_TEAR_MS = 700;
-export const CARD_PACK_SPREAD_MS = 450;
-export const CARD_PACK_FLIP_MS = 380;
+// (設計書8章は「選ぶ時間 + 約4秒」。2026年11月16日に 依頼者が「テンポが速い」と言ったので、約1.8倍の 約7秒にした。
+//  それまでは あける 1500・破れる 700・広がる 450・めくる 380)
+export const CARD_PACK_OPEN_MS = 2600;
+export const CARD_PACK_TEAR_MS = 1400;
+export const CARD_PACK_SPREAD_MS = 900;
+export const CARD_PACK_FLIP_MS = 700;
 export const CARD_PACK_READY_AUTO_MS = 6000;
 // ドローで必殺技のカードが来たときは、長めに見せる
 export const CARD_FINISHER_DRAW_MS = 1400;

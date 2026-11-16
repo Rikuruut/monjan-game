@@ -92,13 +92,18 @@ export function PackOpening({ battle }: { battle: CardBattleApi }) {
     const tear = CARD_PACK_TEAR_MS / 1000;
     gsap.killTweensOf(packs);
     const tl = gsap.timeline();
-    tl.to(others, { y: 520, rotation: (index) => (index % 2 ? 18 : -18), opacity: 0, duration: 0.35, ease: 'power2.in' }, 0)
-      .to(chosen, { x: toCenter.x, y: toCenter.y - 10, scale: 1.7, rotation: 0, duration: 0.35, ease: 'power3.out' }, 0.05)
-      // ため:ぶるぶる ふるえて、少し つぶれる
-      .to(chosen, { rotation: 4, duration: 0.25, ease: 'fx.wiggleBig' }, 0.42)
-      .to(chosen, { scaleX: 1.78, scaleY: 1.64, duration: 0.2, ease: 'power1.in' }, 0.45)
+    // ため:まんなかへ来てから 破れる(tear)までを 3回の ぶるぶる(だんだん強く)+ 最後に ぎゅっと つぶれる で埋める。
+    // 2026年11月16日に テンポを ゆっくりにした(timings.ts の CARD_PACK_*)。ため の長さは tear から決まる
+    const chargeStart = 0.65;
+    const shake = Math.max(0.15, (tear - chargeStart - 0.25) / 3);
+    tl.to(others, { y: 520, rotation: (index) => (index % 2 ? 18 : -18), opacity: 0, duration: 0.5, ease: 'power2.in' }, 0)
+      .to(chosen, { x: toCenter.x, y: toCenter.y - 10, scale: 1.7, rotation: 0, duration: 0.55, ease: 'power3.out' }, 0.05)
+      .to(chosen, { rotation: 3, duration: shake, ease: 'fx.wiggleBig' }, chargeStart)
+      .to(chosen, { rotation: 5, duration: shake, ease: 'fx.wiggleBig' }, chargeStart + shake)
+      .to(chosen, { rotation: 8, duration: shake, ease: 'fx.wiggleBig' }, chargeStart + shake * 2)
+      .to(chosen, { scaleX: 1.8, scaleY: 1.6, duration: 0.25, ease: 'power1.in' }, tear - 0.25)
       // ビリッ:上の帯が 回りながら飛んでいく。うしろに 光の筋と フラッシュ
-      .to(chosen.querySelector('.cb-pack__top'), { x: 300, y: -260, rotation: 55, opacity: 0, duration: 0.5, ease: 'power2.out' }, tear)
+      .to(chosen.querySelector('.cb-pack__top'), { x: 300, y: -260, rotation: 55, opacity: 0, duration: 0.7, ease: 'power2.out' }, tear)
       .to(chosen, { scaleX: 1.7, scaleY: 1.7, duration: 0.3, ease: 'elastic.out(1, 0.4)' }, tear)
       .fromTo('.cb-pack-stage__rays', { opacity: 0, scale: 0.4, rotation: 0 }, { opacity: 1, scale: 1, rotation: 25, duration: 0.6, ease: 'power2.out' }, tear)
       .fromTo('.cb-pack-stage__flash', { opacity: 0.9 }, { opacity: 0, duration: 0.35, ease: 'power2.out' }, tear)
@@ -114,8 +119,8 @@ export function PackOpening({ battle }: { battle: CardBattleApi }) {
         });
       }, undefined, tear)
       // 裏向きのカードが 口から せり上がり、袋は 下へ落ちる
-      .fromTo('.cb-pack-stack', { y: 120, opacity: 0 }, { y: -90, opacity: 1, duration: 0.45, ease: 'back.out(1.6)' }, tear + 0.12)
-      .to(chosen, { y: toCenter.y + 800, opacity: 0, duration: 0.5, ease: 'power2.in' }, tear + 0.3);
+      .fromTo('.cb-pack-stack', { y: 120, opacity: 0 }, { y: -90, opacity: 1, duration: 0.6, ease: 'back.out(1.6)' }, tear + 0.2)
+      .to(chosen, { y: toCenter.y + 800, opacity: 0, duration: 0.6, ease: 'power2.in' }, tear + 0.5);
   }, { scope: rootRef, dependencies: [packStep] });
 
   // ---- めくる:5枚が まんなかの束から 横一列に広がる ----
@@ -126,7 +131,7 @@ export function PackOpening({ battle }: { battle: CardBattleApi }) {
     gsap.fromTo(
       cards,
       { x: (index) => (center - index) * CARD_GAP, y: -70, rotation: (index) => (index - center) * 4, scale: 0.9 },
-      { x: 0, y: 0, rotation: 0, scale: 1, duration: 0.42, ease: 'power3.out', stagger: 0.03 },
+      { x: 0, y: 0, rotation: 0, scale: 1, duration: 0.75, ease: 'power3.out', stagger: 0.06 },
     );
     gsap.to('.cb-pack-stage__rays', { opacity: 0.45, duration: 0.6 });
   }, { scope: rootRef, dependencies: [packStep] });
@@ -138,10 +143,10 @@ export function PackOpening({ battle }: { battle: CardBattleApi }) {
     const face = card?.querySelector('.cb-pack-card__face');
     if (!card || !face) return;
     const rare = card.classList.contains('cb-pack-card--rare');
-    gsap.fromTo(face, { rotationY: 90 }, { rotationY: 0, duration: 0.22, ease: 'power2.out' });
-    gsap.fromTo(card, { scale: rare ? 1.32 : 1.15, y: rare ? -30 : -14 }, { scale: 1, y: 0, duration: rare ? 0.6 : 0.4, ease: 'elastic.out(1, 0.45)' });
+    gsap.fromTo(face, { rotationY: 90 }, { rotationY: 0, duration: 0.32, ease: 'power2.out' });
+    gsap.fromTo(card, { scale: rare ? 1.32 : 1.15, y: rare ? -30 : -14 }, { scale: 1, y: 0, duration: rare ? 0.8 : 0.55, ease: 'elastic.out(1, 0.45)' });
     const burst = card.querySelector('.cb-pack-card__burst');
-    if (burst) gsap.fromTo(burst, { scale: 0.3, opacity: 1 }, { scale: 2.2, opacity: 0, duration: 0.5, ease: 'power2.out' });
+    if (burst) gsap.fromTo(burst, { scale: 0.3, opacity: 1 }, { scale: 2.2, opacity: 0, duration: 0.7, ease: 'power2.out' });
   }, { scope: rootRef, dependencies: [flipped] });
 
   const title = packStep === 'choose' ? 'パックを えらぼう！' : packStep === 'opening' ? 'あけるよ…！' : 'なにが でたかな？';
