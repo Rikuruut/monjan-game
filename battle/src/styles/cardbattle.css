@@ -164,8 +164,8 @@
 }
 
 /* ---- カード:上の札(★・スキル・ひっさつ)/ 絵 / 名前 ----
-   背景は全カード共通の「森」のデザイン(2026年11月16日 依頼者:グー・チョキ・パー・★3 も、印刷のモンスターカードも同じに)。
-   色が変わるのは スキル(紫)と ひっさつ(金)だけで、下の --card-* を差しかえる。
+   地の模様は全カード共通の「森」のデザイン(印刷のモンスターカードも同じ)。
+   色は じゃんけんの ★1(青)・★2(緑)・★3(赤)、スキル(紫)、ひっさつ(金)で、下の --card-* を差しかえる。
    葉の模様・四隅の葉は うすい墨色の SVG なので、どの地の色にもなじむ
    (同じ模様を generator/static/card/card.css のモンスターカードにも mm で使っている) */
 .cb-card {
@@ -198,8 +198,40 @@
   line-height: 1;
   user-select: none;
 }
-/* グー・チョキ・パー・★1〜3 は色を変えない(手は絵と名前、強さは★で見分ける) */
-.cb-card--skill    { --card-color: #a77be8; --card-frame: #4b2a7a; --card-bg-a: #f7f1ff; --card-bg-b: #e0d0ff; }
+/* じゃんけんカードは ★ ごとに色を変え、レアが一目でわかるように(2026年11月16日 依頼者)。
+   ★1 青(飾りなし)→ ★2 緑(内のふちが銀)→ ★3 赤(金のふち + キラッと光が走る + 赤い後光)。
+   相手の手札(★？)には cb-card--star* が付かないので 森の地のまま(★がもれない) */
+.cb-card--star1 { --card-color: #6fb6ff; --card-frame: #1f4f9a; --card-bg-a: #f1f8ff; --card-bg-b: #cfe5ff; }
+.cb-card--star2 { --card-color: #d9e2ea; --card-frame: #17703f; --card-bg-a: #f2fff0; --card-bg-b: #bdeeb4; }
+.cb-card--star3 { --card-color: #ffc93c; --card-frame: #a3121f; --card-bg-a: #fff3ef; --card-bg-b: #ffb8b0; }
+.cb-card--star3 .cb-card__badge { text-shadow: 0 2px 0 var(--ink), 0 0 1px var(--ink), 0 0 10px #fff3a0; }
+/* ★3:斜めの白い光が ときどき表面を走る(2.8秒に1回。点滅ではない) */
+.cb-card--star3::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 40%, #ffffff00 42%, #ffffffb8 50%, #ffffff00 58%, transparent 60%) 0 0 / 300% 100% no-repeat;
+  background-position: 150% 0;
+  content: '';
+  pointer-events: none;
+  animation: cbRareShine 2.8s ease-in-out infinite;
+}
+@keyframes cbRareShine {
+  0%, 55% { background-position: 150% 0; }
+  100% { background-position: -50% 0; }
+}
+/* ★3:赤い後光がゆっくり明滅(ひっさつの金の光と同じ作り。box-shadow は勝ち・開封で上書きされるので疑似要素に) */
+.cb-card--star3::after {
+  position: absolute;
+  inset: -8px;
+  border-radius: 24px;
+  box-shadow: 0 0 22px 8px #ff4d5a;
+  content: '';
+  pointer-events: none;
+  animation: cbFinisherGlow 1.4s ease-in-out infinite alternate;
+}
+.cb-card--tiny.cb-card--star3::after { inset: -4px; border-radius: 13px; box-shadow: 0 0 10px 3px #ff4d5a; }
+.cb-card--skill   { --card-color: #a77be8; --card-frame: #4b2a7a; --card-bg-a: #f7f1ff; --card-bg-b: #e0d0ff; }
 .cb-card--finisher { --card-color: var(--gold); --card-frame: #8a5a00; --card-bg-a: #fff6cf; --card-bg-b: #ffd75e; }
 
 /* ★:ふち取り(text-stroke)は つぶれるので使わず、色と影で見せる */
@@ -278,6 +310,36 @@
   aspect-ratio: 1;
   background: url('/assets/card-mark.png') center / contain no-repeat;
   filter: drop-shadow(0 4px 0 #0006);
+}
+
+/* 「3まい ひく」の絵(CardView.tsx の DrawStackIcon):裏向きの 小さなカード3枚 +「+3」。
+   大きさは すべて em(.cb-card__icon--emoji の字の大きさ:手札 76px・場 52px・見本 30px など)で、どのカードでも同じ割合で縮む。
+   裏面は .cb-card--back と同じ色とマーク(葉の模様は 小さすぎて見えないので 省く) */
+.cb-draw-icon { position: relative; display: block; width: 1.05em; height: 0.95em; }
+.cb-draw-icon__card {
+  position: absolute;
+  top: 0.12em;
+  width: 0.46em;
+  height: 0.62em;
+  border-radius: 0.08em;
+  background: url('/assets/card-mark.png') center / 62% no-repeat, radial-gradient(ellipse at 50% 50%, #2f6b4c, var(--forest-deep) 80%);
+  box-shadow: inset 0 0 0 0.04em var(--sun), 0 0.05em 0 #0006;
+}
+/* 左 → 右へ 少しずつずらして 扇に(うしろの2枚は 山札と同じく 少し暗く) */
+.cb-draw-icon__card:nth-child(1) { left: 0.04em; transform: rotate(-14deg); filter: brightness(0.7); }
+.cb-draw-icon__card:nth-child(2) { left: 0.28em; top: 0.05em; transform: rotate(0deg); filter: brightness(0.85); }
+.cb-draw-icon__card:nth-child(3) { left: 0.52em; transform: rotate(14deg); }
+.cb-draw-icon__plus {
+  position: absolute;
+  right: -0.08em;
+  bottom: -0.06em;
+  font-family: var(--font-title);
+  font-size: 0.42em;
+  line-height: 1;
+  color: var(--sun);
+  -webkit-text-stroke: 0.12em var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 0.08em 0 var(--ink);
 }
 
 /* ---- 真ん中(左右のパネルの あいだ x 610〜1310) ---- */
@@ -439,7 +501,8 @@
   height: 236px;
 }
 /* 扇形:となりと少し重ね、真ん中からの位置で傾けて はしほど下げる(--fan-angle・--fan-drop は CardBattle.tsx の HandRow が決める) */
-.cb-hand__cell + .cb-hand__cell { margin-left: -28px; }
+/* --hand-overlap:ふだんは 28px。6枠をこえると CardBattle.tsx の HandRow が ふやす(手札の上限 7) */
+.cb-hand__cell + .cb-hand__cell { margin-left: calc(-1 * var(--hand-overlap, 28px)); }
 /* 並びの位置の枠(CardBattle.tsx の HandRow。Flip が動かす)。手前に出すカードは 枠ごと前へ */
 .cb-hand__cell { position: relative; }
 .cb-hand__cell:has(.cb-hand__slot--pair) { z-index: 2; }
@@ -523,6 +586,9 @@
 }
 
 /* 合体の演出:合体した2枚の写しと 光(動きは HandRow の GSAP) */
+/* リセット:すてたカードの写し(CardBattle.tsx の HandRow が 元の位置から 落とす) */
+.cb-reset-fx { position: absolute; z-index: 9; inset: 0; pointer-events: none; }
+.cb-reset-fx__card { position: absolute; left: 0; top: 0; opacity: 0; }
 .cb-merge-fx { position: absolute; z-index: 10; inset: 0; pointer-events: none; }
 .cb-merge-fx__card { position: absolute; left: 0; top: 0; }
 .cb-merge-fx__flash {

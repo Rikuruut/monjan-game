@@ -11,7 +11,7 @@
 <body>
   <!-- カード1枚(63×88mm)。中身は card.js が /api/card-data/<id> から差し込む。
        レイアウトは依頼者の案(2026年11月9日):
-         名前 [タイプ] / 動物 × 物 / 絵 / こうげき ⚔⚔⚔ たいりょく ♥♥♥♥♥(数だけ満) / 説明 / [ロゴ] No.0042 -->
+         名前 [タイプ] / 動物 × 物 / 絵 / 攻撃 ⚔⚔⚔ 体力 ♥♥♥♥♥(数だけ満) / 説明 / [ロゴ] No.0042 -->
   <main class="sheet">
     <article id="card" class="card" data-ready="0">
       <!-- キラキラの星(画面で見るときだけ。card.css) -->
@@ -26,8 +26,8 @@
           <img id="card-img" alt="">
         </figure>
         <div class="card-stats">
-          <span class="stat stat-attack"><span class="stat-label">こうげき</span><span id="card-attack" class="icons"></span></span>
-          <span class="stat stat-hp"><span class="stat-label">たいりょく</span><span id="card-hp" class="icons"></span></span>
+          <span class="stat stat-attack"><span class="stat-label">攻撃</span><span id="card-attack" class="icons"></span></span>
+          <span class="stat stat-hp"><span class="stat-label">体力</span><span id="card-hp" class="icons"></span></span>
         </div>
         <p id="card-desc" class="card-desc"></p>
         <footer class="card-foot">

@@ -5,7 +5,8 @@ import type { BattleConfig, Range, RoundConfig } from './config';
 import type { RandomSource } from './logic';
 
 export type Star = 1 | 2 | 3;
-export type SkillName = 'heal' | 'seal';
+/** heal = 回復・seal = 封じ手・draw3 = カードを3枚ひく・reset = 手札を全部すてて5枚ひきなおす(2026年11月18日に足した) */
+export type SkillName = 'heal' | 'seal' | 'draw3' | 'reset';
 
 /** カードの中身(id なし)。抽選はこれを返し、id は engine.ts が付ける */
 export type JankenFace = { kind: 'janken'; hand: Hand; star: Star };
@@ -61,16 +62,42 @@ export function rollJanken(config: BattleConfig, random: RandomSource, hand?: Ha
   return { kind: 'janken', hand: hand ?? HANDS[pickIndex(random, HANDS.length)], star: rollStar(config, random) };
 }
 
+/** スキルごとの出る確率(1枚あたり) */
+export type SkillRates = Record<SkillName, number>;
+
+/** パックの枠の確率。extraSkills が false のラウンド(練習)は ドロー・リセットを出さない */
+export function packRates(config: BattleConfig, round: Pick<RoundConfig, 'extraSkills'>): SkillRates {
+  return {
+    heal: config.packHealRate,
+    seal: config.packSealRate,
+    draw3: round.extraSkills ? config.packDrawRate : 0,
+    reset: round.extraSkills ? config.packResetRate : 0,
+  };
+}
+
+/** ドローの1枚の確率(スキルの ドロー・リセットで引くカードも これ) */
+export function drawRates(config: BattleConfig, round: Pick<RoundConfig, 'extraSkills'>): SkillRates {
+  return {
+    heal: config.drawHealRate,
+    seal: config.drawSealRate,
+    draw3: round.extraSkills ? config.drawDrawRate : 0,
+    reset: round.extraSkills ? config.drawResetRate : 0,
+  };
+}
+
+// 確率の数え順(乱数1回で決める。回復・封じ手を先にして、足す前と同じ乱数で同じカードになるようにする)
+const RATE_ORDER: SkillName[] = ['heal', 'seal', 'draw3', 'reset'];
+
 // スキルか じゃんけんカードかを確率で決める(回復は上限まで。上限なら その枠は じゃんけんカード)
-function rollSlot(
-  config: BattleConfig,
-  rates: { heal: number; seal: number },
-  healAvailable: boolean,
-  random: RandomSource,
-): CardFace {
+function rollSlot(config: BattleConfig, rates: SkillRates, healAvailable: boolean, random: RandomSource): CardFace {
   const point = unit(random);
-  if (point < rates.heal) return healAvailable ? { kind: 'skill', skill: 'heal' } : rollJanken(config, random);
-  if (point < rates.heal + rates.seal) return { kind: 'skill', skill: 'seal' };
+  let edge = 0;
+  for (const skill of RATE_ORDER) {
+    edge += rates[skill];
+    if (point >= edge) continue;
+    if (skill === 'heal' && !healAvailable) break;
+    return { kind: 'skill', skill };
+  }
   return rollJanken(config, random);
 }
 
@@ -91,7 +118,7 @@ export function rollPack(
   }
   let heals = healDrawn;
   while (cards.length < config.packSize) {
-    const card = rollSlot(config, { heal: config.packHealRate, seal: config.packSealRate }, heals < config.healPerRound, random);
+    const card = rollSlot(config, packRates(config, round), heals < config.healPerRound, random);
     if (card.kind === 'skill' && card.skill === 'heal') heals += 1;
     cards.push(card);
   }
@@ -100,18 +127,19 @@ export function rollPack(
 
 /**
  * ドローの1枚。順番:必殺技の判定 → 手札に じゃんけんカードがなければ かならず じゃんけんカード → 確率。
- * finisherChances:いま満たしている条件ごとの確率(満たしていない条件は入れない)。先頭から順に判定する
+ * finisherChances:いま満たしている条件ごとの確率(満たしていない条件は入れない)。先頭から順に判定する。
+ * rates:スキルの確率(drawRates。省くと 回復・封じ手だけ)
  */
 export function rollDraw(
   config: BattleConfig,
-  context: { finisherChances: number[]; hasJanken: boolean; healAvailable: boolean },
+  context: { finisherChances: number[]; hasJanken: boolean; healAvailable: boolean; rates?: SkillRates },
   random: RandomSource,
 ): CardFace {
   for (const chance of context.finisherChances) {
     if (hit(random, chance)) return { kind: 'finisher' };
   }
   if (!context.hasJanken) return rollJanken(config, random);
-  return rollSlot(config, { heal: config.drawHealRate, seal: config.drawSealRate }, context.healAvailable, random);
+  return rollSlot(config, context.rates ?? drawRates(config, { extraSkills: false }), context.healAvailable, random);
 }
 
 // ---- 合成 ----
@@ -146,9 +174,9 @@ export function mergedFace(card: JankenCard): JankenFace {
 
 // ---- 手札の並び ----
 
-const SKILL_ORDER: SkillName[] = ['heal', 'seal'];
+const SKILL_ORDER: SkillName[] = ['heal', 'seal', 'draw3', 'reset'];
 
-// 左にスキル(回復・封じ手)、右に じゃんけんカード(グー・チョキ・パー、同じ手は★の少ない順)、右はしに必殺技
+// 左にスキル(回復・封じ手・ドロー・リセット)、右に じゃんけんカード(グー・チョキ・パー、同じ手は★の少ない順)、右はしに必殺技
 function sortKey(card: Card): number {
   if (card.kind === 'skill') return SKILL_ORDER.indexOf(card.skill);
   if (card.kind === 'janken') return 10 + HANDS.indexOf(card.hand) * 10 + card.star;

@@ -27,7 +27,16 @@ export const CARD_CLASH_IN_MS = 300;
 // 飛んで着地するまで 約 0.6 秒、そのあと 置いたカードを 少し見せてから 見せ場へ
 // ※ 2026年11月16日:800ms では 着地してすぐ じゃんけんが始まり 速かったので のばした
 export const CARD_PLAYER_PLACE_MS = 1400;
-export const CARD_JANKEN_BEAT_MS = 750;
+// じゃん・けん・ぽん の拍は 録音の声(public/audio/jankenpon_01.wav)に合わせる(2026年11月18日)。
+// 声の始まりは じゃん 約90ms・けん 約850ms・ぽん 約1540ms(間が 等しくない)ので、拍は じゃん から数えた時刻で持つ。
+// 声は じゃん の拍より JANKEN_VOICE_LEAD_MS 前に鳴らしはじめる(頭の無音の分)。
+// ずれて聞こえたら:全体は JANKEN_VOICE_LEAD_MS を、拍ごとは CARD_JANKEN_BEATS_MS を 10〜20ms ずつ動かす
+export const CARD_JANKEN_BEATS_MS = [0, 760, 1450] as const;
+export const JANKEN_VOICE_LEAD_MS = 90;
+// ぽん! から めくるまで
+export const CARD_JANKEN_POP_TO_REVEAL_MS = 750;
+// 見せ場の かけ声の長さ(じゃん → めくる)
+export const CARD_JANKEN_TOTAL_MS = CARD_JANKEN_BEATS_MS[2] + CARD_JANKEN_POP_TO_REVEAL_MS;
 export const CARD_REVEAL_MS = 1300;
 // 相手のターン:考える(手札がゆれて「カードを えらんでいる…」)→ ふせる(裏向きのカードが 場へ飛んで置かれる)
 // ※ 2026年11月14日:1.2秒では速すぎて 何をしているか わからなかったので、2つの段に分けて のばした
@@ -43,6 +52,13 @@ export const CARD_DAMAGE_MS = 1400;
 export const CARD_DRAW_MS = 1300;
 // 合成・スキル(回復・封じ手)を使ったあと、結果を見せる
 export const CARD_SKILL_MS = 1200;
+// スキルの ドロー(3まい ひく):山札から 1枚ずつ 時間差で引く(CardBattle.tsx の drawFromDeck を CARD_SKILL_DRAW_STAGGER_S ずらして)
+export const CARD_SKILL_DRAW_MS = 2100;
+export const CARD_SKILL_DRAW_STAGGER_S = 0.35;
+// スキルの リセット(いれかえ):手札が下へ落ちて消える(CARD_RESET_DISCARD_S)→ 5枚を 時間差で引く
+export const CARD_RESET_MS = 3000;
+export const CARD_RESET_DISCARD_S = 0.55;
+export const CARD_RESET_STAGGER_S = 0.3;
 // 回復(自分の回復カード・相手の回復):粒・✚・「+○○」・HP が数え上がる のを見せる
 export const CARD_HEAL_MS = 1800;
 // 回復で HP の数字が 数え上がる時間

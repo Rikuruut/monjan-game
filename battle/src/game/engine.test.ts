@@ -311,6 +311,94 @@ describe('スキル', () => {
   });
 });
 
+describe('スキル:ドロー(3まい ひく)・リセット(いれかえ)', () => {
+  const draw3: Card = { id: 'd3', kind: 'skill', skill: 'draw3' };
+  const reset: Card = { id: 'rs', kind: 'skill', skill: 'reset' };
+  const cpuHand = [janken('x', 'rock', 1), janken('y', 'paper', 1), janken('z', 'scissors', 1)];
+  const fill = (count: number) => Array.from({ length: count }, (_, index) => janken(`j${index}`, 'rock', 1));
+
+  it('手札の上限は 7枚', () => {
+    expect(config.handLimit).toBe(7);
+  });
+
+  it('ドロー:3枚 引いて 手札に入れる。ターンは進まず、スキルの枠を使う', () => {
+    const start = playerTurn({ hand: [draw3, seal, ...fill(3)], cpuHand });
+    const { state, events } = useSkill(start, 'd3', seededRandom(1));
+    expect(state.phase).toBe('player');
+    expect(state.player.hand).toHaveLength(4 + 3);
+    expect(state.player.hand.some((card) => card.id === 'd3')).toBe(false);
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('skill-draw');
+    if (events[0].type === 'skill-draw') {
+      expect(events[0].cards).toHaveLength(3);
+      expect(events[0].cards.every((card) => state.player.hand.some((held) => held.id === card.id))).toBe(true);
+    }
+    expect(state.player.skillsUsed).toBe(1);
+    expect(canUseSkill(state, seal)).toBe(false);
+  });
+
+  it('ドロー:上限7枚を こえない分だけ引く。手札が上限でも 使った分の1枚は引ける', () => {
+    const six = useSkill(playerTurn({ hand: [draw3, ...fill(5)], cpuHand }), 'd3', seededRandom(2)).state;
+    expect(six.player.hand).toHaveLength(7);
+    const full = playerTurn({ hand: [draw3, ...fill(6)], cpuHand });
+    expect(canUseSkill(full, draw3)).toBe(true);
+    expect(useSkill(full, 'd3', seededRandom(3)).state.player.hand).toHaveLength(7);
+    // 上限をこえて持っているとき(開発者メニューで足した など)は 使えない
+    const over = playerTurn({ hand: [draw3, ...fill(7)], cpuHand });
+    expect(canUseSkill(over, draw3)).toBe(false);
+  });
+
+  it('ドロー:回復は 1ラウンドに1枚までを守る', () => {
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const start = playerTurn({ hand: [draw3, janken('r', 'rock', 1)], cpuHand });
+      const used = { ...start, player: { ...start.player, healDrawn: 1 } };
+      const { state } = useSkill(used, 'd3', seededRandom(seed));
+      expect(state.player.hand.some((card) => card.kind === 'skill' && card.skill === 'heal')).toBe(false);
+    }
+  });
+
+  it('リセット:手札を 必殺技もふくめて 全部すてて 5枚 引きなおす。じゃんけんカードが かならず入る', () => {
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const hand = [reset, finisher, heal, janken('r', 'rock', 3), janken('p', 'paper', 2)];
+      const start = playerTurn({ hand, cpuHand });
+      const { state, events } = useSkill(start, 'rs', seededRandom(seed));
+      expect(state.phase).toBe('player');
+      expect(state.player.hand).toHaveLength(5);
+      const oldIds = hand.map((card) => card.id);
+      expect(state.player.hand.some((card) => oldIds.includes(card.id))).toBe(false);
+      expect(state.player.hand.some((card) => card.kind === 'janken')).toBe(true);
+      expect(events[0].type).toBe('reset');
+      if (events[0].type === 'reset') {
+        expect(events[0].discarded.map((card) => card.id)).toEqual(['f', 'h', 'r', 'p']);
+        expect(events[0].cards).toHaveLength(5);
+      }
+      expect(state.player.skillsUsed).toBe(1);
+      // 必殺技を すてても「使った」にはならない(また来うる)
+      expect(state.finisherUsed).toBe(false);
+    }
+  });
+
+  it('リセットは いつでも使える(スキルの枠が残っていれば)', () => {
+    expect(canUseSkill(playerTurn({ hand: [reset], cpuHand }), reset)).toBe(true);
+    const used = { ...playerTurn({ hand: [reset], cpuHand }), player: { ...playerTurn({ hand: [reset], cpuHand }).player, skillsUsed: 1 } };
+    expect(canUseSkill(used, reset)).toBe(false);
+  });
+
+  it('練習のドローでは 来ない。2体目・ボスでは来る', () => {
+    const count = (round: number) => {
+      let found = 0;
+      for (let seed = 1; seed <= 400; seed += 1) {
+        const start = playerTurn({ round, hand: [draw3, janken('r', 'rock', 1)], cpuHand });
+        const { state } = useSkill(start, 'd3', seededRandom(seed));
+        found += state.player.hand.filter((card) => card.kind === 'skill' && (card.skill === 'draw3' || card.skill === 'reset')).length;
+      }
+      return found;
+    };
+    expect(count(1)).toBe(0);
+    expect(count(2)).toBeGreaterThan(0);
+  });
+});
+
 describe('必殺技', () => {
   it('どの手にも勝ち、相手を かならず倒す。1試合に1回', () => {
     const start = playerTurn({ round: 3, hand: [finisher, heal], cpuHand: [janken('x', 'rock', 3)], cpuHp: 44, cpuMaxHp: 85, playerHp: 20 });

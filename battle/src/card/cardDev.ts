@@ -10,10 +10,12 @@ import { cpuHandFor, type ForcedResult } from '../game/logic';
 // - 勝ち負けを決める(ForcedResult):カードを出したときに、相手の ふせたカードを その結果になる手に差しかえる
 
 export type CardDevCommand =
-  /** 必殺技・回復・封じ手のカードを手札に足す(手札の上限 5枚は こえる) */
+  /** 必殺技・回復・封じ手・ドロー・リセットのカードを手札に足す(手札の上限 7枚は こえる) */
   | 'add-finisher'
   | 'add-heal'
   | 'add-seal'
+  | 'add-draw3'
+  | 'add-reset'
   /** 合体できるペア(グー★1 を2枚)を足す */
   | 'add-pair'
   /** 自分の HP を3割に(ピンチの点滅) */
@@ -25,7 +27,7 @@ export type CardDevCommand =
   /** 相手に ため技を予告させる(次のターンに ためる) */
   | 'cpu-charge';
 
-export type CardDemoKind = 'merge' | 'heal' | 'seal' | 'finisher' | 'win' | 'lose' | 'rendan' | 'charge';
+export type CardDemoKind = 'merge' | 'heal' | 'seal' | 'draw3' | 'reset' | 'finisher' | 'win' | 'lose' | 'rendan' | 'charge';
 
 export type { ForcedResult };
 
@@ -66,6 +68,8 @@ export function applyCardDev(state: BattleState, command: CardDevCommand): { sta
     case 'add-finisher': return add({ kind: 'finisher' });
     case 'add-heal': return add({ kind: 'skill', skill: 'heal' });
     case 'add-seal': return add({ kind: 'skill', skill: 'seal' });
+    case 'add-draw3': return add({ kind: 'skill', skill: 'draw3' });
+    case 'add-reset': return add({ kind: 'skill', skill: 'reset' });
     case 'add-pair': return add({ kind: 'janken', hand: 'rock', star: 1 }, { kind: 'janken', hand: 'rock', star: 1 });
     case 'player-pinch': return { state: { ...state, player: { ...state.player, hp: Math.floor(state.player.maxHp * 0.3) } } };
     case 'cpu-half': return { state: { ...state, cpu: { ...state.cpu, hp: Math.max(1, Math.floor(state.cpu.maxHp * 0.5)) } } };
@@ -106,14 +110,23 @@ function withHand(state: BattleState, hand: Card[], hp = state.player.hp): Battl
 export function demoSetup(kind: CardDemoKind): (state: BattleState) => BattleState {
   return (state) => {
     const filler = [jk('dev-f1', 'scissors', 1), jk('dev-f2', 'paper', 2)];
+    // 出すカード(勝ち負けの演出)。スキルの演出では スキルが DEMO_CARD_ID なので、そばに置くカードは べつの id(keep)にする。
+    // 同じ id が2枚あると React の key が重なり、使ったカードの枠が 手札に残ってしまう(2026年11月18日 依頼者が いれかえ で見つけた)
     const play = jk(DEMO_CARD_ID, 'rock', 2);
+    const keep = jk('dev-keep', 'rock', 2);
     switch (kind) {
       case 'merge':
         return withHand(state, [jk(DEMO_CARD_ID, 'rock', 1), jk('dev-pair', 'rock', 1), ...filler]);
       case 'heal':
-        return withHand(state, [{ id: DEMO_CARD_ID, kind: 'skill', skill: 'heal' }, play, ...filler], Math.floor(state.player.maxHp * 0.4));
+        return withHand(state, [{ id: DEMO_CARD_ID, kind: 'skill', skill: 'heal' }, keep, ...filler], Math.floor(state.player.maxHp * 0.4));
       case 'seal':
-        return withHand(state, [{ id: DEMO_CARD_ID, kind: 'skill', skill: 'seal' }, play, ...filler]);
+        return withHand(state, [{ id: DEMO_CARD_ID, kind: 'skill', skill: 'seal' }, keep, ...filler]);
+      case 'draw3':
+        // 4枚 → 使って3枚 → 3枚 引いて 6枚
+        return withHand(state, [{ id: DEMO_CARD_ID, kind: 'skill', skill: 'draw3' }, keep, ...filler]);
+      case 'reset':
+        // 5枚(使ったリセットのほか 4枚)を すてて 5枚 引きなおす
+        return withHand(state, [{ id: DEMO_CARD_ID, kind: 'skill', skill: 'reset' }, keep, ...filler, jk('dev-f3', 'rock', 1)]);
       case 'finisher':
         return withHand(state, [{ id: DEMO_CARD_ID, kind: 'finisher' }, ...filler]);
       case 'win':

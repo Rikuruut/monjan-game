@@ -14,7 +14,9 @@ import {
   CARD_DRAW_MS,
   CARD_FINISHER_ATTACK_MS,
   CARD_HEAL_MS,
-  CARD_JANKEN_BEAT_MS,
+  CARD_JANKEN_BEATS_MS,
+  CARD_JANKEN_POP_TO_REVEAL_MS,
+  CARD_JANKEN_TOTAL_MS,
   CARD_MERGE_HINT_MS,
   CARD_MERGE_MS,
   CARD_PACK_FLIP_MS,
@@ -24,7 +26,9 @@ import {
   CARD_PACK_TEAR_MS,
   CARD_PLAYER_PLACE_MS,
   CARD_PLAYER_TURN_BANNER_MS,
+  CARD_RESET_MS,
   CARD_REVEAL_MS,
+  CARD_SKILL_DRAW_MS,
   CARD_SKILL_MS,
   MASH_DUEL_MS,
   MASH_RESULT_MS,
@@ -51,8 +55,8 @@ const heal: Card = { id: 'heal', kind: 'skill', skill: 'heal' };
 const seal: Card = { id: 'seal', kind: 'skill', skill: 'seal' };
 
 // 出したカードを場へ置く → 見せ場:すべりこみ → じゃん・けん・ぽん(めくる)まで / めくった結果のあと(攻撃のはじめ)まで / 攻撃 → 命中 まで
-const TO_PON = CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * 2;
-const TO_FLIP = CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * 3;
+const TO_PON = CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_BEATS_MS[2];
+const TO_FLIP = CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_TOTAL_MS;
 const TO_REVEAL = TO_FLIP + CARD_REVEAL_MS;
 const TO_IMPACT = TO_REVEAL + CARD_ATTACK_MS;
 // 1ターンが かならず終わる長さ(じゃんけん → めくる → 連打 → 攻撃 → 命中 → ドロー → 相手のスキル2つ → 相手のターン)
@@ -142,7 +146,7 @@ describe('カードバトル:手札と じゃんけん', () => {
     expect(document.querySelector('.monster-panel--player .cb-power')).toHaveAttribute('aria-label', 'こうげき ⚔2');
     expect(cursorIndex()).toBe(0);
     expect(info()).toContain('グー ★1');
-    expect(info()).toContain('かつと 20 ダメージ！');
+    expect(info()).toContain('勝つと 20 ダメージ！');
     expect(guide()).toBe(GUIDE_PICK);
   });
 
@@ -163,7 +167,7 @@ describe('カードバトル:手札と じゃんけん', () => {
     press('ArrowRight');
     press('Enter');
     expect(info()).toContain('チョキ ★2');
-    expect(info()).toContain('かつと 35 ダメージ！');
+    expect(info()).toContain('勝つと 35 ダメージ！');
     expect(guide()).toBe('● を もういちど おすと だすよ！');
     expect(handItems()[1].className).toContain('cb-hand__slot--armed');
     press('ArrowRight');
@@ -193,11 +197,13 @@ describe('カードバトル:手札と じゃんけん', () => {
     press('Enter');
     wait(CARD_CLASH_IN_MS);
     expect(screen.getByText('じゃん')).toBeInTheDocument();
-    wait(CARD_JANKEN_BEAT_MS);
+    // 録音の声は じゃん の少し前に1回(頭の無音の分)
+    expect(playSound.mock.calls.filter(([kind]) => kind === 'janken-voice')).toHaveLength(1);
+    wait(CARD_JANKEN_BEATS_MS[1]);
     expect(screen.getByText('けん')).toBeInTheDocument();
-    wait(CARD_JANKEN_BEAT_MS);
+    wait(CARD_JANKEN_BEATS_MS[2] - CARD_JANKEN_BEATS_MS[1]);
     expect(screen.getByText('ぽん！')).toBeInTheDocument();
-    wait(CARD_JANKEN_BEAT_MS);
+    wait(CARD_JANKEN_POP_TO_REVEAL_MS);
     // めくれる:勝ったほうが大きく(タイプの色で光る)
     expect(screen.queryByLabelText('ふせたカード')).not.toBeInTheDocument();
     expect(screen.getByText('あなたの かち！')).toBeInTheDocument();
@@ -226,7 +232,8 @@ describe('カードバトル:手札と じゃんけん', () => {
     wait(CARD_DAMAGE_MS);
     expect(info()).toContain('を ひいた！');
     wait(CARD_DRAW_MS);
-    expect(handItems().filter((item) => item.querySelector('.cb-card'))).toHaveLength(5);
+    // 合体の枠(中に できあがりのカード)は 数えない(引いたカードで ペアが できることがある)
+    expect(handItems().filter((item) => item.querySelector('.cb-card') && !item.classList.contains('cb-hand__slot--merge'))).toHaveLength(5);
     // 次のターン:相手のターン → 自分のターン
     expect(screen.getByText('カードを えらんでいる…')).toBeInTheDocument();
     wait(CARD_CPU_TURN_MS);
@@ -304,7 +311,7 @@ describe('カードバトル:合成', () => {
     expect(within(screen.getByLabelText('がったい')).getByLabelText('グー ★3')).toBeInTheDocument();
     expect(screen.getByLabelText('がったい')).toHaveTextContent('★2 → ★3');
     expect(screen.getByRole('img', { name: 'グー ★2 2まいで グー ★3' })).toBeInTheDocument();
-    expect(info()).toMatch(/かつと \d+ → \d+ ダメージ！/);
+    expect(info()).toMatch(/勝つと \d+ → \d+ ダメージ！/);
     expect(handItems().filter((item) => item.className.includes('cb-hand__slot--pair'))).toHaveLength(2);
     press('Enter');
     expect(guide()).toBe('● もういちど で がったい！ ターンは つづくよ');
@@ -353,7 +360,7 @@ describe('カードバトル:合成', () => {
     expect(guide()).toBe('✨ がったい できるよ！ ひだりはしを みてね');
     expect(screen.getAllByLabelText('がったい できる')).toHaveLength(2);
     // ペアのカードの説明にも 合体できることを出す
-    expect(info()).toContain('✨ ひだりの がったい で ★アップ！');
+    expect(info()).toContain('✨ 左の がったい で ★アップ！');
     wait(CARD_MERGE_HINT_MS);
     expect(guide()).toBe(GUIDE_PICK);
   });
@@ -370,7 +377,7 @@ describe('カードバトル:スキル', () => {
     expect(hpOf(0)).toBe('HP 40 / 100');
     press('ArrowLeft');
     press('ArrowLeft');
-    expect(info()).toContain('HPが 60 もどる');
+    expect(info()).toContain('HPが 60 回復');
     press('Enter');
     press('Enter');
     expect(screen.getByText('かいふく！')).toBeInTheDocument();
@@ -402,12 +409,69 @@ describe('カードバトル:スキル', () => {
     expect(handItems()[cursorIndex()].className).toContain('cb-hand__slot--blocked');
   });
 
+  it('3まい ひく:説明に 引く枚数、決定2回で 手札が 3枚ふえる。ターンは つづく', () => {
+    const draw3: Card = { id: 'draw3', kind: 'skill', skill: 'draw3' };
+    const hand = [draw3, janken('a', 'rock', 1), janken('b', 'scissors', 2), janken('c', 'paper', 3)];
+    const cards = () => handItems().filter((item) => item.querySelector('.cb-card') && !item.classList.contains('cb-hand__slot--merge'));
+    renderBattle({ setup: withHands(hand, [janken('x', 'rock', 1), janken('y', 'paper', 2)]) });
+    // 絵:裏向きの小さなカード3枚 +「+3」(手札のカード)
+    const icon = handItems()[0].querySelector('.cb-draw-icon');
+    expect(icon?.querySelectorAll('.cb-draw-icon__card')).toHaveLength(3);
+    expect(icon?.querySelector('.cb-draw-icon__plus')).toHaveTextContent('+3');
+    press('ArrowLeft');
+    expect(info()).toContain('3まい ひく');
+    expect(info()).toContain('カードを 3まい ひく');
+    press('Enter');
+    press('Enter');
+    expect(screen.getByText('カードを ひいた！')).toBeInTheDocument();
+    expect(screen.getByText('3まい ふえた')).toBeInTheDocument();
+    expect(cards()).toHaveLength(6);
+    wait(CARD_SKILL_DRAW_MS);
+    // 自分のターンに もどる(カードを出せる)
+    expect(guide()).toBe(GUIDE_PICK);
+    expect(screen.getByLabelText('スキルは しようずみ')).toBeInTheDocument();
+  });
+
+  it('いれかえ:必殺技を持っていると 説明で知らせ、決定2回で 手札が 全部 入れかわる', () => {
+    const reset: Card = { id: 'reset', kind: 'skill', skill: 'reset' };
+    const hand = [reset, janken('a', 'rock', 1), janken('b', 'scissors', 2), { id: 'fin', kind: 'finisher' } as Card];
+    const cards = () => handItems().filter((item) => item.querySelector('.cb-card') && !item.classList.contains('cb-hand__slot--merge'));
+    renderBattle({ setup: withHands(hand, [janken('x', 'rock', 1), janken('y', 'paper', 2)]) });
+    press('ArrowLeft');
+    expect(info()).toContain('いれかえ');
+    expect(info()).toContain('5まい ひきなおす');
+    expect(info()).toContain('ひっさつわざ も すてるよ');
+    press('Enter');
+    press('Enter');
+    expect(screen.getByText('いれかえ！')).toBeInTheDocument();
+    expect(screen.getByText('5まい ひきなおした')).toBeInTheDocument();
+    expect(cards()).toHaveLength(5);
+    // 引きなおした5枚は 山札から引く順番が来るまで 隠れている(先に手札に見えない)
+    const cells = cards().map((item) => item.closest<HTMLElement>('.cb-hand__cell'));
+    expect(cells.every((cell) => cell?.style.opacity === '0')).toBe(true);
+    // すてたカードの写し(演出のあいだだけ)
+    expect(document.querySelectorAll('.cb-reset-fx__card')).toHaveLength(3);
+    wait(CARD_RESET_MS);
+    expect(document.querySelector('.cb-reset-fx')).toBeNull();
+    expect(guide()).toBe(GUIDE_PICK);
+    expect(screen.queryByLabelText('必殺技')).not.toBeInTheDocument();
+  });
+
+  it('3まい ひく:手札が いっぱいのときは 使えない(理由が出る)', () => {
+    const draw3: Card = { id: 'draw3', kind: 'skill', skill: 'draw3' };
+    const hand = [draw3, ...(['rock', 'scissors', 'paper'] as const).flatMap((kind) => [janken(`${kind}1`, kind, 1), janken(`${kind}2`, kind, 2)]), janken('extra', 'rock', 3)];
+    renderBattle({ setup: withHands(hand, [janken('x', 'rock', 1), janken('y', 'paper', 2)]) });
+    // 8枚(上限 7 を こえて持っている:開発者メニューで足したとき など)
+    for (let index = 0; index < 10; index += 1) press('ArrowLeft');
+    expect(info()).toContain('てふだが いっぱい');
+  });
+
   it('封じ手:相手の手を1つ封じ、ふせたカードは 封じた手以外で 出し直される', () => {
     for (let seed = 1; seed <= 20; seed += 1) {
       const cpu = [janken('x', 'rock', 1), janken('y', 'paper', 2), janken('z', 'rock', 3)];
       const view = renderBattle({ seed, setup: withHands([seal, janken('a', 'scissors', 1)], cpu) });
       press('ArrowLeft');
-      expect(info()).toContain('あいての 手を 1つ ふうじる');
+      expect(info()).toContain('相手の 手を 1つ ふうじる');
       press('Enter');
       press('Enter');
       const message = screen.getByText(/を ふうじた！$/).textContent ?? '';
@@ -451,7 +515,7 @@ describe('カードバトル:スキル', () => {
   it('相手の手札が全部同じ手のとき、封じ手は暗くなって使えない', () => {
     renderBattle({ setup: withHands([seal, janken('a', 'paper', 1)], [janken('x', 'rock', 1), janken('y', 'rock', 2)]) });
     press('ArrowLeft');
-    expect(info()).toContain('あいての 手が ぜんぶ おなじなので つかえない');
+    expect(info()).toContain('相手の 手が 全部 同じなので 使えない');
     press('Enter');
     press('Enter');
     expect(screen.queryByText(/ふうじた！/)).not.toBeInTheDocument();
@@ -468,7 +532,7 @@ describe('カードバトル:必殺技', () => {
     const cpu = [janken('x', 'rock', 3), janken('y', 'paper', 2)];
     renderBattle({ setup: withHands([janken('a', 'scissors', 1), finisher], cpu) });
     press('ArrowRight');
-    expect(info()).toContain('どんな 手にも かって');
+    expect(info()).toContain('どんな 手にも 勝って');
     press('Enter');
     press('Enter');
     expect(screen.queryByText('じゃん')).not.toBeInTheDocument();
@@ -511,7 +575,7 @@ describe('カードバトル:必殺技', () => {
     press('Enter');
     press('Enter');
     wait(TO_IMPACT + CARD_DAMAGE_MS);
-    expect(info()).toContain('ひっさつわざ が きた！');
+    expect(info()).toContain('必殺技が 来た！');
     expect(screen.getByLabelText('じぶんの てふだ').querySelector('.cb-card--finisher')).not.toBeNull();
   });
 });
@@ -621,7 +685,7 @@ describe('カードバトル:相手のターンと じゃんけんの見せ場',
     wait(TO_PON);
     expect(screen.getByText('ぽん！')).toBeInTheDocument();
     expect(document.querySelectorAll('.cb-clash .cb-card--back')).toHaveLength(2);
-    wait(CARD_JANKEN_BEAT_MS);
+    wait(CARD_JANKEN_POP_TO_REVEAL_MS);
     expect(screen.getByText('あなたの かち！')).toBeInTheDocument();
     expect(screen.getByText('あいこ！ ★が おおい ほうの かち')).toBeInTheDocument();
     expect(document.querySelector('.cb-clash__slot--player.cb-clash__slot--won')).not.toBeNull();
@@ -692,7 +756,7 @@ describe('カードバトル:HP のピンチ・こうげきの表示・開発者
     act(() => sendCardDev('add-finisher'));
     // 足したカードに カーソル
     expect(handItems()).toHaveLength(2);
-    expect(info()).toContain('どんな 手にも かって');
+    expect(info()).toContain('どんな 手にも 勝って');
     press('Enter');
     press('Enter');
     expect(screen.getByText('ひっさつわざ！')).toBeInTheDocument();
@@ -790,7 +854,7 @@ describe('カードバトル:パック選び・開封', () => {
     wait(CARD_PACK_OPEN_MS - CARD_PACK_TEAR_MS + CARD_PACK_SPREAD_MS);
     expect(screen.getAllByTestId(/^pack-card-/)).toHaveLength(5);
     // 1枚め:表に。レア(回復)なので 高い音も
-    expect(within(screen.getByTestId('pack-card-0')).getByLabelText('かいふく')).toBeInTheDocument();
+    expect(within(screen.getByTestId('pack-card-0')).getByLabelText('回復')).toBeInTheDocument();
     expect(within(screen.getByTestId('pack-card-1')).getByLabelText('ふせたカード')).toBeInTheDocument();
     expect(playSound).toHaveBeenCalledWith('card-flip', { step: 0, rare: true });
     // ★3 は めくる前から レアの光

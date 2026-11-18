@@ -86,13 +86,17 @@ function playTurn(start: BattleState, policy: Policy, random: RandomSource, mash
     state = mergeCards(state, pairs[0][0].id, pairs[0][1].id).state;
   }
 
-  // スキル:考えて遊ぶ子は HP が減ったら回復、そうでなければ封じ手。なんとなく選ぶ子は 持っていれば半々で使う
+  // スキル:考えて遊ぶ子は HP が減ったら回復 → 封じ手 → ドロー → 得になるカードがないときだけ リセット(必殺技があれば リセットしない)。
+  // なんとなく選ぶ子は 持っていれば半々で使う
   const usable = state.player.hand.filter((card) => canUseSkill(state, card));
   let skill: Card | undefined;
   if (policy === 'smart') {
     const low = state.player.hp <= state.player.maxHp * SMART_HEAL_RATIO;
-    skill = usable.find((card) => card.kind === 'skill' && card.skill === 'heal' && low)
-      ?? usable.find((card) => card.kind === 'skill' && card.skill === 'seal');
+    const has = (name: string) => usable.find((card) => card.kind === 'skill' && card.skill === name);
+    const now = state;
+    const hopeless = !now.player.hand.some((card) => card.kind === 'finisher')
+      && now.player.hand.filter(isJanken).every((card) => expectedGain(now, card) <= 0);
+    skill = (low ? has('heal') : undefined) ?? has('seal') ?? has('draw3') ?? (hopeless ? has('reset') : undefined);
   } else if (usable.length > 0 && random() < 0.5) {
     skill = pick(usable, random);
   }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canSeal,
+  drawRates,
   initialCursor,
   mergeablePairs,
   mergedFace,
@@ -46,9 +47,26 @@ describe('パック', () => {
       expect(healDrawn).toBe(heals);
       jankenCounts[jankens] += 1;
     }
-    // 設計書 4-1:3枚 31% / 4枚 38% くらい
-    expect(jankenCounts[3] / 5000).toBeGreaterThan(0.25);
-    expect(jankenCounts[4] / 5000).toBeGreaterThan(0.3);
+    // 設計書 4-1 は 3枚 31% / 4枚 38% くらい。2026年11月18日に ドロー・リセット(1枚あたり 8%ずつ)を足したので、
+    // 4つの枠が じゃんけんカードになる率は 65% → 49%:3枚 約37% / 4枚 約24%
+    expect(jankenCounts[3] / 5000).toBeGreaterThan(0.3);
+    expect(jankenCounts[4] / 5000).toBeGreaterThan(0.2);
+  });
+
+  it('ドロー・リセットは 2体目・ボスのパックに入り、練習のパックには入らない', () => {
+    const extra = (cards: { kind: string; skill?: string }[]) =>
+      cards.filter((card) => card.kind === 'skill' && (card.skill === 'draw3' || card.skill === 'reset')).length;
+    const random = seededRandom(5);
+    let practiceExtra = 0;
+    let secondExtra = 0;
+    for (let index = 0; index < 2000; index += 1) {
+      practiceExtra += extra(rollPack(config, practice, random).cards);
+      secondExtra += extra(rollPack(config, second, random).cards);
+    }
+    expect(practiceExtra).toBe(0);
+    // 4つの枠 × 16% × 2000 = 約1280枚
+    expect(secondExtra).toBeGreaterThan(1000);
+    expect(secondExtra).toBeLessThan(1600);
   });
 
   it('練習のパックには パーが2枚 かならず入る', () => {
@@ -92,6 +110,16 @@ describe('ドロー', () => {
     expect(rollDraw(config, normal, () => 0.2)).toEqual({ kind: 'skill', skill: 'seal' });
     expect(rollDraw(config, normal, () => 0.5).kind).toBe('janken');
     expect(rollDraw(config, { ...normal, healAvailable: false }, () => 0.05).kind).toBe('janken');
+  });
+
+  it('2体目・ボス(rates):回復・封じ手のあとに ドロー6% / リセット6%。足す前の回復・封じ手の位置は 変わらない', () => {
+    const rates = drawRates(config, second);
+    expect(rollDraw(config, { ...normal, rates }, () => 0.05)).toEqual({ kind: 'skill', skill: 'heal' });
+    expect(rollDraw(config, { ...normal, rates }, () => 0.2)).toEqual({ kind: 'skill', skill: 'seal' });
+    expect(rollDraw(config, { ...normal, rates }, () => 0.27)).toEqual({ kind: 'skill', skill: 'draw3' });
+    expect(rollDraw(config, { ...normal, rates }, () => 0.33)).toEqual({ kind: 'skill', skill: 'reset' });
+    expect(rollDraw(config, { ...normal, rates }, () => 0.4).kind).toBe('janken');
+    expect(drawRates(config, practice)).toMatchObject({ draw3: 0, reset: 0 });
   });
 });
 

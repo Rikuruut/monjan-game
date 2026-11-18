@@ -10,19 +10,20 @@ const embed = params.get("embed") === "1";
 document.documentElement.classList.toggle("embed", embed);
 const cardEl = document.getElementById("card");
 
-// タイプのバッジ:アイコン(撮影の画面 static/common/core.js の ELEMENT_STYLES と同じ)と、子供向けのひらがな
+// タイプのバッジ:アイコン(撮影の画面 static/common/core.js の ELEMENT_STYLES と同じ)と名前。
+// タイプの漢字1字をそのまま出す(2026年11月16日 依頼者:もう少し漢字を使う。闇も漢字でよい)
 const ELEMENT_LABELS = {
-  "火": { icon: "🔥", label: "ほのお" },
-  "水": { icon: "💧", label: "みず" },
-  "草": { icon: "🌿", label: "くさ" },
-  "光": { icon: "✨", label: "ひかり" },
-  "闇": { icon: "🌙", label: "やみ" },
-  "風": { icon: "🌪️", label: "かぜ" },
-  "土": { icon: "🪨", label: "つち" },
+  "火": { icon: "🔥", label: "火" },
+  "水": { icon: "💧", label: "水" },
+  "草": { icon: "🌿", label: "草" },
+  "光": { icon: "✨", label: "光" },
+  "闇": { icon: "🌙", label: "闇" },
+  "風": { icon: "🌪️", label: "風" },
+  "土": { icon: "🪨", label: "土" },
   "無": { icon: "⚪", label: "ノーマル" },
 };
 
-// ⚔♥ の枠の数(いちばん多いときの数だけ並べ、数だけ「満」にする。こうげきは 1〜3、たいりょくは 3〜5)。
+// ⚔♥ の枠の数(いちばん多いときの数だけ並べ、数だけ「満」にする。攻撃は 1〜3、体力は 3〜5)。
 // 文字と見た目は じゃんけんバトルと同じ(battle/src/App.tsx の Swords・Hearts、styles/base.css)
 const ATTACK_SLOTS = 3;
 const HP_SLOTS = 5;

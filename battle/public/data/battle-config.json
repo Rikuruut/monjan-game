@@ -6,7 +6,7 @@
   "playerAttack": [6, 14],
   "legacyAttack": [6, 10, 14],
   "legacyHp": [80, 85, 90, 100, 110],
-  "handLimit": 5,
+  "handLimit": 7,
   "cpuHandSize": 3,
   "packChoices": 5,
   "packSize": 5,
@@ -15,6 +15,12 @@
   "packSealRate": 0.2,
   "drawHealRate": 0.1,
   "drawSealRate": 0.15,
+  "packDrawRate": 0.08,
+  "packResetRate": 0.08,
+  "drawDrawRate": 0.06,
+  "drawResetRate": 0.06,
+  "drawSkillCount": 3,
+  "resetCount": 5,
   "healPerRound": 1,
   "skillPerTurn": 1,
   "finisherCpuHpRatio": 0.5,
@@ -38,7 +44,8 @@
       "finisherChance": 0,
       "comebackChance": 0,
       "packPaper": 2,
-      "playerHpFloor": 1
+      "playerHpFloor": 1,
+      "extraSkills": false
     },
     {
       "cpuHp": [35, 45],
@@ -49,7 +56,8 @@
       "finisherChance": 0.1,
       "comebackChance": 0.5,
       "packPaper": 0,
-      "playerHpFloor": 0
+      "playerHpFloor": 0,
+      "extraSkills": true
     },
     {
       "cpuHp": [55, 65],
@@ -60,7 +68,8 @@
       "finisherChance": 1,
       "comebackChance": 0.5,
       "packPaper": 0,
-      "playerHpFloor": 0
+      "playerHpFloor": 0,
+      "extraSkills": true
     }
   ]
 }

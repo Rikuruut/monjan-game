@@ -1,6 +1,6 @@
 import { cx } from '../cx';
 import { mergedFace, type CardFace, type JankenCard, type JankenFace } from '../game/cards';
-import { cardDamage, healAmount } from '../game/engine';
+import { cardDamage, healAmount, skillDrawCount } from '../game/engine';
 import { cardLabel, CardView } from './CardView';
 import { shownPair, skillBlockedReason, type CardBattleApi } from './useCardBattle';
 
@@ -38,7 +38,7 @@ export function cardInfo(battle: CardBattleApi): CardInfo | null {
   const { state, view, items, cursor, armed, mergePick, drawn } = battle;
   if (view === 'draw') {
     if (drawn?.kind === 'finisher') {
-      return { card: drawn, title: 'ひっさつわざ が きた！', lines: ['どんな 手にも かって', 'あいてを かならず たおす！'], action: '', tone: 'special' };
+      return { card: drawn, title: '必殺技が 来た！', lines: ['どんな 手にも 勝って', '相手を 必ず たおす！'], action: '', tone: 'special' };
     }
     return drawn ? { card: drawn, title: `${cardLabel(drawn)} を ひいた！`, lines: [], action: '', tone: 'normal' } : null;
   }
@@ -53,7 +53,7 @@ export function cardInfo(battle: CardBattleApi): CardInfo | null {
     return {
       card: 'merge',
       title,
-      lines: [`かつと ${before} → ${after} ダメージ！`],
+      lines: [`勝つと ${before} → ${after} ダメージ！`],
       action,
       tone,
       equation: { from: pair[0], result },
@@ -62,7 +62,7 @@ export function cardInfo(battle: CardBattleApi): CardInfo | null {
   };
   if (mergePick !== null) {
     if (mergePick >= battle.pairs.length) {
-      return { card: 'merge', title: 'がったいを やめる', lines: ['● で てふだに もどる'], action: '', tone: 'armed', pick: { current: mergePick + 1, total: battle.pairs.length } };
+      return { card: 'merge', title: 'がったいを やめる', lines: ['● で 手札に もどる'], action: '', tone: 'armed', pick: { current: mergePick + 1, total: battle.pairs.length } };
     }
     return mergeInfo('どれを がったいする？', '◀▶ で えらぶ ● で けってい', 'armed', { current: mergePick + 1, total: battle.pairs.length });
   }
@@ -75,18 +75,29 @@ export function cardInfo(battle: CardBattleApi): CardInfo | null {
   const blocked = skillBlockedReason(state, card);
   if (blocked) return { card, title: cardLabel(card), lines: [blocked], action: 'いまは つかえない', tone: 'blocked' };
   if (card.kind === 'janken') {
-    const lines = [`かつと ${cardDamage(state.config, card, state.player.attack)} ダメージ！`];
+    const lines = [`勝つと ${cardDamage(state.config, card, state.player.attack)} ダメージ！`];
     // 合体できるカード:左はしの「がったい」で ★を ふやせることを知らせる
-    if (battle.pairs.some((pair) => pair.some((paired) => paired.id === card.id))) lines.push('✨ ひだりの がったい で ★アップ！');
+    if (battle.pairs.some((pair) => pair.some((paired) => paired.id === card.id))) lines.push('✨ 左の がったい で ★アップ！');
     return { card, title: cardLabel(card), lines, action, tone };
   }
   if (card.kind === 'skill' && card.skill === 'heal') {
-    return { card, title: 'かいふく', lines: [`HPが ${healAmount(state)} もどる`, '(まんたんに なる)'], action, tone };
+    return { card, title: '回復', lines: [`HPが ${healAmount(state)} 回復`, '(満タンに なる)'], action, tone };
+  }
+  if (card.kind === 'skill' && card.skill === 'draw3') {
+    const count = skillDrawCount(state);
+    return { card, title: '3まい ひく', lines: [`カードを ${count}まい ひく`, 'ターンは つづくよ'], action, tone };
+  }
+  if (card.kind === 'skill' && card.skill === 'reset') {
+    // 必殺技を持っているときは すててしまうことを 決定の前に知らせる
+    const losesFinisher = state.player.hand.some((other) => other.kind === 'finisher');
+    const lines = [`てふだを ぜんぶ すてて`, `${state.config.resetCount}まい ひきなおす`];
+    if (losesFinisher) lines.push('⚠ ひっさつわざ も すてるよ');
+    return { card, title: 'いれかえ', lines, action, tone };
   }
   if (card.kind === 'skill') {
-    return { card, title: 'ふうじて', lines: ['あいての 手を 1つ ふうじる', 'あいては カードを だしなおす'], action, tone };
+    return { card, title: 'ふうじて', lines: ['相手の 手を 1つ ふうじる', '相手は カードを 出しなおす'], action, tone };
   }
-  return { card, title: 'ひっさつわざ', lines: ['どんな 手にも かって', 'あいてを かならず たおす！'], action, tone: armed ? 'armed' : 'special' };
+  return { card, title: '必殺技', lines: ['どんな 手にも 勝って', '相手を 必ず たおす！'], action, tone: armed ? 'armed' : 'special' };
 }
 
 export function HandInfo({ battle }: { battle: CardBattleApi }) {

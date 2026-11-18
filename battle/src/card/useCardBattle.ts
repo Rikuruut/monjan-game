@@ -31,7 +31,8 @@ import {
   CARD_FINISHER_ATTACK_MS,
   CARD_FINISHER_DRAW_MS,
   CARD_HEAL_MS,
-  CARD_JANKEN_BEAT_MS,
+  CARD_JANKEN_BEATS_MS,
+  CARD_JANKEN_TOTAL_MS,
   CARD_MERGE_HINT_MS,
   CARD_MERGE_MS,
   CARD_PACK_FLIP_MS,
@@ -41,8 +42,11 @@ import {
   CARD_PACK_TEAR_MS,
   CARD_PLAYER_PLACE_MS,
   CARD_PLAYER_TURN_BANNER_MS,
+  JANKEN_VOICE_LEAD_MS,
   CARD_REVEAL_MS,
   CARD_SKILL_MS,
+  CARD_SKILL_DRAW_MS,
+  CARD_RESET_MS,
   MASH_DUEL_MS,
   MASH_RESULT_MS,
   SPECIAL_CUTIN_SLAM_MS,
@@ -107,6 +111,9 @@ export type Notice =
   | { type: 'merge'; card: JankenCard }
   | { type: 'heal'; amount: number }
   | { type: 'seal'; hand: Hand }
+  // スキルの ドロー(引いたカード)/ リセット(すてたカード・引きなおしたカード)
+  | { type: 'skill-draw'; cards: Card[] }
+  | { type: 'reset'; discarded: Card[]; cards: Card[] }
   // 相手のスキル(ターンのはじめ):回復・ため技の予告
   | { type: 'cpu-heal'; amount: number }
   | { type: 'cpu-charge' };
@@ -123,7 +130,16 @@ function cpuNotices(events: BattleEvent[]): Notice[] {
   });
 }
 
-type PlaySound = (sound: GameSound, options?: GameSoundOptions) => void;
+/** ひとことを見せる長さ(回復は 数え上がり、合体・ドロー・リセットは 手札の動きの分 長め) */
+export function noticeMs(notice: Notice): number {
+  if (notice.type === 'heal' || notice.type === 'cpu-heal') return CARD_HEAL_MS;
+  if (notice.type === 'merge') return CARD_MERGE_MS;
+  if (notice.type === 'skill-draw') return CARD_SKILL_DRAW_MS;
+  if (notice.type === 'reset') return CARD_RESET_MS;
+  return CARD_SKILL_MS;
+}
+
+type PlaySound =(sound: GameSound, options?: GameSoundOptions) => void;
 
 /** 手札の並び(合成できるペアがあれば、左はしに「がったい!」の枠) */
 export function handItems(hand: Card[]): HandItem[] {
@@ -154,7 +170,8 @@ export function itemCursor(items: HandItem[]): number {
 export function skillBlockedReason(state: BattleState, card: Card): string | null {
   if (card.kind !== 'skill' || canUseSkill(state, card)) return null;
   if (state.player.skillsUsed >= state.config.skillPerTurn) return 'スキルは 1ターンに 1まいまで！';
-  if (card.skill === 'seal' && !canSeal(state.cpu.hand)) return 'あいての 手が ぜんぶ おなじなので つかえない';
+  if (card.skill === 'seal' && !canSeal(state.cpu.hand)) return '相手の 手が 全部 同じなので 使えない';
+  if (card.skill === 'draw3') return 'てふだが いっぱい';
   return 'いまは つかえない';
 }
 
@@ -479,7 +496,11 @@ export function useCardBattle({
       setView('janken');
       setBeat(0);
     }, CARD_PLAYER_PLACE_MS);
-    const beatAt = (beat: number) => CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * (beat - 1);
+    // 拍の時刻は 録音の声に合わせる(timings.ts)。4 = めくる
+    const jankenStart = CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS;
+    const beatAt = (beat: number) => jankenStart + (beat >= 4 ? CARD_JANKEN_TOTAL_MS : CARD_JANKEN_BEATS_MS[beat - 1]);
+    // 声は 頭の無音の分だけ 先に鳴らしはじめる(読めていないときは 鳴らず、拍ごとの合成音になる)
+    schedule(() => playSound('janken-voice'), jankenStart - JANKEN_VOICE_LEAD_MS);
     schedule(() => {
       setBeat(1);
       playSound('janken-jan');
@@ -514,7 +535,7 @@ export function useCardBattle({
     schedule(() => {
       setNotice(null);
       setView('player');
-    }, shown.type === 'heal' ? CARD_HEAL_MS : shown.type === 'merge' ? CARD_MERGE_MS : CARD_SKILL_MS);
+    }, noticeMs(shown));
   };
 
   // 合成:同じ手・同じ★の2枚を、★が1つ上の1枚に(スキルの枠は使わない)
@@ -529,7 +550,8 @@ export function useCardBattle({
     showNotice(step.state, { type: 'merge', card: event.card }, event.card.id);
   };
 
-  // スキルを使う(回復:HP が満タンに / 封じ手:相手の手を1つ封じ、相手は出し直す)
+  // スキルを使う(回復:HP が満タンに / 封じ手:相手の手を1つ封じ、相手は出し直す /
+  // ドロー:山札から 何枚か引く / リセット:手札を全部すてて 引きなおす)
   const castSkill = (card: Card) => {
     const step = useSkill(state, card.id, random);
     const event = step.events[0];
@@ -539,6 +561,13 @@ export function useCardBattle({
     } else if (event?.type === 'seal') {
       playSound('reveal');
       showNotice(step.state, { type: 'seal', hand: event.hand });
+    } else if (event?.type === 'skill-draw') {
+      playSound('card-get');
+      // カーソルは 引いた じゃんけんカードの1枚目に(スキルは このターン もう使えないので。なければ いつもの位置)
+      showNotice(step.state, { type: 'skill-draw', cards: event.cards }, event.cards.find(isJanken)?.id);
+    } else if (event?.type === 'reset') {
+      playSound('card-get');
+      showNotice(step.state, { type: 'reset', discarded: event.discarded, cards: event.cards });
     }
   };
 

@@ -44,7 +44,16 @@ const CASES: { name: string; config: BattleConfig }[] = [
   { name: '2体(練習→いまのボス)', config: variant({ twoRounds: true }) },
   // ため技の間かく(いまは3ターンごと。3ターン目に予告 → 4ターン目に ためる)
   { name: 'いまの設定・ため技 2ターンごと', config: { ...base, chargeInterval: 2 } },
+  // スキルの ドロー・リセット(2026年11月18日)の出やすさ:パック / ドロー の1枚あたり(2つとも同じ率)
+  { name: '新スキルなし(足す前と同じ)', config: skillRates(0, 0) },
+  { name: '新スキル パック15%・ドロー10%(回復と同じ)', config: skillRates(0.15, 0.1) },
+  { name: '新スキル パック8%・ドロー6%', config: skillRates(0.08, 0.06) },
+  { name: '新スキル パック5%・ドロー5%', config: skillRates(0.05, 0.05) },
 ];
+
+function skillRates(pack: number, draw: number): BattleConfig {
+  return { ...base, packDrawRate: pack, packResetRate: pack, drawDrawRate: draw, drawResetRate: draw };
+}
 
 const POLICIES: { policy: Policy; label: string }[] = [
   { policy: 'smart', label: '考えて' },

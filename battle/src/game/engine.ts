@@ -10,6 +10,7 @@ import { HANDS, type Hand } from '../types';
 import {
   canMerge,
   canSeal,
+  drawRates,
   isJanken,
   mergedFace,
   pickIndex,
@@ -85,6 +86,10 @@ export type BattleEvent =
   | { type: 'merge'; from: [JankenCard, JankenCard]; card: JankenCard }
   | { type: 'heal'; amount: number }
   | { type: 'seal'; hand: Hand }
+  // スキルの ドロー:引いたカード(上限で 3枚より少ないこともある)
+  | { type: 'skill-draw'; cards: Card[] }
+  // スキルの リセット:すてたカード(使ったリセット自身は入れない)と、引きなおしたカード
+  | { type: 'reset'; discarded: Card[]; cards: Card[] }
   // by:勝ち負けが決まった理由(hand = じゃんけん、star = あいこで★が多い)。winner が rendan なら連打勝負へ
   | { type: 'janken'; playerCard: JankenCard; cpuCard: JankenCard; winner: Side | 'rendan'; by: 'hand' | 'star' }
   | { type: 'rendan'; playerPresses: number; cpuPresses: number; winner: Side }
@@ -259,11 +264,49 @@ export function mergeCards(state: BattleState, cardIdA: string, cardIdB: string)
   };
 }
 
-/** そのスキルカードを いま使えるか(1ターンの上限・封じ手は相手の手が2種類以上) */
+/** スキルの ドローで いま引ける枚数(使ったドローの分 1枚空くので、手札が上限でも 1枚は引ける) */
+export function skillDrawCount(state: BattleState): number {
+  const room = state.config.handLimit - (state.player.hand.length - 1);
+  return Math.max(0, Math.min(state.config.drawSkillCount, room));
+}
+
+/** そのスキルカードを いま使えるか(1ターンの上限・封じ手は相手の手が2種類以上・ドローは引ける枠がある) */
 export function canUseSkill(state: BattleState, card: Card): boolean {
   if (state.phase !== 'player' || card.kind !== 'skill') return false;
   if (state.player.skillsUsed >= state.config.skillPerTurn) return false;
-  return card.skill === 'heal' || canSeal(state.cpu.hand);
+  if (card.skill === 'seal') return canSeal(state.cpu.hand);
+  if (card.skill === 'draw3') return skillDrawCount(state) > 0;
+  return true;
+}
+
+// 1枚引いて手札に入れる(ふつうのドロー・スキルの ドロー・リセットで同じ抽選。必殺技の判定・回復の上限もふくむ)
+function drawOne(state: BattleState, random: RandomSource): { state: BattleState; card: Card } {
+  const face = rollDraw(
+    state.config,
+    {
+      finisherChances: finisherChances(state),
+      hasJanken: state.player.hand.some(isJanken),
+      healAvailable: state.player.healDrawn < state.config.healPerRound,
+      rates: drawRates(state.config, roundConfig(state)),
+    },
+    random,
+  );
+  const { cards, cardSeq } = withIds(state, [face]);
+  const card = cards[0];
+  const healDrawn = state.player.healDrawn + (card.kind === 'skill' && card.skill === 'heal' ? 1 : 0);
+  return { state: { ...state, cardSeq, player: { ...state.player, hand: sortHand([...state.player.hand, card]), healDrawn } }, card };
+}
+
+// count 枚 引く
+function drawMany(state: BattleState, count: number, random: RandomSource): { state: BattleState; cards: Card[] } {
+  let next = state;
+  const cards: Card[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const drawn = drawOne(next, random);
+    next = drawn.state;
+    cards.push(drawn.card);
+  }
+  return { state: next, cards };
 }
 
 /** 回復カードで もどる量(満タンまで) */
@@ -273,7 +316,9 @@ export function healAmount(state: BattleState): number {
 
 /**
  * スキルを使う(その場で効果が出る)。
- * 回復:HP が満タンにもどる / 封じ手:相手が持っている手の種類からランダムに1つ封じ、相手は ふせたカードを かならず出し直す
+ * 回復:HP が満タンにもどる / 封じ手:相手が持っている手の種類からランダムに1つ封じ、相手は ふせたカードを かならず出し直す /
+ * ドロー:drawSkillCount 枚 引く(上限まで)/ リセット:手札を必殺技もふくめて全部すてて、resetCount 枚 引きなおす。
+ * ドロー・リセットで引くカードは ふつうのドローと同じ抽選(1枚目は 手札が空なので、かならず じゃんけんカードが入る)
  */
 export function useSkill(state: BattleState, cardId: string, random: RandomSource = Math.random): Step {
   need(state, 'player');
@@ -288,6 +333,17 @@ export function useSkill(state: BattleState, cardId: string, random: RandomSourc
   if (card.skill === 'heal') {
     const amount = healAmount(state);
     return { state: { ...state, player: { ...player, hp: player.maxHp } }, events: [{ type: 'heal', amount }] };
+  }
+
+  if (card.skill === 'draw3') {
+    const drawn = drawMany({ ...state, player }, skillDrawCount(state), random);
+    return { state: drawn.state, events: [{ type: 'skill-draw', cards: drawn.cards }] };
+  }
+
+  if (card.skill === 'reset') {
+    const discarded = player.hand;
+    const drawn = drawMany({ ...state, player: { ...player, hand: [] } }, state.config.resetCount, random);
+    return { state: drawn.state, events: [{ type: 'reset', discarded, cards: drawn.cards }] };
   }
 
   const kinds = [...new Set(state.cpu.hand.map((other) => other.hand))];
@@ -410,20 +466,9 @@ export function beginNextTurn(state: BattleState, random: RandomSource = Math.ra
   let next: BattleState = { ...state, turn: state.turn + 1, player: { ...state.player, skillsUsed: 0 } };
 
   if (next.player.hand.length < next.config.handLimit) {
-    const face = rollDraw(
-      next.config,
-      {
-        finisherChances: finisherChances(next),
-        hasJanken: next.player.hand.some(isJanken),
-        healAvailable: next.player.healDrawn < next.config.healPerRound,
-      },
-      random,
-    );
-    const { cards, cardSeq } = withIds(next, [face]);
-    const card = cards[0];
-    const healDrawn = next.player.healDrawn + (card.kind === 'skill' && card.skill === 'heal' ? 1 : 0);
-    next = { ...next, cardSeq, player: { ...next.player, hand: sortHand([...next.player.hand, card]), healDrawn } };
-    events.push({ type: 'draw', card });
+    const drawn = drawOne(next, random);
+    next = drawn.state;
+    events.push({ type: 'draw', card: drawn.card });
   }
 
   const cpu = cpuTurn(fillCpuHand(next, random), random);

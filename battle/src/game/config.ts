@@ -23,6 +23,8 @@ export interface RoundConfig {
   packPaper: number;
   /** 自分の HP が これより下がらない(練習は 1。ふつうは 0) */
   playerHpFloor: number;
+  /** スキルの ドロー(3まい ひく)・リセット(いれかえ)が出る(練習は false) */
+  extraSkills: boolean;
 }
 
 export interface BattleConfig {
@@ -47,6 +49,15 @@ export interface BattleConfig {
   packSealRate: number;
   drawHealRate: number;
   drawSealRate: number;
+  /** スキルの ドロー(3まい ひく)・リセット(いれかえ)が パック・ドローで出る確率(extraSkills のラウンドだけ) */
+  packDrawRate: number;
+  packResetRate: number;
+  drawDrawRate: number;
+  drawResetRate: number;
+  /** スキルの ドローで引く枚数(手札の上限 handLimit をこえない分だけ) */
+  drawSkillCount: number;
+  /** スキルの リセットで引きなおす枚数 */
+  resetCount: number;
   /** 回復カードが出る上限(1ラウンド。パックとドローを合わせて) */
   healPerRound: number;
   /** スキルを使える上限(1ターン) */
@@ -78,7 +89,8 @@ export const DEFAULT_BATTLE_CONFIG: BattleConfig = {
   playerAttack: [6, 14],
   legacyAttack: [6, 10, 14],
   legacyHp: [80, 85, 90, 100, 110],
-  handLimit: 5,
+  // 7(2026年11月18日に 5 から。スキルの ドローで 3枚 足せるように。ふだんは 1枚出して1枚引くので 5枚前後のまま)
+  handLimit: 7,
   cpuHandSize: 3,
   packChoices: 5,
   packSize: 5,
@@ -87,6 +99,14 @@ export const DEFAULT_BATTLE_CONFIG: BattleConfig = {
   packSealRate: 0.2,
   drawHealRate: 0.1,
   drawSealRate: 0.15,
+  // ドロー・リセット(2026年11月18日):回復と同じ率(パック15%・ドロー10%)だと パックが スキルだらけになり 1試合が 0.4ターン のびるので、
+  // 間をとって パック8%・ドロー6%(全クリアは ほぼ変わらない。くらべた結果は npm.cmd run sim)
+  packDrawRate: 0.08,
+  packResetRate: 0.08,
+  drawDrawRate: 0.06,
+  drawResetRate: 0.06,
+  drawSkillCount: 3,
+  resetCount: 5,
   healPerRound: 1,
   skillPerTurn: 1,
   finisherCpuHpRatio: 0.5,
@@ -102,13 +122,13 @@ export const DEFAULT_BATTLE_CONFIG: BattleConfig = {
   packAutoOpenMs: 10000,
   rounds: [
     // 1体目(練習):相手は全部グー。パックにパーが2枚、自分の HP は 1 より下がらない。必殺技は出さない
-    { cpuHp: [30, 30], cpuAttack: [8, 8], cpuAllRock: true, cpuHeal: false, cpuCharge: false, finisherChance: 0, comebackChance: 0, packPaper: 2, playerHpFloor: 1 },
+    { cpuHp: [30, 30], cpuAttack: [8, 8], cpuAllRock: true, cpuHeal: false, cpuCharge: false, finisherChance: 0, comebackChance: 0, packPaper: 2, playerHpFloor: 1, extraSkills: false },
     // 2体目・ボスの HP と攻撃力は、1試合を平均6〜7ターンにするために 設計書の値から変えた(2026年11月14日。当日の時間のため)。
     // 設計書:2体目 HP55〜65・回復あり、ボス HP80〜90、攻撃力は どちらも8〜12。くらべた結果は npm.cmd run sim
     // 2体目:回復は使わない
-    { cpuHp: [35, 45], cpuAttack: [10, 14], cpuAllRock: false, cpuHeal: false, cpuCharge: false, finisherChance: 0.1, comebackChance: 0.5, packPaper: 0, playerHpFloor: 0 },
+    { cpuHp: [35, 45], cpuAttack: [10, 14], cpuAllRock: false, cpuHeal: false, cpuCharge: false, finisherChance: 0.1, comebackChance: 0.5, packPaper: 0, playerHpFloor: 0, extraSkills: true },
     // ボス:相手の HP が半分以下になったら、次のドローで必殺技が かならず来る
-    { cpuHp: [55, 65], cpuAttack: [10, 14], cpuAllRock: false, cpuHeal: true, cpuCharge: true, finisherChance: 1, comebackChance: 0.5, packPaper: 0, playerHpFloor: 0 },
+    { cpuHp: [55, 65], cpuAttack: [10, 14], cpuAllRock: false, cpuHeal: true, cpuCharge: true, finisherChance: 1, comebackChance: 0.5, packPaper: 0, playerHpFloor: 0, extraSkills: true },
   ],
 };
 

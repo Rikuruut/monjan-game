@@ -1,25 +1,45 @@
 import { HAND_META, HandIcon } from '../components/HandIcon';
 import { cx } from '../cx';
-import type { CardFace } from '../game/cards';
+import type { CardFace, SkillName } from '../game/cards';
+import { DEFAULT_BATTLE_CONFIG } from '../game/config';
 
-// スキル・必殺技のカードの絵と名前
-const SKILL_META = {
-  heal: { icon: '💚', label: 'かいふく' },
+// スキル・必殺技のカードの絵と名前(アイコンの差しかえは ここだけ)。
+// icon が 'draw-stack' のときは 絵文字ではなく 裏向きのカード3枚 +「+3」(DrawStackIcon。2026年11月18日 依頼者が選んだ)。
+// reset の 🔄 は まだ仮
+const SKILL_META: Record<SkillName, { icon: string; label: string }> = {
+  heal: { icon: '💚', label: '回復' },
   seal: { icon: '⛓️', label: 'ふうじて' },
-} as const;
+  draw3: { icon: 'draw-stack', label: '3まい ひく' },
+  reset: { icon: '🔄', label: 'いれかえ' },
+};
+
+/**
+ * 「3まい ひく」の絵:山札と同じ裏面の 小さなカード3枚を ずらして重ね、右下に「+3」。
+ * 大きさは em(親の .cb-card__icon の字の大きさ)で決まるので、どの大きさのカードでも そのまま縮む(cardbattle.css の .cb-draw-icon)
+ */
+function DrawStackIcon() {
+  return (
+    <span className="cb-draw-icon">
+      <span className="cb-draw-icon__card" />
+      <span className="cb-draw-icon__card" />
+      <span className="cb-draw-icon__card" />
+      <span className="cb-draw-icon__plus">+{DEFAULT_BATTLE_CONFIG.drawSkillCount}</span>
+    </span>
+  );
+}
 
 /** カードの名前(読み上げ・説明に使う) */
 export function cardLabel(card: CardFace): string {
   if (card.kind === 'janken') return `${HAND_META[card.hand].label} ★${card.star}`;
   if (card.kind === 'skill') return SKILL_META[card.skill].label;
-  return 'ひっさつわざ';
+  return '必殺技';
 }
 
 /** カードの名前だけ(★なし) */
 export function cardName(card: CardFace): string {
   if (card.kind === 'janken') return HAND_META[card.hand].label;
   if (card.kind === 'skill') return SKILL_META[card.skill].label;
-  return 'ひっさつ';
+  return '必殺';
 }
 
 /**
@@ -70,9 +90,9 @@ export function CardView({
       role="img"
       aria-label={cardLabel(card)}
     >
-      <span className="cb-card__badge cb-card__badge--word" aria-hidden="true">{card.kind === 'skill' ? 'スキル' : 'ひっさつ'}</span>
-      <span className="cb-card__icon cb-card__icon--emoji" aria-hidden="true">{icon}</span>
-      <span className="cb-card__name" aria-hidden="true">{card.kind === 'skill' ? cardName(card) : 'わざ'}</span>
+      <span className="cb-card__badge cb-card__badge--word" aria-hidden="true">{card.kind === 'skill' ? 'スキル' : '必殺'}</span>
+      <span className="cb-card__icon cb-card__icon--emoji" aria-hidden="true">{icon === 'draw-stack' ? <DrawStackIcon /> : icon}</span>
+      <span className="cb-card__name" aria-hidden="true">{card.kind === 'skill' ? cardName(card) : '技'}</span>
     </div>
   );
 }

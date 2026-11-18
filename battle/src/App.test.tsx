@@ -10,7 +10,7 @@ import {
   CARD_CLASH_IN_MS,
   CARD_CPU_TURN_MS,
   CARD_DEV_DEMO_LEAD_MS,
-  CARD_JANKEN_BEAT_MS,
+  CARD_JANKEN_TOTAL_MS,
   CARD_PLAYER_PLACE_MS,
   CARD_REVEAL_MS,
 } from './timings';
@@ -246,7 +246,7 @@ describe('開発者メニュー(D キー)', () => {
     openTab('演出を見る');
     fireEvent.click(within(menu()).getByRole('button', { name: '火' }));
     await flush();
-    await advance(CARD_DEV_DEMO_LEAD_MS + CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * 3 + CARD_REVEAL_MS);
+    await advance(CARD_DEV_DEMO_LEAD_MS + CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_TOTAL_MS + CARD_REVEAL_MS);
     expect(document.querySelector('.battle-screen--attack-fire')).not.toBeNull();
     expect(screen.getAllByText('あなたの かち！').length).toBeGreaterThan(0);
   });
@@ -263,7 +263,7 @@ describe('開発者メニュー(D キー)', () => {
     await advance(CARD_CPU_TURN_MS);
     press('Enter');
     press('Enter');
-    await advance(CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_BEAT_MS * 3 + 10);
+    await advance(CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_TOTAL_MS + 10);
     expect(screen.getAllByText('あいての かち…').length).toBeGreaterThan(0);
   });
 
@@ -271,7 +271,7 @@ describe('開発者メニュー(D キー)', () => {
     await renderTitle('?pack=0');
     press('Enter');
     await flush();
-    expect(screen.queryByRole('img', { name: /ひっさつわざ/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /必殺技/ })).not.toBeInTheDocument();
     const before = screen.getAllByTestId(/^hand-item-/).length;
     openMenu();
     openTab('バトルを操作');

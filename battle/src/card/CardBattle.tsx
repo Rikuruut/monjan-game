@@ -22,6 +22,7 @@ import { PackOpening } from './PackOpening';
 import { useCardFx } from './useCardFx';
 import type { CardDemoKind, ForcedResult } from './cardDev';
 import { Flip, gsap, useGSAP } from '../fx/gsap';
+import { CARD_RESET_DISCARD_S, CARD_RESET_STAGGER_S, CARD_SKILL_DRAW_STAGGER_S } from '../timings';
 import {
   shownPair,
   skillBlockedReason,
@@ -82,6 +83,8 @@ function noticeCopy(notice: Notice): FieldCopy {
   if (notice.type === 'merge') return { main: 'がったい！', sub: `${cardLabel(notice.card)} に なった` };
   if (notice.type === 'heal') return { main: 'かいふく！', sub: `HPが ${notice.amount} もどった` };
   if (notice.type === 'seal') return { main: `${HAND_META[notice.hand].label}を ふうじた！`, sub: 'あいては カードを だしなおした' };
+  if (notice.type === 'skill-draw') return { main: 'カードを ひいた！', sub: `${notice.cards.length}まい ふえた` };
+  if (notice.type === 'reset') return { main: 'いれかえ！', sub: `${notice.cards.length}まい ひきなおした` };
   if (notice.type === 'cpu-heal') return { main: 'あいての かいふく！', sub: `HPが ${notice.amount} もどった` };
   return { main: 'ちからを ためている…！', sub: 'つぎの ターン まけると ダメージ 2ばい' };
 }
@@ -134,6 +137,13 @@ function pairCardIds(battle: CardBattleApi): Set<string> {
 // 扇形の手札:1枚あたりの傾き(度)と、はしほど下げる量(真ん中からの枚数の2乗 × px)
 const FAN_ANGLE = 6;
 const FAN_DROP = 3;
+// これより多い枠(カード +「しようずみ」)は 詰めて並べる(手札の上限は 7。2026年11月18日に 5 から)
+const FAN_ROOMY_SLOTS = 6;
+// 手札のカードの幅・となりとの重なり(cardbattle.css の .cb-card--hand・.cb-hand__cell と そろえる)
+const HAND_CARD_W = 168;
+const HAND_OVERLAP = 28;
+// 詰めるときの 並び全体の幅の上限(真ん中 960 から左右に。左の「がったい」の枠 x 330〜500 に かからない)
+const HAND_MAX_W = 880;
 
 // 舞台は 画面に合わせて縮めて映しているので、見た目の px(getBoundingClientRect)を 要素の px に直す倍率
 function stageScale(el: HTMLElement): number {
@@ -194,12 +204,20 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
   const skillUsed = state.player.skillsUsed >= state.config.skillPerTurn;
   const newCardId = notice?.type === 'merge' ? notice.card.id : null;
 
-  // 扇形:手札の並び(「しようずみ」の置き場も ふくむ)の真ん中からの位置で、少しずつ傾けて、はしほど下げる
+  // 扇形:手札の並び(「しようずみ」の置き場も ふくむ)の真ん中からの位置で、少しずつ傾けて、はしほど下げる。
+  // 6枠をこえたら(スキルの ドローで 7枚 など)、重なりを ふやして 傾きを へらし、左の「がったい」の枠に かからない幅に おさめる
   const count = shown.length + (skillUsed ? 1 : 0);
+  const crowded = count > FAN_ROOMY_SLOTS;
+  const fanAngle = crowded ? (FAN_ANGLE * (FAN_ROOMY_SLOTS - 1)) / (count - 1) : FAN_ANGLE;
+  const fanDrop = crowded ? (FAN_DROP * ((FAN_ROOMY_SLOTS - 1) / (count - 1)) ** 2) : FAN_DROP;
   const fan = (position: number) => {
     const offset = position - (count - 1) / 2;
-    return { '--fan-angle': `${offset * FAN_ANGLE}deg`, '--fan-drop': `${offset * offset * FAN_DROP}px` } as CSSProperties;
+    return { '--fan-angle': `${offset * fanAngle}deg`, '--fan-drop': `${offset * offset * fanDrop}px` } as CSSProperties;
   };
+  const overlap = crowded ? Math.ceil(HAND_CARD_W - (HAND_MAX_W - HAND_CARD_W) / (count - 1)) : HAND_OVERLAP;
+  const handStyle = { '--hand-overlap': `${overlap}px` } as CSSProperties;
+  // リセットで すてたカード(演出のあいだだけ 写しを 元の位置から 落とす)
+  const discarded = notice?.type === 'reset' ? notice.discarded : [];
   const usedOffset = skillUsed ? 1 : 0;
 
   // ---- 動き(GSAP の Flip):並びが変わったら(出した・ドロー・合成)、のこりのカードが すべって つめる。
@@ -249,7 +267,8 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
 
   // 山札から引く(CARD_DRAW_MS の中で 約 1.1 秒):いちばん上の裏向きのカードが 浮いて 横につぶれる(めくる)→
   // 引いたカードが 山札の位置から 表向きに ひらきながら トレイの上へ 大きく せり上がる → 少し見せる → 手札の自分の位置へ
-  const drawFromDeck = (cell: HTMLElement, deck: HTMLElement) => {
+  // delay:スキルの ドロー・リセットで 何枚か引くときの 時間差(秒)。待つあいだは 見せない
+  const drawFromDeck = (cell: HTMLElement, deck: HTMLElement, delay = 0) => {
     const scale = stageScale(cell);
     const box = cell.getBoundingClientRect();
     const pile = deck.getBoundingClientRect();
@@ -258,7 +277,9 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
     // 山札のカード(124×166)と 手札のカード(168×226)の 大きさの比
     const small = 124 / 168;
     const top = deck.querySelector('.cb-deck__card:last-child');
-    const tl = gsap.timeline();
+    // 山札で めくれる(0.15秒)まで 隠しておく。下の fromTo は immediateRender: false にして、順番が来るまで 何も描かない
+    gsap.set(cell, { opacity: 0 });
+    const tl = gsap.timeline({ delay });
     if (top) {
       tl.to(top, { y: -22, scaleX: 0, duration: 0.15, ease: 'power1.in' }, 0)
         .set(top, { clearProps: 'transform' }, 0.16);
@@ -266,7 +287,7 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
     // 引いているあいだは 手札の うす暗さ(.cb-hand--locked)を かけない
     tl.call(() => cell.classList.add('cb-hand__cell--drawing'), undefined, 0)
       .set(cell, { zIndex: 10 }, 0)
-      .fromTo(cell, { x: dx, y: dy - 22, scaleX: 0, scaleY: small, rotation: 0, opacity: 1 }, { scaleX: small, duration: 0.12, ease: 'power1.out' }, 0.15)
+      .fromTo(cell, { x: dx, y: dy - 22, scaleX: 0, scaleY: small, rotation: 0, opacity: 1 }, { scaleX: small, duration: 0.12, ease: 'power1.out', immediateRender: false }, 0.15)
       .to(cell, { x: dx * 0.45, y: -210, scale: 1.3, duration: 0.3, ease: 'back.out(1.4)' }, 0.27)
       .to(cell, { x: 0, y: 0, scale: 1, duration: 0.3, ease: 'power2.inOut' }, 0.92)
       .set(cell, { clearProps: 'zIndex' })
@@ -276,7 +297,7 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
   useGSAP(() => {
     const section = sectionRef.current;
     if (!section) return;
-    const cells = section.querySelectorAll('.cb-hand__cell');
+    const cells = section.querySelectorAll<HTMLElement>('.cb-hand__cell');
     const first = committedKeyRef.current === null;
     committedKeyRef.current = layoutKey;
     if (first) {
@@ -286,6 +307,23 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
     const state = flipStateRef.current;
     flipStateRef.current = null;
     if (!state) return;
+    // リセット:すてたカードの写しを 元の位置に置いて、くるくる回りながら 下へ落とす
+    if (view === 'notice' && notice?.type === 'reset') {
+      const scale = stageScale(section);
+      const base = section.getBoundingClientRect();
+      section.querySelectorAll<HTMLElement>('.cb-reset-fx__card').forEach((ghost, i) => {
+        const from = rectsRef.current.get(ghost.dataset.cardId ?? '');
+        if (!from) {
+          gsap.set(ghost, { opacity: 0 });
+          return;
+        }
+        const side = i % 2 === 0 ? -1 : 1;
+        gsap.timeline()
+          .set(ghost, { x: (from.left - base.left) / scale, y: (from.top - base.top) / scale, rotation: 0, opacity: 1 })
+          .to(ghost, { y: '-=40', duration: 0.12, ease: 'power1.out' }, i * 0.04)
+          .to(ghost, { y: '+=420', rotation: side * (40 + i * 12), opacity: 0, duration: CARD_RESET_DISCARD_S, ease: 'power2.in' }, 0.12 + i * 0.04);
+      });
+    }
     // 出した:手札にあった位置から、裏向きのカードが 場の自分の枠へ 弧をえがいて飛び、つぶれて着地(相手の ふせる と同じ動き)
     if (view === 'place' && clash) {
       const fly = section.closest('.cb-screen')?.querySelector<HTMLElement>('.cb-field__fly--player');
@@ -314,14 +352,31 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
     // 合体でできたカードは Flip に まかせず、合体の演出の中で 出す(Flip が 先に見せてしまうので)
     const made = [...cells].find((cell) => cell.querySelector('.cb-hand__slot--new'));
     if (made) playMerge(section, made);
+    const deck = section.closest('.cb-screen')?.querySelector<HTMLElement>('.cb-deck__pile') ?? null;
+    // スキルの ドロー・リセットで引いたカードも Flip に まかせない:Flip は 0.4秒で終わるときに 触ったカードの見た目を元にもどすので、
+    // まだ順番が来ていない(隠している)カードが 先に手札に見えてしまう(2026年11月18日 依頼者が見つけた)。
+    // 描いた直後(色をぬる前)に隠して、山札から引く動きだけで出す
+    const skillDrawn = view === 'notice' && (notice?.type === 'skill-draw' || notice?.type === 'reset') ? notice : null;
+    const order = skillDrawn ? skillDrawn.cards.map((card) => card.id) : [];
+    const incoming = [...cells].filter((cell) => order.includes(cell.dataset.flipId ?? ''));
+    if (skillDrawn && incoming.length > 0) {
+      gsap.set(incoming, { opacity: 0 });
+      // リセットは すてたカードが 落ちてから。引いた順(イベントの並び)に 1枚ずつ
+      const start = skillDrawn.type === 'reset' ? CARD_RESET_DISCARD_S : 0;
+      const stagger = skillDrawn.type === 'reset' ? CARD_RESET_STAGGER_S : CARD_SKILL_DRAW_STAGGER_S;
+      incoming.forEach((cell) => {
+        const delay = start + Math.max(0, order.indexOf(cell.dataset.flipId ?? '')) * stagger;
+        if (deck) drawFromDeck(cell, deck, delay);
+        else gsap.to(cell, { opacity: 1, duration: 0.3, delay });
+      });
+    }
     Flip.from(state, {
-      targets: [...cells].filter((cell) => cell !== made),
+      targets: [...cells].filter((cell) => cell !== made && !incoming.includes(cell)),
       duration: 0.4,
       ease: 'power3.out',
       onEnter: (drawn) => {
         if (!drawn.length) return;
         // ターンのはじめの ドロー:山札から引く
-        const deck = section.closest('.cb-screen')?.querySelector<HTMLElement>('.cb-deck__pile');
         if (view === 'draw' && deck) {
           drawn.forEach((cell) => drawFromDeck(cell as HTMLElement, deck));
           return;
@@ -389,7 +444,7 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
     : null;
 
   return (
-    <section ref={sectionRef} className={cx('cb-hand', choosing ? 'cb-hand--choosing' : 'cb-hand--locked')} aria-label="じぶんの てふだ">
+    <section ref={sectionRef} className={cx('cb-hand', choosing ? 'cb-hand--choosing' : 'cb-hand--locked')} style={handStyle} aria-label="じぶんの てふだ">
       {showMerge && <MergePanel battle={battle} index={mergeIndex} />}
       {/* スキルを使ったターンは、置き場所が「しようずみ」になる */}
       {skillUsed && (
@@ -405,6 +460,13 @@ function HandRow({ battle }: { battle: CardBattleApi }) {
           <div className="cb-merge-fx__card"><CardView card={mergeGhost} /></div>
           <div className="cb-merge-fx__card"><CardView card={mergeGhost} /></div>
           <span className="cb-merge-fx__flash" />
+        </div>
+      )}
+      {discarded.length > 0 && (
+        <div className="cb-reset-fx" aria-hidden="true">
+          {discarded.map((card) => (
+            <div key={card.id} className="cb-reset-fx__card" data-card-id={card.id}><CardView card={card} /></div>
+          ))}
         </div>
       )}
     </section>

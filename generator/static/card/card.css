@@ -148,7 +148,7 @@ html, body {
   display: block;
 }
 
-/* こうげき ●●●○○  たいりょく ●●●●○ */
+/* 攻撃 ●●●○○  体力 ●●●●○ */
 .card-stats {
   display: flex;
   justify-content: space-between;

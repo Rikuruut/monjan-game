@@ -1,4 +1,5 @@
 import { getAttributeTheme } from '../attributes';
+import { assetUrl } from '../integration';
 
 export type GameSound =
   | 'start'
@@ -7,6 +8,9 @@ export type GameSound =
   | 'janken-jan'
   | 'janken-ken'
   | 'janken-pon'
+  // じゃんけんぽんの 録音の声(jankenpon_01.wav。1回で じゃん・けん・ぽん の3つ)。
+  // 鳴っているあいだは 合成音の janken-jan/ken/pon を止める。読めていないときは 鳴らない(合成音だけになる)
+  | 'janken-voice'
   | 'reveal'
   | 'star-showdown'
   | 'attack'
@@ -47,6 +51,61 @@ let sfxVolume = 0.9;
 let muted = false;
 let resumePromise: Promise<boolean> | null = null;
 let warnedUnsupported = false;
+
+// ---- じゃんけんぽんの声(録音) ----
+export const JANKEN_VOICE_PATH = assetUrl('/audio/jankenpon_01.wav');
+// 声の音量(masterGain で ×5 されるので、ここで下げる。耳で決める)
+const JANKEN_VOICE_VOLUME = 0.22;
+// 出力の遅れ(スピーカーに届くまで)を 声の頭を飛ばして取りかえす上限。wav の頭は 約60ms 無音
+const JANKEN_VOICE_MAX_SKIP_SEC = 0.06;
+let jankenVoice: AudioBuffer | null = null;
+let jankenVoiceLoading: Promise<void> | null = null;
+let jankenVoiceContext: AudioContext | null = null;
+// 声が鳴り終わる時刻(context.currentTime)。それまでは 合成音の じゃん・けん・ぽん を重ねない
+let jankenVoiceUntil = 0;
+let warnedVoice = false;
+
+/** 声の wav を前もって読みこむ(AudioContext ごとに1回。失敗したら 合成音のまま) */
+function preloadJankenVoice(context: AudioContext) {
+  if (jankenVoiceContext === context && (jankenVoice || jankenVoiceLoading)) return;
+  if (typeof fetch !== 'function' || typeof context.decodeAudioData !== 'function') return;
+  jankenVoiceContext = context;
+  jankenVoice = null;
+  jankenVoiceLoading = fetch(JANKEN_VOICE_PATH)
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then((data) => context.decodeAudioData(data))
+    .then((buffer) => {
+      if (jankenVoiceContext === context) jankenVoice = buffer;
+    })
+    .catch((error: unknown) => {
+      if (!warnedVoice) {
+        warnedVoice = true;
+        console.warn(`${AUDIO_LOG_PREFIX} じゃんけんの声を読みこめませんでした(合成音で鳴らします): ${JANKEN_VOICE_PATH}`, error);
+      }
+    })
+    .finally(() => {
+      if (jankenVoiceContext === context) jankenVoiceLoading = null;
+    });
+}
+
+/** 声を鳴らす。スピーカーまでの遅れの分だけ 頭(無音)を飛ばして、画面の拍と そろえる */
+function playJankenVoice(context: AudioContext): boolean {
+  if (!jankenVoice || !masterGain || jankenVoiceContext !== context) return false;
+  const latency = (context.baseLatency ?? 0) + (context.outputLatency ?? 0);
+  const skip = Math.min(JANKEN_VOICE_MAX_SKIP_SEC, Math.max(0, Number.isFinite(latency) ? latency : 0));
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+  source.buffer = jankenVoice;
+  gain.gain.setValueAtTime(JANKEN_VOICE_VOLUME, context.currentTime);
+  source.connect(gain);
+  gain.connect(masterGain);
+  source.start(context.currentTime, skip);
+  jankenVoiceUntil = context.currentTime + jankenVoice.duration - skip;
+  return true;
+}
 
 function clamp(value: number): number {
   return Math.min(1, Math.max(0, value));
@@ -92,6 +151,7 @@ function getAudioContext(): AudioContext | null {
       masterGain.connect(outputLimiter);
       outputLimiter.connect(audioContext.destination);
       applyMasterVolume();
+      preloadJankenVoice(audioContext);
     } catch (error) {
       audioContext = null;
       masterGain = null;
@@ -210,8 +270,12 @@ function playAttributeAttack(context: AudioContext, now: number, attribute?: str
   }
 }
 
-function scheduleGameSound(context: AudioContext, kind: GameSound, options: GameSoundOptions) {
+function scheduleGameSound(context: AudioContext, kind: GameSound, options: GameSoundOptions): boolean {
   const now = context.currentTime + 0.008;
+  // 声が鳴っているあいだは 合成音の かけ声を重ねない
+  if ((kind === 'janken-jan' || kind === 'janken-ken' || kind === 'janken-pon') && context.currentTime < jankenVoiceUntil) {
+    return false;
+  }
 
   switch (kind) {
     case 'start':
@@ -226,6 +290,8 @@ function scheduleGameSound(context: AudioContext, kind: GameSound, options: Game
       scheduleTone(context, now + 0.24, 523.25, 0.3, 0.045, 'sine', 783.99);
       scheduleTone(context, now + 0.42, 1046.5, 0.2, 0.035, 'sine');
       break;
+    case 'janken-voice':
+      return playJankenVoice(context);
     case 'janken-jan':
       scheduleTone(context, now, 220, 0.18, 0.06, 'triangle', 180);
       break;
@@ -299,12 +365,12 @@ function scheduleGameSound(context: AudioContext, kind: GameSound, options: Game
       scheduleTone(context, now, 660, 0.12, 0.045, 'sine', 820);
       break;
   }
+  return true;
 }
 
 function safelyScheduleGameSound(context: AudioContext, kind: GameSound, options: GameSoundOptions): boolean {
   try {
-    scheduleGameSound(context, kind, options);
-    return true;
+    return scheduleGameSound(context, kind, options);
   } catch (error) {
     console.error(`${AUDIO_LOG_PREFIX} 「${kind}」の再生準備に失敗しました。`, error);
     return false;
@@ -337,4 +403,9 @@ export function closeGameAudio() {
   outputLimiter = null;
   resumePromise = null;
   warnedUnsupported = false;
+  jankenVoice = null;
+  jankenVoiceLoading = null;
+  jankenVoiceContext = null;
+  jankenVoiceUntil = 0;
+  warnedVoice = false;
 }

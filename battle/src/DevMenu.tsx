@@ -40,6 +40,8 @@ const CARD_DEMOS: { kind: CardDemoKind; icon: string; label: string; note: strin
   { kind: 'merge', icon: '✨', label: '合体', note: '2枚が重なって ★が上がる' },
   { kind: 'heal', icon: '💚', label: '回復', note: 'HP 4割 → まんたん' },
   { kind: 'seal', icon: '⛓', label: '封じ手', note: '相手の手に鎖' },
+  { kind: 'draw3', icon: '🃏', label: '3まい ひく', note: '山札から 3枚 つづけて' },
+  { kind: 'reset', icon: '🔄', label: 'いれかえ', note: '手札を すてて 5枚 引きなおす' },
   { kind: 'finisher', icon: '⚡', label: '必殺技', note: 'カットイン → とどめ' },
 ];
 
@@ -61,6 +63,8 @@ const ADD_CARDS: { command: CardDevCommand; icon: string; label: string }[] = [
   { command: 'add-finisher', icon: '⚡', label: '必殺技' },
   { command: 'add-heal', icon: '💚', label: '回復' },
   { command: 'add-seal', icon: '⛓', label: '封じ手' },
+  { command: 'add-draw3', icon: '🃏', label: '3まい ひく' },
+  { command: 'add-reset', icon: '🔄', label: 'いれかえ' },
   { command: 'add-pair', icon: '✨', label: '合体ペア' },
 ];
 

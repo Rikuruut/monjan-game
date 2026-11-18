@@ -56,8 +56,14 @@ const ALL_SOUNDS: GameSound[] = [
 function installFakeAudioContext(options: {
   initialState?: AudioContextState;
   resumeError?: Error;
+  /** じゃんけんの声を読める(fetch と decodeAudioData を用意する) */
+  voice?: boolean;
 } = {}) {
   const oscillators: FakeOscillator[] = [];
+  const bufferSources: Array<{ buffer: unknown; connect: ReturnType<typeof vi.fn>; start: ReturnType<typeof vi.fn> }> = [];
+  if (options.voice) {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) })));
+  }
   const gains: Array<{ gain: FakeParam; connect: ReturnType<typeof vi.fn> }> = [];
   const compressors: FakeCompressor[] = [];
   const contexts: FakeAudioContext[] = [];
@@ -77,8 +83,19 @@ function installFakeAudioContext(options: {
     });
     close = vi.fn(async () => { this.state = 'closed'; });
 
+    // 声を読めるときだけ decodeAudioData がある(ないときは 読みこまずに 合成音)
+    decodeAudioData = options.voice ? vi.fn(async () => ({ duration: 2 })) : undefined;
+    baseLatency = 0.01;
+    outputLatency = 0.02;
+
     constructor() {
       contexts.push(this);
+    }
+
+    createBufferSource() {
+      const source = { buffer: null as unknown, connect: vi.fn(), start: vi.fn() };
+      bufferSources.push(source);
+      return source;
     }
 
     createOscillator() {
@@ -114,7 +131,7 @@ function installFakeAudioContext(options: {
   }
 
   vi.stubGlobal('AudioContext', FakeAudioContext);
-  return { compressors, contexts, gains, oscillators };
+  return { bufferSources, compressors, contexts, gains, oscillators };
 }
 
 function firstFrequency(oscillator: FakeOscillator): number {
@@ -200,6 +217,35 @@ describe('会場用効果音', () => {
     expect(pon).toHaveLength(2);
     expect([firstFrequency(jan[0]), firstFrequency(ken[0]), firstFrequency(pon[0])])
       .toEqual([220, 294, 147]);
+  });
+
+  it('じゃんけんの声:読めたら録音を鳴らし、鳴っているあいだは 合成音の かけ声を止める', async () => {
+    const { bufferSources, contexts, oscillators } = installFakeAudioContext({ voice: true });
+    await unlockGameAudio();
+    await vi.waitFor(() => expect(contexts[0].decodeAudioData).toHaveBeenCalled());
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(await playGameSound('janken-voice')).toBe(true);
+    expect(bufferSources).toHaveLength(1);
+    // スピーカーまでの遅れ(0.01 + 0.02 秒)の分だけ 頭を飛ばす
+    expect(bufferSources[0].start).toHaveBeenCalledWith(1, expect.closeTo(0.03, 5));
+    expect(await playGameSound('janken-jan')).toBe(false);
+    expect(await playGameSound('janken-pon')).toBe(false);
+    expect(oscillators).toHaveLength(0);
+
+    // 鳴り終わったら 合成音にもどる
+    contexts[0].currentTime = 10;
+    expect(await playGameSound('janken-ken')).toBe(true);
+    expect(oscillators).toHaveLength(1);
+  });
+
+  it('じゃんけんの声:読めないときは 声は鳴らず、合成音の かけ声が鳴る', async () => {
+    const { bufferSources, oscillators } = installFakeAudioContext();
+    expect(await playGameSound('janken-voice')).toBe(false);
+    expect(bufferSources).toHaveLength(0);
+    expect(await playGameSound('janken-jan')).toBe(true);
+    expect(oscillators).toHaveLength(1);
   });
 
   it.each([
