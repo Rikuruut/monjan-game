@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ELEMENTS, getAttributeTheme, specialMoveFontSize, specialMoveName, specialMoveParts, type AttributeTheme } from './attributes';
+import { ELEMENTS, getAttributeTheme, specialMoveFontSize, specialMoveName, specialMoveParts, specialWord, type AttributeTheme } from './attributes';
 
 describe('getAttributeTheme', () => {
   const cases: [string, AttributeTheme][] = [
@@ -30,6 +30,8 @@ describe('必殺技の名前', () => {
   it('撮った物 + タイプの言葉', () => {
     expect(specialMoveName({ attribute: '風', source: { object: 'はさみ' } })).toBe('はさみ ストーム!');
     expect(specialMoveName({ attribute: '雷', source: { object: 'ドライヤー' } })).toBe('ドライヤー サンダー!');
+    expect(specialWord('雷')).toBe('サンダー');
+    expect(specialWord('')).toBe('アタック');
     expect(specialMoveName({ attribute: '火', source: { object: 'えんぴつ' } })).toBe('えんぴつ ファイヤー!');
   });
 

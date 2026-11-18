@@ -259,6 +259,8 @@
 .cb-card__icon--emoji { font-size: 76px; }
 .cb-card__name { font-size: 30px; white-space: nowrap; }
 .cb-card--finisher .cb-card__name { color: #b3261e; }
+/* 必殺技の名前(タイプの技の言葉):長いものは 横に縮める(--name-squeeze は CardView.tsx の nameSqueeze) */
+.cb-card__name--finisher { display: block; transform: scaleX(var(--name-squeeze, 1)); }
 
 /* 場:少し小さく */
 .cb-card--field { width: 124px; height: 166px; padding: 7px 4px 9px; border-radius: 15px; }
@@ -311,6 +313,19 @@
   background: url('/assets/card-mark.png') center / contain no-repeat;
   filter: drop-shadow(0 4px 0 #0006);
 }
+
+/* 必殺技の絵(CardView.tsx の FinisherArt):自分のモンスターの絵を 丸く切りぬき、金の輪で囲む。
+   大きさは em(.cb-card__icon--emoji の字の大きさ)なので、どの大きさのカードでも同じ割合で縮む */
+.cb-finisher-art {
+  display: block;
+  width: 1.25em;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #fff6cf;
+  box-shadow: 0 0 0 0.06em #fff, 0 0 0 0.12em #c98a00, 0 0.06em 0.12em 0.12em #0005;
+}
+.cb-finisher-art__img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* 「3まい ひく」の絵(CardView.tsx の DrawStackIcon):裏向きの 小さなカード3枚 +「+3」。
    大きさは すべて em(.cb-card__icon--emoji の字の大きさ:手札 76px・場 52px・見本 30px など)で、どのカードでも同じ割合で縮む。

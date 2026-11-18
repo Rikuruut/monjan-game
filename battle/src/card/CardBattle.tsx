@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { burstAt, chargeAt, createParticleFire, healAt, stopParticleFire, type ParticleFire } from '../attackParticles';
-import { getAttributeTheme, type AttributeTheme } from '../attributes';
+import { getAttributeTheme, specialWord, type AttributeTheme } from '../attributes';
 import type { GameSound, GameSoundOptions } from '../audio/gameAudio';
 import { SpecialCutin } from './SpecialCutin';
 import { MashDuel } from './MashDuel';
@@ -14,7 +14,7 @@ import type { BattleState, Side } from '../game/engine';
 import type { RandomSource } from '../game/logic';
 import { assetUrl, usePadButtons } from '../integration';
 import type { Hand, Monster } from '../types';
-import { cardLabel, CardView } from './CardView';
+import { cardLabel, CardView, FinisherArtContext } from './CardView';
 import { ClashStage } from './ClashStage';
 import { FighterPanel } from './FighterPanel';
 import { HandZone } from './HandGuide';
@@ -660,8 +660,11 @@ export function CardBattle({
   // 手ざわり(ヒットストップ・揺れ・のけぞり・はずみ。GSAP)。揺れの class は テストと これまでの目印のため残し、動きは useCardFx が出す
   const rootRef = useRef<HTMLElement>(null);
   useCardFx(rootRef, battle, turnSide);
+  // 必殺技カードの絵(自分のモンスター)と 下の名前(タイプの技の言葉)
+  const finisherArt = useMemo(() => ({ image: player.image, word: specialWord(player.attribute) }), [player.image, player.attribute]);
 
   return (
+    <FinisherArtContext.Provider value={finisherArt}>
     <main
       ref={rootRef}
       className={cx(
@@ -834,6 +837,7 @@ export function CardBattle({
         </div>
       )}
     </main>
+    </FinisherArtContext.Provider>
   );
 }
 

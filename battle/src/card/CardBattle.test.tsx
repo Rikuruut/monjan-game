@@ -529,6 +529,15 @@ describe('カードバトル:必殺技', () => {
 
   const finisher: Card = { id: 'fin', kind: 'finisher' };
 
+  it('必殺技カード:上は「ひっさつ」、絵は 自分のモンスターの絵(⚡ ではない)、下は タイプの技の言葉(風 → ストーム)', () => {
+    renderBattle({ setup: withHands([janken('a', 'scissors', 1), finisher], [janken('x', 'rock', 3)]) });
+    const card = document.querySelector('.cb-hand .cb-card--finisher') ?? document.querySelector('.cb-card--finisher');
+    expect(card?.querySelector('.cb-finisher-art__img')).toHaveAttribute('src', '/monsters/test.png');
+    expect(card?.querySelector('.cb-card__badge')?.textContent).toBe('ひっさつ');
+    expect(card?.querySelector('.cb-card__name')?.textContent).toBe('ストーム');
+    expect(card?.textContent).not.toContain('⚡');
+  });
+
   it('必殺技を出すと、かけ声なしで すぐカットイン → 特大の攻撃 → 相手を かならず倒す', () => {
     const cpu = [janken('x', 'rock', 3), janken('y', 'paper', 2)];
     renderBattle({ setup: withHands([janken('a', 'scissors', 1), finisher], cpu) });

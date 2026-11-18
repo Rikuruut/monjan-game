@@ -1,3 +1,4 @@
+import { createContext, useContext, type CSSProperties } from 'react';
 import { HAND_META, HandIcon } from '../components/HandIcon';
 import { cx } from '../cx';
 import type { CardFace, SkillName } from '../game/cards';
@@ -12,6 +13,29 @@ const SKILL_META: Record<SkillName, { icon: string; label: string }> = {
   draw3: { icon: 'draw-stack', label: '3まい ひく' },
   reset: { icon: '🔄', label: 'いれかえ' },
 };
+
+/**
+ * 必殺技カードの絵と名前(2026年11月18日 依頼者が選んだ):
+ * 絵は 自分のモンスターの絵(それまでは ⚡ で、雷タイプのアイコンと同じに見えた)、
+ * 下の名前は タイプの技の言葉(カットインの技名の後ろ半分。雷 → サンダー。それまでは「技」)。上の札は「ひっさつ」。
+ * CardBattle が 自分のモンスターの絵の URL と 言葉を 渡す。ないとき(テスト・単体の見本)は 💥 と「わざ」
+ */
+export const FinisherArtContext = createContext<{ image?: string; word?: string }>({});
+
+/** 長い言葉(スプラッシュ など)は 横に縮めて 枠に収める(4文字まで そのまま) */
+function nameSqueeze(text: string): number {
+  return Math.min(1, 4.2 / Math.max(1, [...text].length));
+}
+
+function FinisherArt() {
+  const { image } = useContext(FinisherArtContext);
+  if (!image) return <>💥</>;
+  return (
+    <span className="cb-finisher-art">
+      <img className="cb-finisher-art__img" src={image} alt="" draggable={false} />
+    </span>
+  );
+}
 
 /**
  * 「3まい ひく」の絵:山札と同じ裏面の 小さなカード3枚を ずらして重ね、右下に「+3」。
@@ -83,16 +107,29 @@ export function CardView({
       </div>
     );
   }
-  const icon = card.kind === 'skill' ? SKILL_META[card.skill].icon : '⚡';
+  const icon = card.kind === 'skill' ? SKILL_META[card.skill].icon : 'finisher-art';
   return (
     <div
       className={cx('cb-card', `cb-card--${size}`, card.kind === 'skill' ? `cb-card--skill cb-card--${card.skill}` : 'cb-card--finisher', className)}
       role="img"
       aria-label={cardLabel(card)}
     >
-      <span className="cb-card__badge cb-card__badge--word" aria-hidden="true">{card.kind === 'skill' ? 'スキル' : '必殺'}</span>
-      <span className="cb-card__icon cb-card__icon--emoji" aria-hidden="true">{icon === 'draw-stack' ? <DrawStackIcon /> : icon}</span>
-      <span className="cb-card__name" aria-hidden="true">{card.kind === 'skill' ? cardName(card) : '技'}</span>
+      <span className="cb-card__badge cb-card__badge--word" aria-hidden="true">{card.kind === 'skill' ? 'スキル' : 'ひっさつ'}</span>
+      <span className="cb-card__icon cb-card__icon--emoji" aria-hidden="true">{icon === 'draw-stack' ? <DrawStackIcon /> : icon === 'finisher-art' ? <FinisherArt /> : icon}</span>
+      {card.kind === 'skill' ? (
+        <span className="cb-card__name" aria-hidden="true">{cardName(card)}</span>
+      ) : (
+        <FinisherName />
+      )}
     </div>
+  );
+}
+
+function FinisherName() {
+  const word = useContext(FinisherArtContext).word || 'わざ';
+  return (
+    <span className="cb-card__name cb-card__name--finisher" aria-hidden="true" style={{ '--name-squeeze': nameSqueeze(word) } as CSSProperties}>
+      {word}
+    </span>
   );
 }

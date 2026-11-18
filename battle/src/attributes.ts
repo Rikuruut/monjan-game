@@ -44,13 +44,18 @@ const SPECIAL_WORDS: Record<AttributeTheme, string> = {
   neutral: 'アタック',
 };
 
+/** タイプの技の言葉(「!」なし)。必殺技カードの下の名前にも使う(例 雷 → サンダー) */
+export function specialWord(attribute = ''): string {
+  return SPECIAL_WORDS[getAttributeTheme(attribute)];
+}
+
 type SpecialMoveMonster = { attribute: string; source?: { object?: string } };
 
 /** 必殺技の名前を2つに分けたもの(カットインでは2行で出す)。撮った物がなければ object は空で「ひっさつわざ!」だけ */
 export function specialMoveParts(monster: SpecialMoveMonster): { object: string; word: string } {
   const object = monster.source?.object?.trim() ?? '';
   if (!object) return { object: '', word: 'ひっさつわざ!' };
-  return { object, word: `${SPECIAL_WORDS[getAttributeTheme(monster.attribute)]}!` };
+  return { object, word: `${specialWord(monster.attribute)}!` };
 }
 
 /** 必殺技の名前:撮った物 + タイプの言葉(例「はさみ ストーム!」)。撮った物がなければ「ひっさつわざ!」 */
