@@ -19,7 +19,7 @@ import { pickCpuMash, type RandomSource } from '../game/logic';
 import { useTimers } from '../hooks/useTimers';
 import type { PadButton } from '../integration';
 import type { Hand } from '../types';
-import { applyCardDev, DEMO_CARD_ID, forceCpuCard, useCardDev, type CardDemoKind, type CardDevCommand, type ForcedResult } from './cardDev';
+import { applyCardDev, DEMO_CARD_ID, forceCpuCard, isDirectAttackDemo, useCardDev, type CardDemoKind, type CardDevCommand, type ForcedResult } from './cardDev';
 import {
   CARD_ATTACK_MS,
   CARD_DAMAGE_MS,
@@ -293,7 +293,7 @@ export function useCardBattle({
     setCpuStep('think');
     schedule(() => {
       setCpuStep('place');
-      playSound('select');
+      playSound('cpu-put');
     }, CARD_CPU_THINK_MS);
     schedule(() => {
       setView('player');
@@ -380,7 +380,7 @@ export function useCardBattle({
     }
     setNotice(first);
     setView('notice');
-    playSound(first.type === 'cpu-heal' ? 'heal' : 'star-showdown');
+    playSound(first.type === 'cpu-heal' ? 'heal' : 'charge');
     schedule(() => showCpuNotices(rest), first.type === 'cpu-heal' ? CARD_HEAL_MS : CARD_SKILL_MS);
   };
 
@@ -418,10 +418,11 @@ export function useCardBattle({
   const showImpact = (after: BattleState, finisher: boolean) => {
     setState(after);
     setView('damage');
-    playSound('impact');
+    // とどめ(相手の HP が 0)と 必殺技は 重い命中の音
+    playSound(finisher || after.cpu.hp <= 0 ? 'impact-big' : 'impact');
     playSound('hp-loss');
     // 必殺技は、命中の音を重ねる
-    if (finisher) schedule(() => playSound('impact'), SPECIAL_SECOND_IMPACT_MS);
+    if (finisher) schedule(() => playSound('impact-big'), SPECIAL_SECOND_IMPACT_MS);
 
     schedule(() => {
       setDamage(null);
@@ -482,7 +483,7 @@ export function useCardBattle({
       // 必殺技:じゃんけんぽんの かけ声は入れず、すぐカットイン → 相手を かならず倒す
       setView('finisher');
       playSound('star-showdown');
-      schedule(() => playSound('impact'), SPECIAL_CUTIN_SLAM_MS);
+      schedule(() => playSound('impact-big'), SPECIAL_CUTIN_SLAM_MS);
       schedule(() => strike(step.state, step.events), SPECIAL_DISPLAY_MS);
       return;
     }
@@ -543,7 +544,7 @@ export function useCardBattle({
     const step = mergeCards(state, pair[0].id, pair[1].id);
     const event = step.events.find((item) => item.type === 'merge');
     if (!event || event.type !== 'merge') return;
-    playSound('card-get');
+    playSound('merge');
     setMergeHint(false);
     // 合体の演出(2枚が 枠へ寄って重なる)が どの2枚かを知るため
     setMergedFrom(pair.map((card) => card.id) as [string, string]);
@@ -559,14 +560,14 @@ export function useCardBattle({
       playSound('heal');
       showNotice(step.state, { type: 'heal', amount: event.amount });
     } else if (event?.type === 'seal') {
-      playSound('reveal');
+      playSound('seal');
       showNotice(step.state, { type: 'seal', hand: event.hand });
     } else if (event?.type === 'skill-draw') {
-      playSound('card-get');
+      playSound('shuffle');
       // カーソルは 引いた じゃんけんカードの1枚目に(スキルは このターン もう使えないので。なければ いつもの位置)
       showNotice(step.state, { type: 'skill-draw', cards: event.cards }, event.cards.find(isJanken)?.id);
     } else if (event?.type === 'reset') {
-      playSound('card-get');
+      playSound('shuffle');
       showNotice(step.state, { type: 'reset', discarded: event.discarded, cards: event.cards });
     }
   };
@@ -741,7 +742,17 @@ export function useCardBattle({
     }
     if (!card) return;
     if (card.kind === 'skill') castSkill(card);
+    else if (isDirectAttackDemo(kind)) attackNow(card);
     else play(card);
+  };
+
+  // 攻撃のタイプを見る:じゃんけんの見せ場を飛ばして、勝負の結果から すぐ 攻撃 → 命中
+  const attackNow = (card: Card) => {
+    const step = playCard(state, card.id);
+    setArmed(false);
+    setTurnBanner(false);
+    setClash(null);
+    strike(step.state, step.events);
   };
 
   /** 連打勝負の画面のゲージを押した(マウス) */

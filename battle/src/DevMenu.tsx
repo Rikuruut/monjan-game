@@ -312,7 +312,7 @@ export function DevMenu({
                     ))}
                   </div>
                 </Section>
-                <Section title="攻撃のタイプ" free desc="えらんだタイプで じゃんけん → 攻撃 → 命中 を流します(両方のモンスターを そのタイプにする)。">
+                <Section title="攻撃のタイプ" free desc="えらんだタイプで すぐ 攻撃 → 命中 を流します(じゃんけんは 飛ばす。両方のモンスターを そのタイプにする)。">
                   <p className="dev-segment" role="radiogroup" aria-label="攻撃の向き">
                     <span className="dev-segment__label">向き</span>
                     <button type="button" role="radio" aria-checked={fxFrom === 'win'} onClick={() => setFxFrom('win')}>自分 → 相手</button>
@@ -325,7 +325,7 @@ export function DevMenu({
                         key={element.attribute}
                         className={`dev-fx el-${element.theme}`}
                         title={`${element.attribute}タイプの攻撃`}
-                        onClick={() => demo(`${element.attribute}タイプの攻撃`, fxFrom, element.attribute)}
+                        onClick={() => demo(`${element.attribute}タイプの攻撃`, fxFrom === 'win' ? 'attack-win' : 'attack-lose', element.attribute)}
                       >
                         {element.attribute}
                       </button>

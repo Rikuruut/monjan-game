@@ -26,7 +26,14 @@ export type GameSound =
   // パック開封:袋が ビリッと破れる / カードを1枚めくる(step で音程が上がる。rare は 高い音を重ねる)
   | 'pack-tear'
   | 'card-flip'
-  | 'toggle';
+  | 'toggle'
+  // 2026年11月18日に足した場面(効果音ラボの音。読めないときは SYNTH_FALLBACK の合成音)
+  | 'merge'        // 合体
+  | 'shuffle'      // 3まい ひく・いれかえ
+  | 'cpu-put'      // 相手が カードを ふせる
+  | 'seal'         // 封じ手の鎖
+  | 'impact-big'   // とどめ・必殺技の命中
+  | 'charge';      // ボスの ため技の予告(合成音のまま。star-showdown の合成音)
 
 export type GameSoundOptions = {
   attribute?: string;
@@ -107,6 +114,97 @@ function playJankenVoice(context: AudioContext): boolean {
   return true;
 }
 
+// ---- 録音の効果音(効果音ラボ。2026年11月18日に依頼者が聴いて選んだ) ----
+// ファイルは generator/static/sfx/ に置く(再配布禁止なので Git に入れない。会場の PC にだけ置く。どれが どの音かは generator/static/sounds/README.md)。
+// サーバーが /static/sfx/ で配る。読めないとき(npm run dev・テスト・ファイルがない)は これまでの合成音で鳴らす。
+// gain は耳で決める(masterGain で 約4倍されるので小さめ)。maxSec をこえる長い音は、終わりの FADE_SEC で消して止める
+type SampleSpec = { file: string; gain?: number; maxSec?: number };
+const SAMPLE_BASE = '/static/sfx/';
+const SAMPLE_GAIN = 0.22;
+const SAMPLE_FADE_SEC = 0.25;
+type SampleKey = GameSound | `attack-${string}`;
+export const SAMPLES: Partial<Record<SampleKey, SampleSpec>> = {
+  start: { file: 'decision10.mp3', maxSec: 1.2 },
+  'pack-tear': { file: 'treasure-chest1.mp3' },
+  merge: { file: 'magic-statusup2.mp3' },
+  shuffle: { file: 'card-shuffle1.mp3', maxSec: 1.6 },
+  'cpu-put': { file: 'card-pick1.mp3' },
+  // 攻撃(タイプは attributes.ts の getAttributeTheme。無 = default は合成音のまま)
+  'attack-fire': { file: 'magic-flame1.mp3' },
+  'attack-water': { file: 'sprinkle-water1.mp3' },
+  'attack-nature': { file: 'dash-fallen-leaves1.mp3', maxSec: 1.2 },
+  'attack-light': { file: 'magic-attack-holy1.mp3', maxSec: 1.5 },
+  'attack-thunder': { file: 'magic-electron2.mp3' },
+  'attack-dark': { file: 'magic-gravity1.mp3', maxSec: 1.4 },
+  'attack-wind': { file: 'magic-wind1.mp3' },
+  'attack-earth': { file: 'blow4.mp3' },
+  impact: { file: 'blow2.mp3' },
+  'impact-big': { file: 'super-arts-hit1.mp3' },
+  'star-showdown': { file: 'aura2.mp3', maxSec: 2.5 },
+  seal: { file: 'metal1.mp3' },
+  heal: { file: 'gauge-recovery1.mp3' },
+};
+// 録音が読めないときに鳴らす合成音(新しく足した場面。charge は いつも合成音)
+const SYNTH_FALLBACK: Partial<Record<GameSound, GameSound>> = {
+  merge: 'card-get',
+  shuffle: 'card-get',
+  'cpu-put': 'select',
+  seal: 'reveal',
+  'impact-big': 'impact',
+  charge: 'star-showdown',
+};
+const sampleBuffers = new Map<string, AudioBuffer>();
+let samplesContext: AudioContext | null = null;
+let warnedSamples = false;
+
+/** 録音の効果音を前もって読みこむ(AudioContext ごとに1回。読めなかったものは 合成音のまま) */
+function preloadSamples(context: AudioContext) {
+  if (samplesContext === context) return;
+  if (typeof fetch !== 'function' || typeof context.decodeAudioData !== 'function') return;
+  samplesContext = context;
+  sampleBuffers.clear();
+  const files = [...new Set(Object.values(SAMPLES).map((spec) => spec!.file))];
+  files.forEach((file) => {
+    fetch(SAMPLE_BASE + file)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then((data) => context.decodeAudioData(data))
+      .then((buffer) => {
+        if (samplesContext === context) sampleBuffers.set(file, buffer);
+      })
+      .catch((error: unknown) => {
+        if (!warnedSamples) {
+          warnedSamples = true;
+          console.warn(`${AUDIO_LOG_PREFIX} 録音の効果音を読みこめませんでした(合成音で鳴らします): ${SAMPLE_BASE}${file}`, error);
+        }
+      });
+  });
+}
+
+/** 録音の効果音を鳴らす。読めていなければ false(合成音にまかせる) */
+function playSample(context: AudioContext, key: SampleKey, now: number): boolean {
+  const spec = SAMPLES[key];
+  const buffer = spec && samplesContext === context ? sampleBuffers.get(spec.file) : undefined;
+  if (!spec || !buffer || !masterGain) return false;
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+  const level = spec.gain ?? SAMPLE_GAIN;
+  source.buffer = buffer;
+  gain.gain.setValueAtTime(level, now);
+  source.connect(gain);
+  gain.connect(masterGain);
+  source.start(now);
+  if (spec.maxSec !== undefined && buffer.duration > spec.maxSec) {
+    const fadeAt = Math.max(0, spec.maxSec - SAMPLE_FADE_SEC);
+    gain.gain.setValueAtTime(level, now + fadeAt);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + spec.maxSec);
+    source.stop(now + spec.maxSec + 0.02);
+  }
+  return true;
+}
+
 function clamp(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
@@ -152,6 +250,7 @@ function getAudioContext(): AudioContext | null {
       outputLimiter.connect(audioContext.destination);
       applyMasterVolume();
       preloadJankenVoice(audioContext);
+      preloadSamples(audioContext);
     } catch (error) {
       audioContext = null;
       masterGain = null;
@@ -252,6 +351,11 @@ function playAttributeAttack(context: AudioContext, now: number, attribute?: str
       [784, 988, 1318].forEach((frequency, index) =>
         scheduleTone(context, now + index * 0.055, frequency, 0.2, 0.045, 'sine'));
       break;
+    case 'thunder':
+      // ジジッと鋭く下がる電気の音 + 低い ドン(録音 magic-electron2.mp3 が読めないときの音)
+      scheduleTone(context, now, 1480, 0.14, 0.04, 'square', 220);
+      scheduleTone(context, now + 0.03, 96, 0.36, 0.07, 'sawtooth', 44);
+      break;
     case 'dark':
       scheduleTone(context, now, 190, 0.38, 0.065, 'sawtooth', 64);
       scheduleTone(context, now + 0.04, 130, 0.3, 0.035, 'triangle', 52);
@@ -270,12 +374,18 @@ function playAttributeAttack(context: AudioContext, now: number, attribute?: str
   }
 }
 
-function scheduleGameSound(context: AudioContext, kind: GameSound, options: GameSoundOptions): boolean {
+function scheduleGameSound(context: AudioContext, kind: GameSound, options: GameSoundOptions, synthOnly = false): boolean {
   const now = context.currentTime + 0.008;
   // 声が鳴っているあいだは 合成音の かけ声を重ねない
   if ((kind === 'janken-jan' || kind === 'janken-ken' || kind === 'janken-pon') && context.currentTime < jankenVoiceUntil) {
     return false;
   }
+  // 録音があれば それを鳴らす(攻撃は タイプごと)。なければ 下の合成音
+  // (代わりの合成音を鳴らすときは synthOnly。charge が star-showdown の録音にならないように)
+  const sampleKey: SampleKey = kind === 'attack' ? `attack-${getAttributeTheme(options.attribute)}` : kind;
+  if (!synthOnly && playSample(context, sampleKey, now)) return true;
+  const fallback = SYNTH_FALLBACK[kind];
+  if (fallback) return scheduleGameSound(context, fallback, options, true);
 
   switch (kind) {
     case 'start':
@@ -408,4 +518,7 @@ export function closeGameAudio() {
   jankenVoiceContext = null;
   jankenVoiceUntil = 0;
   warnedVoice = false;
+  sampleBuffers.clear();
+  samplesContext = null;
+  warnedSamples = false;
 }

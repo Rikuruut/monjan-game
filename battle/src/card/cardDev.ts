@@ -27,7 +27,15 @@ export type CardDevCommand =
   /** 相手に ため技を予告させる(次のターンに ためる) */
   | 'cpu-charge';
 
-export type CardDemoKind = 'merge' | 'heal' | 'seal' | 'draw3' | 'reset' | 'finisher' | 'win' | 'lose' | 'rendan' | 'charge';
+// attack-win / attack-lose:攻撃のタイプを見る(じゃんけんの見せ場を飛ばして、すぐ 攻撃 → 命中。2026年11月18日)
+export type CardDemoKind =
+  | 'merge' | 'heal' | 'seal' | 'draw3' | 'reset' | 'finisher' | 'win' | 'lose' | 'rendan' | 'charge'
+  | 'attack-win' | 'attack-lose';
+
+/** じゃんけんを飛ばして すぐ攻撃する演出か */
+export function isDirectAttackDemo(kind: CardDemoKind): boolean {
+  return kind === 'attack-win' || kind === 'attack-lose';
+}
 
 export type { ForcedResult };
 
@@ -130,8 +138,10 @@ export function demoSetup(kind: CardDemoKind): (state: BattleState) => BattleSta
       case 'finisher':
         return withHand(state, [{ id: DEMO_CARD_ID, kind: 'finisher' }, ...filler]);
       case 'win':
+      case 'attack-win':
         return placeCpu(withHand(state, [play, ...filler]), jk('dev-cpu', 'scissors', 2));
       case 'lose':
+      case 'attack-lose':
         return placeCpu(withHand(state, [play, ...filler]), jk('dev-cpu', 'paper', 2));
       case 'rendan':
         return placeCpu(withHand(state, [play, ...filler]), jk('dev-cpu', 'rock', 2));

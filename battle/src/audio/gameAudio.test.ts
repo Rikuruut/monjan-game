@@ -51,6 +51,12 @@ const ALL_SOUNDS: GameSound[] = [
   'pack-tear',
   'card-flip',
   'toggle',
+  'merge',
+  'shuffle',
+  'cpu-put',
+  'seal',
+  'impact-big',
+  'charge',
 ];
 
 function installFakeAudioContext(options: {
@@ -60,7 +66,7 @@ function installFakeAudioContext(options: {
   voice?: boolean;
 } = {}) {
   const oscillators: FakeOscillator[] = [];
-  const bufferSources: Array<{ buffer: unknown; connect: ReturnType<typeof vi.fn>; start: ReturnType<typeof vi.fn> }> = [];
+  const bufferSources: Array<{ buffer: unknown; connect: ReturnType<typeof vi.fn>; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
   if (options.voice) {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) })));
   }
@@ -93,7 +99,7 @@ function installFakeAudioContext(options: {
     }
 
     createBufferSource() {
-      const source = { buffer: null as unknown, connect: vi.fn(), start: vi.fn() };
+      const source = { buffer: null as unknown, connect: vi.fn(), start: vi.fn(), stop: vi.fn() };
       bufferSources.push(source);
       return source;
     }
@@ -240,6 +246,38 @@ describe('会場用効果音', () => {
     expect(oscillators).toHaveLength(1);
   });
 
+  it('録音の効果音:読めたら 録音を鳴らし、長い音は 上限で止める。表にない音は 合成音のまま', async () => {
+    const { bufferSources, contexts, oscillators } = installFakeAudioContext({ voice: true });
+    await unlockGameAudio();
+    await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalledWith('/static/sfx/blow2.mp3'));
+    await vi.waitFor(() => expect(contexts[0].decodeAudioData!.mock.calls.length).toBeGreaterThan(5));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(await playGameSound('impact')).toBe(true);
+    expect(await playGameSound('attack', { attribute: '火' })).toBe(true);
+    expect(oscillators).toHaveLength(0);
+    expect(bufferSources).toHaveLength(2);
+    // 長さ2秒の音(テストの偽物)は 上限1.2秒の start で 止める
+    expect(await playGameSound('start')).toBe(true);
+    expect(bufferSources[2].stop).toHaveBeenCalledTimes(1);
+    expect(bufferSources[0].stop).not.toHaveBeenCalled();
+
+    // 無タイプの攻撃・ため技の予告(star-showdown の録音ではなく 合成音)は 合成音
+    expect(await playGameSound('attack', { attribute: '無' })).toBe(true);
+    expect(await playGameSound('charge')).toBe(true);
+    expect(bufferSources).toHaveLength(3);
+    expect(oscillators.length).toBe(2 + 3);
+  });
+
+  it('録音の効果音:読めないときは 新しい場面も 代わりの合成音で鳴る', async () => {
+    const { bufferSources, oscillators } = installFakeAudioContext();
+    expect(await playGameSound('merge')).toBe(true);
+    expect(await playGameSound('impact-big')).toBe(true);
+    expect(bufferSources).toHaveLength(0);
+    expect(oscillators.length).toBe(5 + 2);
+  });
+
   it('じゃんけんの声:読めないときは 声は鳴らず、合成音の かけ声が鳴る', async () => {
     const { bufferSources, oscillators } = installFakeAudioContext();
     expect(await playGameSound('janken-voice')).toBe(false);
@@ -253,6 +291,7 @@ describe('会場用効果音', () => {
     ['水', 260, 'sine'],
     ['草', 330, 'triangle'],
     ['光', 784, 'sine'],
+    ['雷', 1480, 'square'],
     ['闇', 190, 'sawtooth'],
     ['風', 210, 'triangle'],
     ['土', 120, 'triangle'],

@@ -72,7 +72,7 @@ class DesignPlan(BaseModel):
 class MonsterInfo(BaseModel):
     """モデルに返してもらう形式(構造化出力のスキーマになる)。
 
-    element はタイプ8種類に限定するので、モデル側でも選択肢が守られやすくなる。
+    element はタイプ9種類に限定するので、モデル側でも選択肢が守られやすくなる。
     それでも念のため validator.py でもう一度チェックする。
     """
 

@@ -108,7 +108,7 @@ outputs/  YYYYMMDD_HHMMSS/ に photo.jpg・monster.png・result.json(判定・�
   すぐ要る判定 `quick_check`(`needs_retake`・`retake_reason`・`has_person`・`object_name`)→ 画像生成を始める →
   同時に名前・説明 `describe`(`element`・`monster_name`・`name_candidates`(3つ)・`description`)。design_plan(detailed だけ。6項目。`recognizer.MonsterInfo`)は作らない。
   指示文は部品に分けてあり(`prompts.py`)、detailed の `RECOGNIZE_INSTRUCTIONS` は分ける前と1字も変わらない(テストで確かめている)
-- タイプ `element` は8つから1つ:火・水・草・光・闇・風・土・無(バトルの属性と同じ。`prompts.ElementName`)。**画像プロンプトには入れない**(バトルとカードのバッジに使うだけ)
+- タイプ `element` は9つから1つ:火・水・草・光・雷・闇・風・土・無(2026年11月18日に雷を足した。光 = 光る物・雷 = 電気を使う物。バトルの属性と同じ。`prompts.ElementName`)。**画像プロンプトには入れない**(バトルとカードのバッジに使うだけ)
 - 撮り直し:人が写っている・物がはっきりしない・子供にふさわしくない物。**物を持つ手や指だけなら人とみなさない**(指だけで人モードになり、人の特徴が描かれた)。
   判定の返答を読めない(モデルが断った)ときも撮り直し(不適切な写真で断られることが多いため)
 - 説明文は小学3年までの漢字を使い(それより難しい漢字はひらがな。2026年11月9日)、50文字まで(依頼文のねらいは35〜45文字。「40〜50」と頼むと半分ほどが50をこえ、文のとちゅうで切れた)。simple では**たたかいかた**の紹介(物の使い方を技に変える。2026年11月9日。それまでの「図鑑の小さなお話」は、おちゃを いれる など子供向けすぎた)。絵と同じ「どのパーツを・武器にしたか」も伝える(`build_describe_prompt`)。

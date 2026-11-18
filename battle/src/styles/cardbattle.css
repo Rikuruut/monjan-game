@@ -800,11 +800,12 @@
    UI の調整2回目:攻撃のタイプの色・じゃんけんの見せ場・相手のターン
    ================================================================== */
 
-/* タイプの色(main の攻撃の --fx-edge と同じ8色)。モンスター・場・見せ場のカードに付ける */
+/* タイプの色(main の攻撃の --fx-edge と同じ9色)。モンスター・場・見せ場のカードに付ける */
 .cb-type-fire    { --type-color: #ff6a00; }
 .cb-type-water   { --type-color: #1a8fe8; }
 .cb-type-nature  { --type-color: #5cc23a; }
 .cb-type-light   { --type-color: #ffd23f; }
+.cb-type-thunder { --type-color: #eef23a; }
 .cb-type-dark    { --type-color: #7b4fd8; }
 .cb-type-wind    { --type-color: #7ad9b8; }
 .cb-type-earth   { --type-color: #b0844f; }

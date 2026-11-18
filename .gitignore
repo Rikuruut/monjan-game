@@ -4,3 +4,6 @@ battle/dist/
 *.tsbuildinfo
 battle/vite.config.js
 battle/vite.config.d.ts
+
+# 効果音ラボの音(再配布禁止のため Git に入れない。会場の PC にだけ置く)
+generator/static/sfx/

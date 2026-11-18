@@ -42,6 +42,7 @@ html, body {
 .card[data-element="水"] { --el: #176aa1; }
 .card[data-element="草"] { --el: #33743e; }
 .card[data-element="光"] { --el: #a77c1d; }
+.card[data-element="雷"] { --el: #9a8a00; }
 .card[data-element="闇"] { --el: #51398d; }
 .card[data-element="風"] { --el: #277a69; }
 .card[data-element="土"] { --el: #77502c; }

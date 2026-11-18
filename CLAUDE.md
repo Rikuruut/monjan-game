@@ -43,7 +43,7 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
   前のページが `sessionStorage` の `monjan-curtain` に印を付け、次のページは `<html class="curtain-closed">` で最初の描画から覆い、`load`(おそくとも3秒)で開く。撮影ページの中の場面の切りかえは これまでの木もれ日の光のまま
 - サーバー(`generator/app/main.py`)が `generator/static/battle/` を `/battle/` で配る(`battle/vite.config.ts` の `base`・`build.outDir`)
 - 受け渡しは `GET /api/battle-monster/{id}`(`generator/app/battle.py`)。バトルの JSON 形式(`battle/docs/DATA_SPEC.md`)で返す
-  - `name` は子供が選んだ名前、`attribute` はタイプ(火 など8つ。バトルの属性と同じ)、`image` は `/api/monster-image/{photo_id}`
+  - `name` は子供が選んだ名前、`attribute` はタイプ(火 など9つ。バトルの属性と同じ)、`image` は `/api/monster-image/{photo_id}`
   - ⚔(attack)は 1〜3、♡(hp)は 3〜5 をランダム。絵ができたときに決めて `result.json` の `battle` に残す(カード印刷と数字をそろえるため)
   - id は photo_id のほか、`outputs/` のフォルダ名(絵は `/api/output-image/<フォルダ名>`)と `demo`(見本のゴリラ × はさみ。`?name=` で名前)も受け付ける
   - カード印刷(試作):誕生の「いんさつ」→ `/card?id=<photo_id>`(同じ id の形。⚔♡は `result.json` の `battle` を個数で載せる)。くわしくは `generator/CLAUDE.md` の 1.
@@ -56,7 +56,7 @@ cd battle; npm.cmd run dev                # バトルだけを単体で開発(�
   - `?standalone=1`:スタートで撮影の画面へ行かない。ビルドしていない開発用(`npm.cmd run dev`)とテストは、これまでどおり単体で動く(スタートで すぐカードバトル)
 - 操作は会場の3つのボタン(← / Enter・Space / →)。バトルの中は 下の「カードバトルへの作り直し」、それ以外の画面は中ボタンで進む
 - 画面の切りかえは `battle/src/App.tsx`(タイトル → バトル → リザルト → カードゲット。`AppScreen`)。**これまでのじゃんけんバトル(練習ラウンド・れんしゅうクリア・登場シーン・♡の必殺技・勝ち/負け/引き分けの画面)は 2026年11月16日に外した**(段階2e。前のソースとテストは `generator/archive/20261116_before_card_swap/battle-src/`)。カードバトルが使う 必殺技のカットインと連打勝負は `battle/src/card/SpecialCutin.tsx`・`card/MashDuel.tsx` に移した
-- タイプは バトルの属性そのもの:火・水・草・光・闇・風・土・無(攻撃の色・音が変わる)。撮影側の判定が8つから選ぶ(2026年11月2日まではひらがなの性質6つで、バトルが読みかえていた。古い outputs/ の値もバトルはそのまま読める)
+- タイプは バトルの属性そのもの:火・水・草・光・雷・闇・風・土・無(攻撃の色・音が変わる)。撮影側の判定が9つから選ぶ(雷は 2026年11月18日に足した。電気の物は 光から雷へ・古い「でんき」も雷。アイコン ⚡・攻撃の音は 効果音ラボの「雷魔法2」`magic-electron2.mp3`。2026年11月2日まではひらがなの性質6つで、バトルが読みかえていた。古い outputs/ の値もバトルはそのまま読める)
 
 ## カードバトルへの作り直し(進行中。枝 `card-battle`)
 2026年11月14日の戦闘システム設計書(カードバトル版)で、バトルを「パックとドローで手札を作り、3体(練習・2体目・ボス)と戦うカードバトル」に作り直している。2026年11月16日に これまでのバトルと入れかえた(段階2e。上の「つなぎ方」)。作り直す前のソースは `generator/archive/20261114_before_card_battle/`。
@@ -100,9 +100,11 @@ D キーか右下の ⚙ で開く(会場の3つのボタンでは開かない)�
 - 作ったモンスターで戦う:`GET /api/recent-monsters`(`outputs/` の新しい順に30件)から選ぶと `/battle/?photo=<フォルダ名>`(サーバーを再起動したあとでも戦える)
 - バトルだけ(2026年11月16日に カードバトル用に組み直した。依頼者に「ごちゃごちゃ・合体を最後まで見られない」と言われて)。**画面・演出・操作のボタンは 押すと メニューが閉じて 画面いっぱいで見られる**。アイコン + 名前 + 1行の説明のタイル。相手(練習・2体目・ボス)は 上の切りかえで えらぶ
   - 画面へとぶ:タイトル・パック選び・バトル(パックなし)・リザルト かち / まけ(見本の数字)・カードゲット
-  - 演出を見る:合体・回復・封じ手・必殺技・かつ・まける・連打勝負・ため技・攻撃のタイプ(8つ × 向き)・パック開封。バトルを作り直し、その演出が起きる手札と 相手の ふせたカードを用意して(`card/cardDev.ts` の `demoSetup`)、相手のターンを飛ばして自分のターンから `CARD_DEV_DEMO_LEAD_MS` 後に流す。画面の左下に「▶ もう一度」(くり返し)
+  - 演出を見る:合体・回復・封じ手・必殺技・かつ・まける・連打勝負・ため技・攻撃のタイプ(9つ × 向き。じゃんけんを飛ばして すぐ 攻撃 → 命中。`attack-win` / `attack-lose`。2026年11月18日)・パック開封。バトルを作り直し、その演出が起きる手札と 相手の ふせたカードを用意して(`card/cardDev.ts` の `demoSetup`)、相手のターンを飛ばして自分のターンから `CARD_DEV_DEMO_LEAD_MS` 後に流す。画面の左下に「▶ もう一度」(くり返し)
   - バトルを操作:勝ち負けを決める(ふつう / かつ / まける / あいこ。カードを出すとき 相手の ふせたカードを その手・同じ★に差しかえる。`forceCpuCard`)・手札に足す(必殺技・回復・封じ手・合体ペア)・HP(自分3割・相手半分・相手1)・ため技の予告。命令は window の CustomEvent(`sendCardDev`)で、自分のターン以外で押すと ためておいて 次の自分のターンで当てる
   - データ:自分・相手・練習の相手の JSON
 - じゃんけんぽんの声(2026年11月18日):録音 `battle/public/audio/jankenpon_01.wav` を `gameAudio.ts` の `janken-voice` で鳴らす(Web Audio で前もって読みこみ、スピーカーまでの遅れの分だけ頭の無音を飛ばす。鳴っているあいだは 合成音の `janken-jan/ken/pon` を止め、読めないときは 合成音だけ)。**画面の拍は 声に合わせる**(声の始まりが じゃん 90ms・けん 850ms・ぽん 1540ms と等しくないので、`timings.ts` の `CARD_JANKEN_BEATS_MS` = [0, 760, 1450]・`JANKEN_VOICE_LEAD_MS` = 90)。ずれて聞こえたら この2つを 10〜20ms ずつ動かす。声を差しかえたら 始まりの時刻を測りなおす
+- 効果音ラボの音(2026年11月18日。依頼者が聴いて選んだ):バトル・撮影の一部の音を 録音に差しかえた。ファイルは `generator/static/sfx/`(**再配布禁止なので Git に入れない。会場の PC へ手でコピー**)。読めないときは これまでの合成音・仮の音。
+  バトルは `gameAudio.ts` の `SAMPLES`(新しい場面 `merge`・`shuffle`・`cpu-put`・`seal`・`impact-big`・`charge` も足した。代わりの合成音は `SYNTH_FALLBACK`)、撮影は `sound.js` の `lab`。一覧は `generator/static/sounds/README.md`
 - 攻撃の演出は CSS(`battle/src/styles/effects.css`)と、命中ではじける粒(`battle/src/attackParticles.ts`。canvas-confetti)。タイプの判定は `battle/src/attributes.ts` の1か所
 - 撮影・合体だけ:`generator/CLAUDE.md` の 5.

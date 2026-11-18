@@ -236,7 +236,7 @@ monjan-prototype/
 | 撮り直し | `ok: true`、`needs_retake: true`、`retake_reason`、`monster`、`timings`、`usage` |
 | 失敗 | `ok: false`、`step`(「判定」「画像生成」、保存などの思わぬエラーは「サーバー」)、`error`、(判定まで済んでいれば)`monster`・`usage`。どの失敗でも WebSocket で `progress: error` を送る |
 
-`monster` の主な項目:`object_name`(物の名前)・`element`(タイプ:火 / 水 / 草 / 光 / 闇 / 風 / 土 / 無。バトルの属性と同じ)・`monster_name`・`name_candidates`・`description`・`needs_retake`・`retake_reason`・`has_person`・`design_plan`(絵の設計図)。
+`monster` の主な項目:`object_name`(物の名前)・`element`(タイプ:火 / 水 / 草 / 光 / 雷 / 闇 / 風 / 土 / 無。バトルの属性と同じ)・`monster_name`・`name_candidates`・`description`・`needs_retake`・`retake_reason`・`has_person`・`design_plan`(絵の設計図)。
 タイプ `element` は絵には使っておらず、バトルの攻撃の色・音と、カードのバッジに使います。
 
 ### WebSocket(`/ws?role=pc` または `/ws?role=phone`)

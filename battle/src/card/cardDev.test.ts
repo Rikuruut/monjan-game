@@ -4,7 +4,7 @@ import { openPack, startMatch } from '../game/engine';
 import { seededRandom } from '../game/simulate';
 import { demoSetup, type CardDemoKind } from './cardDev';
 
-const KINDS: CardDemoKind[] = ['merge', 'heal', 'seal', 'draw3', 'reset', 'finisher', 'win', 'lose', 'rendan', 'charge'];
+const KINDS: CardDemoKind[] = ['merge', 'heal', 'seal', 'draw3', 'reset', 'finisher', 'win', 'lose', 'rendan', 'charge', 'attack-win', 'attack-lose'];
 
 describe('演出を見る(demoSetup)', () => {
   // 同じ id のカードが2枚あると React の key が重なり、使ったカードの枠が 手札に残る(いれかえ で起きた)

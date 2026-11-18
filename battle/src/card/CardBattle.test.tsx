@@ -33,10 +33,11 @@ import {
   MASH_DUEL_MS,
   MASH_RESULT_MS,
   SPECIAL_DISPLAY_MS,
+  CARD_DEV_DEMO_LEAD_MS,
 } from '../timings';
 import type { Hand, Monster } from '../types';
 import { CardBattle, trialConfig, type CardBattleOutcome } from './CardBattle';
-import { sendCardDev } from './cardDev';
+import { demoSetup, sendCardDev } from './cardDev';
 
 // ♥4(HP 100)にしておく(HP の数字を 100 で書いているテストが多いので)。♥ と HP の読みかえは 下の「こうげき・HP の見せ方」で見る
 const monster = (id: string, name: string, attack: Monster['attack'], hp: Monster['hp'] = 4000): Monster => ({
@@ -672,7 +673,7 @@ describe('カードバトル:相手のターンと じゃんけんの見せ場',
     expect(screen.getByText('あなたの ターン')).toBeInTheDocument();
     expect(screen.getByText('あなたの ターン！')).toBeInTheDocument();
     expect(guide()).toBe(GUIDE_PICK);
-    expect(playSound).toHaveBeenCalledWith('select');
+    expect(playSound).toHaveBeenCalledWith('cpu-put');
     wait(CARD_PLAYER_TURN_BANNER_MS);
     expect(screen.queryByText('あなたの ターン！')).not.toBeInTheDocument();
   });
@@ -906,5 +907,36 @@ describe('カードバトル:パック選び・開封', () => {
     expect(end).not.toBeNull();
     press('Enter');
     expect(packs()).toHaveLength(5);
+  });
+});
+
+describe('開発者メニュー:攻撃のタイプを見る', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it.each([
+    ['attack-win', 'player', '風'],
+    ['attack-lose', 'cpu', '火'],
+  ] as const)('%s:じゃんけんを飛ばして すぐ攻撃 → 命中', (kind, attacker, attribute) => {
+    const playSound = vi.fn();
+    render(
+      <CardBattle
+        player={{ ...monster('p', 'ゴリザミ', 2000), attribute: '風' }}
+        cpu={{ ...monster('c', 'ドライオン', 1000), attribute: '火' }}
+        config={trialConfig(DEFAULT_BATTLE_CONFIG, 2)}
+        playSound={playSound}
+        random={seededRandom(1)}
+        demo={kind}
+        setup={demoSetup(kind)}
+      />,
+    );
+    wait(CARD_DEV_DEMO_LEAD_MS);
+    // 見せ場(じゃん・けん・ぽん)は出ず、そのまま 攻撃
+    expect(document.querySelector('.cb-clash')).toBeNull();
+    expect(playSound).not.toHaveBeenCalledWith('janken-voice');
+    expect(document.querySelector(`.monster-panel--${attacker}`)!.className).toContain('monster-panel--attacking');
+    expect(playSound).toHaveBeenCalledWith('attack', { attribute });
+    wait(CARD_ATTACK_MS);
+    expect(screen.getByLabelText(/^[0-9]+ダメージ$/)).toBeInTheDocument();
   });
 });

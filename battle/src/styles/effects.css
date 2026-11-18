@@ -15,6 +15,7 @@
 .projectile--water,   .impact-effect--water   { --fx-a: #7fd8ff; --fx-b: #1a6fd1; }
 .projectile--nature,  .impact-effect--nature  { --fx-a: #8fdc5a; --fx-b: #F7A8C4; }
 .projectile--light,   .impact-effect--light   { --fx-a: #fff6b0; --fx-b: #ffc928; }
+.projectile--thunder, .impact-effect--thunder { --fx-a: #fffbd0; --fx-b: #ffe600; }
 .projectile--dark,    .impact-effect--dark    { --fx-a: #b48cff; --fx-b: #3a1b6e; }
 .projectile--wind,    .impact-effect--wind    { --fx-a: #f4fff6; --fx-b: #7ad9b8; }
 .projectile--earth,   .impact-effect--earth   { --fx-a: #e8cfa4; --fx-b: #8a6a4a; }
@@ -25,6 +26,7 @@
 .battle-screen--attack-water   { --fx-edge: #1a8fe8; }
 .battle-screen--attack-nature  { --fx-edge: #5cc23a; }
 .battle-screen--attack-light   { --fx-edge: #ffd23f; }
+.battle-screen--attack-thunder { --fx-edge: #f2f23a; }
 .battle-screen--attack-dark    { --fx-edge: #7b4fd8; }
 .battle-screen--attack-wind    { --fx-edge: #7ad9b8; }
 .battle-screen--attack-earth   { --fx-edge: #b0844f; }
@@ -263,6 +265,20 @@
 }
 .projectile--from-cpu.projectile--light .projectile__core { transform: scaleX(-1); }
 .projectile--light .projectile__trail { --size: 22px; background: #fff; box-shadow: 0 0 16px 6px var(--fx-b); }
+/* 雷:ジグザグの稲妻(光らせない。点滅は 1秒に3回以下のため) */
+.projectile--thunder .projectile__core {
+  left: -110px;
+  width: 220px;
+  top: -60px;
+  height: 120px;
+  border-radius: 0;
+  clip-path: polygon(0 40%, 38% 22%, 34% 44%, 70% 18%, 64% 42%, 100% 50%, 56% 66%, 62% 46%, 26% 74%, 32% 54%);
+  background: linear-gradient(90deg, var(--fx-b), #fff 55%, #9fe8ff);
+  box-shadow: none;
+  animation: none;
+}
+.projectile--from-cpu.projectile--thunder .projectile__core { transform: scaleX(-1); }
+.projectile--thunder .projectile__trail { --size: 16px; border-radius: 0; clip-path: polygon(50% 0, 100% 40%, 60% 45%, 80% 100%, 0 50%, 40% 45%); background: linear-gradient(135deg, #fff, var(--fx-b) 60%, #9fe8ff); }
 /* 闇:むらさきの玉(まん中が暗い) */
 .projectile--dark .projectile__core { background: radial-gradient(circle, #12051f 0 26%, var(--fx-b) 42%, var(--fx-a) 62%, transparent 70%); box-shadow: 0 0 50px 16px #7b4fd8; }
 .projectile--dark .projectile__trail { background: radial-gradient(circle, var(--fx-b), var(--fx-a)); }
@@ -547,6 +563,7 @@
 .special-cutin--water   { --sp-a: #9ff3ff; --sp-b: #1f7bff; }
 .special-cutin--nature  { --sp-a: #d8ff7a; --sp-b: #22b14c; }
 .special-cutin--light   { --sp-a: #fffbe0; --sp-b: #ffc928; }
+.special-cutin--thunder { --sp-a: #fffbd0; --sp-b: #e8d800; }
 .special-cutin--dark    { --sp-a: #e6b3ff; --sp-b: #6a1fb5; }
 .special-cutin--wind    { --sp-a: #e8fff6; --sp-b: #31c8a0; }
 .special-cutin--earth   { --sp-a: #ffd9a0; --sp-b: #a0581f; }
@@ -730,6 +747,7 @@
 .special-impact-flash--water   { --sp-a: #3fa9ff; }
 .special-impact-flash--nature  { --sp-a: #5fe06a; }
 .special-impact-flash--light   { --sp-a: #ffe45c; }
+.special-impact-flash--thunder { --sp-a: #f6f05a; }
 .special-impact-flash--dark    { --sp-a: #b05cff; }
 .special-impact-flash--wind    { --sp-a: #6ff0c8; }
 .special-impact-flash--earth   { --sp-a: #d9903f; }

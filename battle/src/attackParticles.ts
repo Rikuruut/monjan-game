@@ -48,10 +48,15 @@ const IMPACT: Record<AttributeTheme, Shot[]> = {
     { count: 26, emoji: ['🍃', '🌸', '🌿'], velocity: 45, gravity: 0.35, decay: 0.92, drift: 0.6, ticks: 200, scalar: 4 },
     { count: 40, colors: ['#8fdc5a', '#F7A8C4', '#3F8F4A', '#fff6d0'], velocity: 50, gravity: 0.4, decay: 0.92, ticks: 180, scalar: 1.8 },
   ],
-  // 光:星と雷が大きく広がる
+  // 光:星が大きく広がる(⚡ は 2026年11月18日に雷へ移した)
   light: [
     { count: 70, colors: ['#fff6b0', '#ffc928', '#ffffff'], shapes: ['star'], velocity: 70, gravity: 0.5, decay: 0.89, ticks: 100, scalar: 2.6 },
-    { count: 12, emoji: ['⚡', '✨'], velocity: 55, gravity: 0.3, decay: 0.9, ticks: 90, scalar: 4.2, flat: true },
+    { count: 12, emoji: ['✨', '🌟'], velocity: 55, gravity: 0.3, decay: 0.9, ticks: 90, scalar: 4.2, flat: true },
+  ],
+  // 雷:黄と青白の 細かい火花が 速く飛び散って すぐ消える + ⚡
+  thunder: [
+    { count: 90, colors: ['#fff35c', '#ffffff', '#9fe8ff', '#ffe600'], shapes: ['square'], velocity: 85, gravity: 0.6, decay: 0.85, ticks: 70, scalar: 1.3 },
+    { count: 12, emoji: ['⚡'], velocity: 60, gravity: 0.4, decay: 0.88, ticks: 80, scalar: 4.4, flat: true },
   ],
   // 闇:むらさきの玉がゆっくり広がって、早く消える
   dark: [

@@ -17,6 +17,7 @@ const ELEMENT_LABELS = {
   "水": { icon: "💧", label: "水" },
   "草": { icon: "🌿", label: "草" },
   "光": { icon: "✨", label: "光" },
+  "雷": { icon: "⚡", label: "雷" },
   "闇": { icon: "🌙", label: "闇" },
   "風": { icon: "🌪️", label: "風" },
   "土": { icon: "🪨", label: "土" },

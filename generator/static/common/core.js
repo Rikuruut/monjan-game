@@ -587,6 +587,7 @@ const ELEMENT_STYLES = {
   "水": { icon: "💧", cls: "el-water" },
   "草": { icon: "🌿", cls: "el-nature" },
   "光": { icon: "✨", cls: "el-light" },
+  "雷": { icon: "⚡", cls: "el-thunder" },
   "闇": { icon: "🌙", cls: "el-dark" },
   "風": { icon: "🌪️", cls: "el-wind" },
   "土": { icon: "🪨", cls: "el-earth" },

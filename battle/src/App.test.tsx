@@ -240,15 +240,15 @@ describe('開発者メニュー(D キー)', () => {
     expect(screen.getByText(/グー ★2 に なった/)).toBeInTheDocument();
   });
 
-  it('攻撃のタイプ:えらんだタイプで じゃんけん → 攻撃 を流す', async () => {
+  it('攻撃のタイプ:えらんだタイプで じゃんけんを飛ばして すぐ 攻撃 を流す', async () => {
     await renderTitle();
     openMenu();
     openTab('演出を見る');
     fireEvent.click(within(menu()).getByRole('button', { name: '火' }));
     await flush();
-    await advance(CARD_DEV_DEMO_LEAD_MS + CARD_PLAYER_PLACE_MS + CARD_CLASH_IN_MS + CARD_JANKEN_TOTAL_MS + CARD_REVEAL_MS);
+    await advance(CARD_DEV_DEMO_LEAD_MS);
     expect(document.querySelector('.battle-screen--attack-fire')).not.toBeNull();
-    expect(screen.getAllByText('あなたの かち！').length).toBeGreaterThan(0);
+    expect(document.querySelector('.cb-clash')).toBeNull();
   });
 
   it('勝ち負けを決める:「まける」にすると、出したカードが かならず負ける', async () => {

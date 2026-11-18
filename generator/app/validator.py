@@ -4,7 +4,7 @@ CLAUDE.md のチェックのルールに従って、不正な値をデフォル�
 
 | 項目 | ルール | 不正なときの扱い |
 |---|---|---|
-| element | タイプ8種類(火・水・草・光・闇・風・土・無)のどれか | 「無」にする |
+| element | タイプ9種類(火・水・草・光・雷・闇・風・土・無)のどれか | 「無」にする |
 | monster_name | 10文字以内 | 10文字で切る。候補がすべて不合格で、これもチェックに不合格なら「なぞのモンスター」 |
 | name_candidates | カタカナだけ・2〜10文字・NGの言葉なし・言いやすい・単語を並べただけでない | 合格した候補からランダムに1つを monster_name にする |
 | description | 50文字以内 | 50文字までの区切りで切る |
@@ -233,11 +233,11 @@ def validate_monster(
         object_name = DEFAULT_OBJECT_NAME
         notes.append(f"object_name が空なので「{DEFAULT_OBJECT_NAME}」にしました")
 
-    # --- タイプ(8種類のどれか) ---
+    # --- タイプ(9種類のどれか) ---
     element = _as_text(raw.get("element"))
     if element not in ELEMENTS:
         notes.append(
-            f"element「{element or '(空)'}」は8種類に無いので「{DEFAULT_ELEMENT}」にしました"
+            f"element「{element or '(空)'}」は9種類に無いので「{DEFAULT_ELEMENT}」にしました"
         )
         element = DEFAULT_ELEMENT
 

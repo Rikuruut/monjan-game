@@ -15,20 +15,24 @@
 //   どれを流すかは開発者メニューで選ぶ(window.sfx.setFusionBgm(番号)。0 は流さない)。選んだ番号はこのブラウザに残す。
 
 (() => {
+  // lab:効果音ラボの音(2026年11月18日に依頼者が聴いて選んだ)。static/sfx/ に置き、再配布禁止なので Git に入れない(会場の PC にだけ置く)。
+  //   読めたら lab を labVolume で鳴らし、読めなければ src の仮の音。どれが どの音かは static/sounds/README.md
+  // maxMs:長い音は 頭から この長さだけ鳴らし、終わりの LAB_FADE_MS で消す
   const SOUNDS = {
-    press:   { src: "/static/sounds/press.wav",   volume: 0.5 },   // ボタンを押した
+    press:   { src: "/static/sounds/press.wav",   volume: 0.5, lab: "/static/sfx/decision34.mp3", labVolume: 0.5 },   // ボタンを押した
     tick:    { src: "/static/sounds/tick.wav",    volume: 0.7 },   // ひびが増えた・進み具合が上がった
     crack:   { src: "/static/sounds/crack.wav",   volume: 0.8 },   // 割れる・ひらく(誕生の瞬間)
     fanfare: { src: "/static/sounds/fanfare.wav", volume: 0.6 },   // モンスターが生まれた
     // がったい中の嵐(fusion のテーマ。2026年11月16日。仮の音は tools/make_storm_sounds.py で合成)
     thunder: { src: "/static/sounds/thunder.wav", volume: 1.0 },   // 落雷
     rumble:  { src: "/static/sounds/rumble.wav",  volume: 0.6 },   // 遠くの稲光(ゴロゴロ)
-    gust:    { src: "/static/sounds/gust.wav",    volume: 0.6 },   // 突風
-    zap:     { src: "/static/sounds/zap.wav",     volume: 0.45 },  // 連打で 雷パワーを ためる(たまるほど 高く鳴らす)
+    gust:    { src: "/static/sounds/gust.wav",    volume: 0.6, lab: "/static/sfx/wind2.mp3", labVolume: 0.7, maxMs: 2500 },   // 突風(wind2 は83秒あるので頭だけ)
+    zap:     { src: "/static/sounds/zap.wav",     volume: 0.45, lab: "/static/sfx/decision15.mp3", labVolume: 0.35 },  // 連打で 雷パワーを ためる(たまるほど 高く鳴らす)
   };
+  const LAB_FADE_MS = 700;
   // 嵐の環境音(雨と風。くり返し)。window.sfx.storm(大きさ) で流す・0 で止める。
   // がったい中の BGM(FUSION_BGM_VOLUME)の上に重ねるので、大きさは STORM_MAX_VOLUME を上限に その割合
-  const STORM = { src: "/static/sounds/storm.wav" };
+  const STORM = { src: "/static/sounds/storm.wav", lab: "/static/sfx/thunderstorm1.mp3" };
   const STORM_MAX_VOLUME = 0.45;
   // 撮影・合体の BGM「光差し込む森」(OpenTracks(旧 DOVA-SYNDROME)のフリー BGM)
   const BGM = { src: "/static/sounds/bgm.mp3", volume: 0.3 };
@@ -55,10 +59,28 @@
 
   const muted = new URLSearchParams(location.search).get("sound") === "0";
   const howls = {};
+  const usingLab = {};   // 名前 → lab の音で鳴らしているか(maxMs で切るのは lab だけ)
+
+  // lab の音を読み、読めなければ src の仮の音に差しかえる(options は Howl にそのまま渡す)
+  function loadWithFallback(conf, options, onReplace) {
+    if (!conf.lab) return { howl: new Howl({ src: [conf.src], ...options }), lab: false };
+    const howl = new Howl({ src: [conf.lab], ...options, volume: conf.labVolume ?? options.volume });
+    howl.once("loaderror", () => {
+      console.warn("[モンじゃん！ SE] 効果音を読みこめませんでした(仮の音で鳴らします):", conf.lab);
+      onReplace(new Howl({ src: [conf.src], ...options }));
+    });
+    return { howl, lab: true };
+  }
+
   let bgm = null;
   if (window.Howl && !muted) {
     for (const [name, conf] of Object.entries(SOUNDS)) {
-      howls[name] = new Howl({ src: [conf.src], volume: conf.volume, preload: true });
+      const loaded = loadWithFallback(conf, { volume: conf.volume, preload: true }, (howl) => {
+        howls[name] = howl;
+        usingLab[name] = false;
+      });
+      howls[name] = loaded.howl;
+      usingLab[name] = loaded.lab;
     }
     // html5:ファイルを全部読んで変換し終わるのを待たず、読みながら鳴らす(ページを移ってから鳴るまでが遅かった)
     bgm = new Howl({ src: [BGM.src], volume: BGM.volume, loop: true, html5: true, autoplay: true });
@@ -105,7 +127,14 @@
     const target = Math.max(0, Math.min(1, level)) * STORM_MAX_VOLUME;
     if (target === stormVolume) return;
     if (target > 0 && !stormHowl) {
-      stormHowl = new Howl({ src: [STORM.src], volume: 0, loop: true });
+      // 読めなかったら 仮の音に差しかえ、そのときの大きさで流しなおす
+      stormHowl = loadWithFallback(STORM, { volume: 0, loop: true }, (howl) => {
+        stormHowl = howl;
+        if (stormVolume > 0) {
+          howl.play();
+          howl.fade(0, stormVolume, FADE_MS);
+        }
+      }).howl;
     }
     if (!stormHowl) return;
     if (target > 0 && !stormHowl.playing()) stormHowl.play();
@@ -124,6 +153,12 @@
       const id = h.play();
       if (rate !== 1) h.rate(rate, id);
       if (volume !== undefined) h.volume(volume, id);
+      // 長い lab の音は 頭だけ鳴らして、終わりを消して止める
+      const maxMs = usingLab[name] ? SOUNDS[name].maxMs : undefined;
+      if (maxMs) {
+        setTimeout(() => h.fade(h.volume(id), 0, LAB_FADE_MS, id), Math.max(0, maxMs - LAB_FADE_MS));
+        setTimeout(() => h.stop(id), maxMs + 50);
+      }
     },
     // 嵐の環境音(雨と風)の大きさ(0〜1)。0 で フェードして止める。同じ値で何度呼んでもよい
     storm(level) { setStorm(level); },
